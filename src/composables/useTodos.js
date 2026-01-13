@@ -51,16 +51,12 @@ export function useTodos() {
    * @param {Object} formData - Form data
    */
   async function handleSubmit(formData) {
-    try {
-      if (isEditing.value) {
-        await todosStore.updateTodo(editingTodo.value.id, formData)
-      } else {
-        await todosStore.createTodo(formData)
-      }
-      closeModal()
-    } catch (error) {
-      // Error is handled in store
+    if (isEditing.value) {
+      await todosStore.updateTodo(editingTodo.value.id, formData)
+    } else {
+      await todosStore.createTodo(formData)
     }
+    closeModal()
   }
 
   /**

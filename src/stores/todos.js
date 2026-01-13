@@ -99,8 +99,6 @@ export const useTodosStore = defineStore('todos', () => {
       // Refresh the list
       await fetchTodos()
       return response.data
-    } catch (error) {
-      throw error
     } finally {
       loading.value = false
     }
@@ -119,8 +117,6 @@ export const useTodosStore = defineStore('todos', () => {
       // Refresh the list
       await fetchTodos()
       return response.data
-    } catch (error) {
-      throw error
     } finally {
       loading.value = false
     }
@@ -138,8 +134,6 @@ export const useTodosStore = defineStore('todos', () => {
       // Refresh the list
       await fetchTodos()
       return response.data
-    } catch (error) {
-      throw error
     } finally {
       loading.value = false
     }
@@ -161,8 +155,6 @@ export const useTodosStore = defineStore('todos', () => {
       selectedIds.value = []
       await fetchTodos()
       return response.data
-    } catch (error) {
-      throw error
     } finally {
       loading.value = false
     }
