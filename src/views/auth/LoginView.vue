@@ -1,5 +1,4 @@
 <script setup>
-import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Card, Form, Input, Button, Typography, Alert, Space } from 'ant-design-vue'
 import { UserOutlined, LockOutlined } from '@ant-design/icons-vue'
@@ -7,9 +6,6 @@ import { useAuth } from '@/composables/useAuth'
 
 const router = useRouter()
 const { formState, error, loading, usernameRules, passwordRules, handleSignin } = useAuth()
-
-// Form ref for validation
-const formRef = ref()
 
 // Handle form submit
 async function onFinish() {
@@ -33,7 +29,7 @@ function goToSignup() {
 
       <Alert v-if="error" :message="error" type="error" show-icon style="margin-bottom: 16px" />
 
-      <Form ref="formRef" :model="formState" layout="vertical" @finish="onFinish">
+      <Form :model="formState" layout="vertical" @finish="onFinish">
         <Form.Item name="username" :rules="usernameRules">
           <Input v-model:value="formState.username" placeholder="Username" size="large">
             <template #prefix>

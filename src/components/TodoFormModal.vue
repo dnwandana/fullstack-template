@@ -19,9 +19,6 @@ const props = defineProps({
 
 const emit = defineEmits(['submit', 'cancel'])
 
-// Form instance
-const formRef = Form.useForm
-
 // Form state
 const formState = reactive({
   title: '',
@@ -30,12 +27,15 @@ const formState = reactive({
 })
 
 // Validation rules
-const rules = {
+const rules = reactive({
   title: [
     { required: true, message: 'Please enter a title' },
     { max: 255, message: 'Title cannot exceed 255 characters' },
   ],
-}
+})
+
+// Form instance with validation
+const { validate, resetFields } = Form.useForm(formState, rules)
 
 // Watch for todo prop changes to populate form
 watch(
@@ -54,18 +54,21 @@ watch(
 
 // Reset form to initial state
 function resetForm() {
-  formState.title = ''
-  formState.description = ''
-  formState.is_completed = false
+  resetFields()
 }
 
 // Handle form submission
 async function handleOk() {
-  emit('submit', {
-    title: formState.title,
-    description: formState.description || undefined,
-    is_completed: formState.is_completed,
-  })
+  try {
+    await validate()
+    emit('submit', {
+      title: formState.title,
+      description: formState.description || undefined,
+      is_completed: formState.is_completed,
+    })
+  } catch {
+    // Validation failed, errors are displayed by ant-design-vue
+  }
 }
 
 // Handle cancel
