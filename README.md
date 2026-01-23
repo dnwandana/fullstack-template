@@ -131,7 +131,7 @@ This separation ensures each layer has a single responsibility and makes testing
 
 - **Linters**: oxlint (fast) + eslint (comprehensive)
 - **Formatter**: Prettier
-- **Rules**: No semicolons, single quotes, 100 char line width
+- **Rules**: No semicolons, double quotes, 100 char line width
 - **Import alias**: `@` maps to `src/`
 
 ## Browser DevTools Setup
