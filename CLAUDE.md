@@ -91,7 +91,7 @@ This is a Vue 3 SPA built with Vite, using a Pinia store composables pattern for
 ### Code Style
 
 - **Linting**: Dual-linter setup with oxlint (fast) and eslint (comprehensive)
-- **Formatting**: Prettier with semicolons disabled, single quotes, 100 char width
+- **Formatting**: Prettier with semicolons disabled, double quotes, 100 char width
 - **Import alias**: `@` maps to `src/` directory
 
 ### File Naming
