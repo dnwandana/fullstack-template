@@ -1,9 +1,9 @@
 <script setup>
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { Layout, Menu, Button, Space, Typography } from 'ant-design-vue'
-import { UnorderedListOutlined, LogoutOutlined, UserOutlined } from '@ant-design/icons-vue'
-import { useAuthStore } from '@/stores/auth'
+import { computed } from "vue"
+import { useRouter } from "vue-router"
+import { Layout, Menu, Button, Space, Typography } from "ant-design-vue"
+import { UnorderedListOutlined, LogoutOutlined, UserOutlined } from "@ant-design/icons-vue"
+import { useAuthStore } from "@/stores/auth"
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -14,7 +14,7 @@ const currentUser = computed(() => authStore.currentUser)
 // Handle logout
 function handleLogout() {
   authStore.logout()
-  router.push('/login')
+  router.push("/login")
 }
 
 // Navigation

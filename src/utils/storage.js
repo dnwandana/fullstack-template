@@ -3,9 +3,9 @@
  * Handles localStorage operations for authentication
  */
 
-const ACCESS_TOKEN_KEY = 'access_token'
-const REFRESH_TOKEN_KEY = 'refresh_token'
-const USER_DATA_KEY = 'user_data'
+const ACCESS_TOKEN_KEY = "access_token"
+const REFRESH_TOKEN_KEY = "refresh_token"
+const USER_DATA_KEY = "user_data"
 
 // Token management
 export function getAccessToken() {

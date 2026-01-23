@@ -3,7 +3,7 @@
  * Handles all CRUD operations for todos
  */
 
-import request from '@/utils/request'
+import request from "@/utils/request"
 
 /**
  * Get paginated list of todos
@@ -15,7 +15,7 @@ import request from '@/utils/request'
  * @returns {Promise} API response with todos and pagination
  */
 export function getTodos(params = {}) {
-  return request.get('/todos', { params })
+  return request.get("/todos", { params })
 }
 
 /**
@@ -36,7 +36,7 @@ export function getTodoById(todoId) {
  * @returns {Promise} API response with created todo
  */
 export function createTodo(data) {
-  return request.post('/todos', data)
+  return request.post("/todos", data)
 }
 
 /**
@@ -67,7 +67,7 @@ export function deleteTodo(todoId) {
  * @returns {Promise} API response
  */
 export function deleteTodos(ids) {
-  return request.delete('/todos', {
-    params: { ids: ids.join(',') },
+  return request.delete("/todos", {
+    params: { ids: ids.join(",") },
   })
 }

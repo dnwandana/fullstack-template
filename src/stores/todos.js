@@ -2,9 +2,9 @@
  * Todos store - manages todo state and operations
  */
 
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { message } from 'ant-design-vue'
+import { defineStore } from "pinia"
+import { ref, computed } from "vue"
+import { message } from "ant-design-vue"
 import {
   getTodos as apiGetTodos,
   getTodoById as apiGetTodoById,
@@ -12,9 +12,9 @@ import {
   updateTodo as apiUpdateTodo,
   deleteTodo as apiDeleteTodo,
   deleteTodos as apiDeleteTodos,
-} from '@/api/todos'
+} from "@/api/todos"
 
-export const useTodosStore = defineStore('todos', () => {
+export const useTodosStore = defineStore("todos", () => {
   // State
   const todos = ref([])
   const currentTodo = ref(null)
@@ -30,8 +30,8 @@ export const useTodosStore = defineStore('todos', () => {
   const selectedIds = ref([])
 
   // Sort params
-  const sortBy = ref('updated_at')
-  const sortOrder = ref('desc')
+  const sortBy = ref("updated_at")
+  const sortOrder = ref("desc")
 
   // Getters
   const hasSelected = computed(() => selectedIds.value.length > 0)
@@ -95,7 +95,7 @@ export const useTodosStore = defineStore('todos', () => {
     loading.value = true
     try {
       const response = await apiCreateTodo(data)
-      message.success('Todo created successfully!')
+      message.success("Todo created successfully!")
       // Refresh the list
       await fetchTodos()
       return response.data
@@ -113,7 +113,7 @@ export const useTodosStore = defineStore('todos', () => {
     loading.value = true
     try {
       const response = await apiUpdateTodo(todoId, data)
-      message.success('Todo updated successfully!')
+      message.success("Todo updated successfully!")
       // Refresh the list
       await fetchTodos()
       return response.data
@@ -130,7 +130,7 @@ export const useTodosStore = defineStore('todos', () => {
     loading.value = true
     try {
       const response = await apiDeleteTodo(todoId)
-      message.success('Todo deleted successfully!')
+      message.success("Todo deleted successfully!")
       // Refresh the list
       await fetchTodos()
       return response.data

@@ -1,6 +1,6 @@
 <script setup>
-import { onMounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onMounted, watch } from "vue"
+import { useRoute, useRouter } from "vue-router"
 import {
   Descriptions,
   Button,
@@ -11,10 +11,10 @@ import {
   Spin,
   Popconfirm,
   Result,
-} from 'ant-design-vue'
-import { ArrowLeftOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
-import { useTodos } from '@/composables/useTodos'
-import TodoFormModal from '@/components/TodoFormModal.vue'
+} from "ant-design-vue"
+import { ArrowLeftOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons-vue"
+import { useTodos } from "@/composables/useTodos"
+import TodoFormModal from "@/components/TodoFormModal.vue"
 
 const route = useRoute()
 const router = useRouter()
@@ -51,7 +51,7 @@ watch(
 
 // Go back to list
 function goBack() {
-  router.push('/todos')
+  router.push("/todos")
 }
 
 // Handle edit
@@ -64,7 +64,7 @@ function handleEdit() {
 // Handle delete
 async function handleDelete() {
   await deleteTodo(todoId)
-  router.push('/todos')
+  router.push("/todos")
 }
 
 // Format date
@@ -148,7 +148,7 @@ function formatDate(dateString) {
         </Descriptions.Item>
 
         <Descriptions.Item label="Description">
-          {{ currentTodo.description || 'No description' }}
+          {{ currentTodo.description || "No description" }}
         </Descriptions.Item>
 
         <Descriptions.Item label="Created At">

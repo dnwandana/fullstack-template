@@ -1,8 +1,8 @@
 <script setup>
-import { useRouter } from 'vue-router'
-import { Card, Form, Input, Button, Typography, Alert, Space } from 'ant-design-vue'
-import { UserOutlined, LockOutlined } from '@ant-design/icons-vue'
-import { useAuth } from '@/composables/useAuth'
+import { useRouter } from "vue-router"
+import { Card, Form, Input, Button, Typography, Alert, Space } from "ant-design-vue"
+import { UserOutlined, LockOutlined } from "@ant-design/icons-vue"
+import { useAuth } from "@/composables/useAuth"
 
 const router = useRouter()
 const {
@@ -22,7 +22,7 @@ async function onFinish() {
 
 // Navigate to login
 function goToLogin() {
-  router.push('/login')
+  router.push("/login")
 }
 </script>
 

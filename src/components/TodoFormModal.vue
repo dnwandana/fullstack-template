@@ -1,6 +1,6 @@
 <script setup>
-import { reactive, watch } from 'vue'
-import { Form, Modal, Input, Checkbox } from 'ant-design-vue'
+import { reactive, watch } from "vue"
+import { Form, Modal, Input, Checkbox } from "ant-design-vue"
 
 const props = defineProps({
   visible: {
@@ -17,20 +17,20 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['submit', 'cancel'])
+const emit = defineEmits(["submit", "cancel"])
 
 // Form state
 const formState = reactive({
-  title: '',
-  description: '',
+  title: "",
+  description: "",
   is_completed: false,
 })
 
 // Validation rules
 const rules = reactive({
   title: [
-    { required: true, message: 'Please enter a title' },
-    { max: 255, message: 'Title cannot exceed 255 characters' },
+    { required: true, message: "Please enter a title" },
+    { max: 255, message: "Title cannot exceed 255 characters" },
   ],
 })
 
@@ -42,8 +42,8 @@ watch(
   () => props.todo,
   (newTodo) => {
     if (newTodo) {
-      formState.title = newTodo.title || ''
-      formState.description = newTodo.description || ''
+      formState.title = newTodo.title || ""
+      formState.description = newTodo.description || ""
       formState.is_completed = newTodo.is_completed || false
     } else {
       resetForm()
@@ -61,7 +61,7 @@ function resetForm() {
 async function handleOk() {
   try {
     await validate()
-    emit('submit', {
+    emit("submit", {
       title: formState.title,
       description: formState.description || undefined,
       is_completed: formState.is_completed,
@@ -74,13 +74,13 @@ async function handleOk() {
 // Handle cancel
 function handleCancel() {
   resetForm()
-  emit('cancel')
+  emit("cancel")
 }
 
 // Computed title for modal
-const modalTitle = computed(() => (props.todo ? 'Edit Todo' : 'Create Todo'))
+const modalTitle = computed(() => (props.todo ? "Edit Todo" : "Create Todo"))
 
-import { computed } from 'vue'
+import { computed } from "vue"
 </script>
 
 <template>

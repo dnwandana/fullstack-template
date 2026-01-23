@@ -2,13 +2,13 @@
  * Auth store - manages authentication state
  */
 
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { message } from 'ant-design-vue'
-import { signup as apiSignup, signin as apiSignin } from '@/api/auth'
-import { setTokens, setUserData, getUserData, getAccessToken, clearAuthData } from '@/utils/storage'
+import { defineStore } from "pinia"
+import { ref, computed } from "vue"
+import { message } from "ant-design-vue"
+import { signup as apiSignup, signin as apiSignin } from "@/api/auth"
+import { setTokens, setUserData, getUserData, getAccessToken, clearAuthData } from "@/utils/storage"
 
-export const useAuthStore = defineStore('auth', () => {
+export const useAuthStore = defineStore("auth", () => {
   // State
   const user = ref(null)
   const loading = ref(false)
@@ -40,10 +40,10 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     try {
       const response = await apiSignup(username, password)
-      message.success('Account created successfully! Please sign in.')
+      message.success("Account created successfully! Please sign in.")
       return response.data
     } catch (error) {
-      const errorMsg = error.response?.data?.message || 'Signup failed. Please try again.'
+      const errorMsg = error.response?.data?.message || "Signup failed. Please try again."
       throw new Error(errorMsg)
     } finally {
       loading.value = false
@@ -69,10 +69,10 @@ export const useAuthStore = defineStore('auth', () => {
       setUserData(userData)
       user.value = userData
 
-      message.success('Signed in successfully!')
+      message.success("Signed in successfully!")
       return response.data
     } catch (error) {
-      const errorMsg = error.response?.data?.message || 'Sign in failed. Please try again.'
+      const errorMsg = error.response?.data?.message || "Sign in failed. Please try again."
       throw new Error(errorMsg)
     } finally {
       loading.value = false
@@ -85,7 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
   function logout() {
     clearAuthData()
     user.value = null
-    message.success('Logged out successfully')
+    message.success("Logged out successfully")
   }
 
   return {

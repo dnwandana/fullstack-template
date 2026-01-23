@@ -2,8 +2,8 @@
  * Todos composable - helpers for todo operations
  */
 
-import { ref, computed } from 'vue'
-import { useTodosStore } from '@/stores/todos'
+import { ref, computed } from "vue"
+import { useTodosStore } from "@/stores/todos"
 
 export function useTodos() {
   const todosStore = useTodosStore()
@@ -14,8 +14,8 @@ export function useTodos() {
 
   // Validation rules for todo form
   const titleRules = [
-    { required: true, message: 'Please enter a title' },
-    { max: 255, message: 'Title cannot exceed 255 characters' },
+    { required: true, message: "Please enter a title" },
+    { max: 255, message: "Title cannot exceed 255 characters" },
   ]
 
   // Computed

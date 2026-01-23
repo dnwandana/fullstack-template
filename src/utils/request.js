@@ -3,16 +3,16 @@
  * Handles token attachment and automatic refresh on 401
  */
 
-import axios from 'axios'
-import { message } from 'ant-design-vue'
-import { getAccessToken, getRefreshToken, setTokens, clearAuthData } from './storage'
+import axios from "axios"
+import { message } from "ant-design-vue"
+import { getAccessToken, getRefreshToken, setTokens, clearAuthData } from "./storage"
 
 // Create axios instance with base URL from environment
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
   timeout: 10000,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 })
 
@@ -37,7 +37,7 @@ request.interceptors.request.use(
   (config) => {
     const token = getAccessToken()
     if (token) {
-      config.headers['x-access-token'] = token
+      config.headers["x-access-token"] = token
     }
     return config
   },
@@ -56,9 +56,9 @@ request.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       // Don't retry for auth endpoints
       if (
-        originalRequest.url?.includes('/auth/signin') ||
-        originalRequest.url?.includes('/auth/signup') ||
-        originalRequest.url?.includes('/auth/refresh')
+        originalRequest.url?.includes("/auth/signin") ||
+        originalRequest.url?.includes("/auth/signup") ||
+        originalRequest.url?.includes("/auth/refresh")
       ) {
         return Promise.reject(error)
       }
@@ -69,7 +69,7 @@ request.interceptors.response.use(
           failedQueue.push({ resolve, reject })
         })
           .then((token) => {
-            originalRequest.headers['x-access-token'] = token
+            originalRequest.headers["x-access-token"] = token
             return request(originalRequest)
           })
           .catch((err) => Promise.reject(err))
@@ -83,7 +83,7 @@ request.interceptors.response.use(
       if (!refreshToken) {
         isRefreshing = false
         clearAuthData()
-        window.location.href = '/login'
+        window.location.href = "/login"
         return Promise.reject(error)
       }
 
@@ -94,7 +94,7 @@ request.interceptors.response.use(
           {},
           {
             headers: {
-              'x-refresh-token': refreshToken,
+              "x-refresh-token": refreshToken,
             },
           },
         )
@@ -105,12 +105,12 @@ request.interceptors.response.use(
         processQueue(null, newAccessToken)
 
         // Retry original request with new token
-        originalRequest.headers['x-access-token'] = newAccessToken
+        originalRequest.headers["x-access-token"] = newAccessToken
         return request(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError, null)
         clearAuthData()
-        window.location.href = '/login'
+        window.location.href = "/login"
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false
@@ -118,7 +118,7 @@ request.interceptors.response.use(
     }
 
     // Handle other errors
-    const errorMessage = error.response?.data?.message || error.message || 'An error occurred'
+    const errorMessage = error.response?.data?.message || error.message || "An error occurred"
 
     // Show error message for non-401 errors
     if (error.response?.status !== 401) {

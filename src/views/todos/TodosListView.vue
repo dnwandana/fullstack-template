@@ -1,6 +1,6 @@
 <script setup>
-import { onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted } from "vue"
+import { useRouter } from "vue-router"
 import {
   Table,
   Button,
@@ -11,10 +11,10 @@ import {
   Select,
   Empty,
   Skeleton,
-} from 'ant-design-vue'
-import { PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons-vue'
-import { useTodos } from '@/composables/useTodos'
-import TodoFormModal from '@/components/TodoFormModal.vue'
+} from "ant-design-vue"
+import { PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons-vue"
+import { useTodos } from "@/composables/useTodos"
+import TodoFormModal from "@/components/TodoFormModal.vue"
 
 const router = useRouter()
 const {
@@ -44,40 +44,40 @@ const {
 // Table columns
 const columns = [
   {
-    title: 'Title',
-    dataIndex: 'title',
-    key: 'title',
+    title: "Title",
+    dataIndex: "title",
+    key: "title",
     ellipsis: true,
   },
   {
-    title: 'Description',
-    dataIndex: 'description',
-    key: 'description',
+    title: "Description",
+    dataIndex: "description",
+    key: "description",
     ellipsis: true,
-    customRender: ({ text }) => text || '-',
+    customRender: ({ text }) => text || "-",
   },
   {
-    title: 'Status',
-    dataIndex: 'is_completed',
-    key: 'is_completed',
+    title: "Status",
+    dataIndex: "is_completed",
+    key: "is_completed",
     width: 120,
     customRender: ({ record }) =>
       record.is_completed
-        ? h(Tag, { color: 'success' }, () => 'Completed')
-        : h(Tag, { color: 'default' }, () => 'Pending'),
+        ? h(Tag, { color: "success" }, () => "Completed")
+        : h(Tag, { color: "default" }, () => "Pending"),
   },
   {
-    title: 'Updated',
-    dataIndex: 'updated_at',
-    key: 'updated_at',
+    title: "Updated",
+    dataIndex: "updated_at",
+    key: "updated_at",
     width: 180,
     customRender: ({ text }) => new Date(text).toLocaleString(),
   },
   {
-    title: 'Actions',
-    key: 'actions',
+    title: "Actions",
+    key: "actions",
     width: 150,
-    fixed: 'right',
+    fixed: "right",
   },
 ]
 
@@ -89,13 +89,13 @@ const rowSelection = {
 
 // Sort options
 const sortByOptions = [
-  { value: 'updated_at', label: 'Updated At' },
-  { value: 'title', label: 'Title' },
+  { value: "updated_at", label: "Updated At" },
+  { value: "title", label: "Title" },
 ]
 
 const sortOrderOptions = [
-  { value: 'desc', label: 'Descending' },
-  { value: 'asc', label: 'Ascending' },
+  { value: "desc", label: "Descending" },
+  { value: "asc", label: "Ascending" },
 ]
 
 // View todo detail
@@ -128,7 +128,7 @@ onMounted(() => {
   fetchTodos()
 })
 
-import { h } from 'vue'
+import { h } from "vue"
 </script>
 
 <template>

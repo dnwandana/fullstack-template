@@ -3,8 +3,8 @@
  * Handles signup, signin, and token refresh
  */
 
-import request from '@/utils/request'
-import { getRefreshToken } from '@/utils/storage'
+import request from "@/utils/request"
+import { getRefreshToken } from "@/utils/storage"
 
 /**
  * Register a new user account
@@ -13,7 +13,7 @@ import { getRefreshToken } from '@/utils/storage'
  * @returns {Promise} API response with user data
  */
 export function signup(username, password) {
-  return request.post('/auth/signup', { username, password })
+  return request.post("/auth/signup", { username, password })
 }
 
 /**
@@ -23,7 +23,7 @@ export function signup(username, password) {
  * @returns {Promise} API response with user data and tokens
  */
 export function signin(username, password) {
-  return request.post('/auth/signin', { username, password })
+  return request.post("/auth/signin", { username, password })
 }
 
 /**
@@ -33,11 +33,11 @@ export function signin(username, password) {
 export function refreshToken() {
   const token = getRefreshToken()
   return request.post(
-    '/auth/refresh',
+    "/auth/refresh",
     {},
     {
       headers: {
-        'x-refresh-token': token,
+        "x-refresh-token": token,
       },
     },
   )
