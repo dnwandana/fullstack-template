@@ -33,6 +33,9 @@ export const useTodosStore = defineStore("todos", () => {
   const sortBy = ref("updated_at")
   const sortOrder = ref("desc")
 
+  // Search params
+  const searchQuery = ref("")
+
   // Getters
   const hasSelected = computed(() => selectedIds.value.length > 0)
   const selectedCount = computed(() => selectedIds.value.length)
@@ -51,6 +54,7 @@ export const useTodosStore = defineStore("todos", () => {
         limit: params.limit || pagination.value.items_per_page,
         sort_by: params.sort_by || sortBy.value,
         sort_order: params.sort_order || sortOrder.value,
+        ...(searchQuery.value && { search: searchQuery.value }),
       })
 
       todos.value = response.data.data.todos
@@ -198,6 +202,14 @@ export const useTodosStore = defineStore("todos", () => {
   }
 
   /**
+   * Set search query
+   * @param {string} query - Search term
+   */
+  function setSearch(query) {
+    searchQuery.value = query
+  }
+
+  /**
    * Clear current todo
    */
   function clearCurrentTodo() {
@@ -213,6 +225,7 @@ export const useTodosStore = defineStore("todos", () => {
     selectedIds,
     sortBy,
     sortOrder,
+    searchQuery,
     // Getters
     hasSelected,
     selectedCount,
@@ -227,6 +240,7 @@ export const useTodosStore = defineStore("todos", () => {
     selectAll,
     clearSelection,
     setSort,
+    setSearch,
     clearCurrentTodo,
   }
 })

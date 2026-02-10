@@ -12,6 +12,7 @@ import request from "@/utils/request"
  * @param {number} [params.limit=10] - Items per page
  * @param {string} [params.sort_by='updated_at'] - Sort field (updated_at, title)
  * @param {string} [params.sort_order='desc'] - Sort order (asc, desc)
+ * @param {string} [params.search=''] - Search term to filter by title (case-insensitive, max 255 chars)
  * @returns {Promise} API response with todos and pagination
  */
 export function getTodos(params = {}) {

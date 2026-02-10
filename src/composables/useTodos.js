@@ -87,6 +87,15 @@ export function useTodos() {
   }
 
   /**
+   * Handle search
+   * @param {string} value - Search query
+   */
+  function handleSearch(value) {
+    todosStore.setSearch(value)
+    todosStore.fetchTodos({ page: 1 })
+  }
+
+  /**
    * Handle row selection change
    * @param {string[]} selectedRowKeys - Selected row keys
    */
@@ -113,6 +122,7 @@ export function useTodos() {
     selectedCount: computed(() => todosStore.selectedCount),
     sortBy: computed(() => todosStore.sortBy),
     sortOrder: computed(() => todosStore.sortOrder),
+    searchQuery: computed(() => todosStore.searchQuery),
     currentTodo: computed(() => todosStore.currentTodo),
     // Modal state
     isModalVisible,
@@ -133,6 +143,7 @@ export function useTodos() {
     handlePageChange,
     handlePageSizeChange,
     handleSortChange,
+    handleSearch,
     handleSelectionChange,
     isSelected,
   }

@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted } from "vue"
+import { onMounted, ref } from "vue"
 import { useRouter } from "vue-router"
 import {
   Table,
@@ -11,6 +11,7 @@ import {
   Select,
   Empty,
   Skeleton,
+  Input,
 } from "ant-design-vue"
 import { PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons-vue"
 import { useTodos } from "@/composables/useTodos"
@@ -38,7 +39,9 @@ const {
   handlePageChange,
   handlePageSizeChange,
   handleSortChange,
+  handleSearch,
   handleSelectionChange,
+  searchQuery,
 } = useTodos()
 
 // Table columns
@@ -113,6 +116,18 @@ async function handleBulkDelete() {
   await bulkDelete()
 }
 
+// Search input value (local ref for two-way binding)
+const searchValue = ref("")
+
+function onSearch(value) {
+  handleSearch(value)
+}
+
+function clearSearch() {
+  searchValue.value = ""
+  handleSearch("")
+}
+
 // Handle sort by change
 function onSortByChange(value) {
   handleSortChange(value, sortOrder.value)
@@ -138,6 +153,15 @@ import { h } from "vue"
       <Typography.Title :level="4" style="margin: 0"> My Todos </Typography.Title>
 
       <Space>
+        <!-- Search -->
+        <Input.Search
+          v-model:value="searchValue"
+          placeholder="Search todos..."
+          allow-clear
+          style="width: 250px"
+          @search="onSearch"
+        />
+
         <!-- Sort controls -->
         <Select
           :value="sortBy"
@@ -184,8 +208,14 @@ import { h } from "vue"
     <Skeleton v-if="loading && todos.length === 0" active :paragraph="{ rows: 5 }" />
 
     <!-- Empty state -->
-    <Empty v-else-if="!loading && todos.length === 0" description="No todos yet">
-      <Button type="primary" @click="openCreateModal"> Create your first todo </Button>
+    <Empty
+      v-else-if="!loading && todos.length === 0"
+      :description="searchQuery ? 'No todos match your search' : 'No todos yet'"
+    >
+      <Button v-if="!searchQuery" type="primary" @click="openCreateModal">
+        Create your first todo
+      </Button>
+      <Button v-else type="default" @click="clearSearch"> Clear search </Button>
     </Empty>
 
     <!-- Table -->
