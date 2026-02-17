@@ -25,6 +25,8 @@ export const useTodosStore = defineStore("todos", () => {
     items_per_page: 10,
     has_next_page: false,
     has_previous_page: false,
+    next_page: null,
+    previous_page: null,
   })
   const loading = ref(false)
   const selectedIds = ref([])
@@ -57,8 +59,8 @@ export const useTodosStore = defineStore("todos", () => {
         ...(searchQuery.value && { search: searchQuery.value }),
       })
 
-      todos.value = response.data.data.todos
-      pagination.value = response.data.data.pagination
+      todos.value = response.data.data
+      pagination.value = response.data.pagination
 
       // Update sort params if provided
       if (params.sort_by) sortBy.value = params.sort_by
@@ -81,7 +83,7 @@ export const useTodosStore = defineStore("todos", () => {
     loading.value = true
     try {
       const response = await apiGetTodoById(todoId)
-      currentTodo.value = response.data.data.todo
+      currentTodo.value = response.data.data
       return response.data
     } catch (error) {
       currentTodo.value = null
