@@ -60,20 +60,12 @@ export function useTodos() {
   }
 
   /**
-   * Handle page change
+   * Handle page or page size change
    * @param {number} page - New page number
+   * @param {number} pageSize - New page size
    */
-  function handlePageChange(page) {
-    todosStore.fetchTodos({ page })
-  }
-
-  /**
-   * Handle page size change
-   * @param {number} current - Current page
-   * @param {number} size - New page size
-   */
-  function handlePageSizeChange(current, size) {
-    todosStore.fetchTodos({ page: 1, limit: size })
+  function handlePageChange(page, pageSize) {
+    todosStore.fetchTodos({ page, limit: pageSize })
   }
 
   /**
@@ -141,7 +133,6 @@ export function useTodos() {
     closeModal,
     handleSubmit,
     handlePageChange,
-    handlePageSizeChange,
     handleSortChange,
     handleSearch,
     handleSelectionChange,

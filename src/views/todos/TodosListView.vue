@@ -37,7 +37,6 @@ const {
   closeModal,
   handleSubmit,
   handlePageChange,
-  handlePageSizeChange,
   handleSortChange,
   handleSearch,
   handleSelectionChange,
@@ -233,7 +232,6 @@ import { h } from "vue"
         showSizeChanger: true,
         showTotal: (total) => `Total ${total} items`,
         onChange: handlePageChange,
-        onShowSizeChange: handlePageSizeChange,
       }"
     >
       <template #bodyCell="{ column, record }">
