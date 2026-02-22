@@ -1,6 +1,6 @@
 <script setup>
-import { onMounted, ref } from "vue"
-import { useRouter } from "vue-router"
+import { h, onMounted, ref } from "vue"
+import { useRoute, useRouter } from "vue-router"
 import {
   Table,
   Button,
@@ -12,12 +12,29 @@ import {
   Empty,
   Skeleton,
   Input,
+  Breadcrumb,
 } from "ant-design-vue"
-import { PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons-vue"
+import {
+  PlusOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  EyeOutlined,
+  SettingOutlined,
+} from "@ant-design/icons-vue"
 import { useTodos } from "@/composables/useTodos"
+import { useOrgs } from "@/composables/useOrgs"
+import { useProjects } from "@/composables/useProjects"
+import { usePermissions } from "@/composables/usePermissions"
+import { useAuthStore } from "@/stores/auth"
 import TodoFormModal from "@/components/TodoFormModal.vue"
 
+const route = useRoute()
 const router = useRouter()
+
+// Extract multi-tenant identifiers from route params
+const orgId = route.params.orgId
+const projectId = route.params.projectId
+
 const {
   todos,
   pagination,
@@ -41,7 +58,13 @@ const {
   handleSearch,
   handleSelectionChange,
   searchQuery,
+  setContext,
 } = useTodos()
+
+const { fetchOrgById, currentOrg } = useOrgs()
+const { fetchProjectById, currentProject } = useProjects()
+const { can, canAny, loadPermissions } = usePermissions()
+const authStore = useAuthStore()
 
 // Table columns
 const columns = [
@@ -56,17 +79,24 @@ const columns = [
     dataIndex: "description",
     key: "description",
     ellipsis: true,
-    customRender: ({ text }) => text || "-",
+    // Show dash when description is empty
+    customRender: ({ text }) => {
+      if (text) return text
+      return "-"
+    },
   },
   {
     title: "Status",
     dataIndex: "is_completed",
     key: "is_completed",
     width: 120,
-    customRender: ({ record }) =>
-      record.is_completed
-        ? h(Tag, { color: "success" }, () => "Completed")
-        : h(Tag, { color: "default" }, () => "Pending"),
+    // Render a colored tag based on completion status
+    customRender: ({ record }) => {
+      if (record.is_completed) {
+        return h(Tag, { color: "success" }, () => "Completed")
+      }
+      return h(Tag, { color: "default" }, () => "Pending")
+    },
   },
   {
     title: "Updated",
@@ -100,9 +130,14 @@ const sortOrderOptions = [
   { value: "asc", label: "Ascending" },
 ]
 
-// View todo detail
+// Navigate to todo detail using multi-tenant route
 function viewTodo(id) {
-  router.push(`/todos/${id}`)
+  router.push(`/orgs/${orgId}/projects/${projectId}/todos/${id}`)
+}
+
+// Navigate to project settings page
+function goToSettings() {
+  router.push(`/orgs/${orgId}/projects/${projectId}/settings`)
 }
 
 // Handle delete with confirmation
@@ -137,19 +172,40 @@ function onSortOrderChange(value) {
   handleSortChange(sortBy.value, value)
 }
 
-// Fetch todos on mount
-onMounted(() => {
+// Set multi-tenant context, load supporting data, then fetch todos
+onMounted(async () => {
+  // Set org/project context so the store scopes API calls correctly
+  setContext(orgId, projectId)
+
+  // Fetch org and project names for breadcrumb display
+  fetchOrgById(orgId)
+  fetchProjectById(orgId, projectId)
+
+  // Load user permissions for this org to gate UI actions
+  loadPermissions(orgId, authStore.currentUser.id)
+
+  // Fetch the todos list
   fetchTodos()
 })
-
-import { h } from "vue"
 </script>
 
 <template>
   <div class="todos-list">
+    <!-- Breadcrumb navigation for multi-tenant hierarchy -->
+    <Breadcrumb style="margin-bottom: 16px">
+      <Breadcrumb.Item>
+        <router-link to="/orgs">Organizations</router-link>
+      </Breadcrumb.Item>
+      <Breadcrumb.Item>
+        <router-link :to="`/orgs/${orgId}`">{{ currentOrg?.name || "..." }}</router-link>
+      </Breadcrumb.Item>
+      <Breadcrumb.Item>{{ currentProject?.name || "..." }}</Breadcrumb.Item>
+      <Breadcrumb.Item>Todos</Breadcrumb.Item>
+    </Breadcrumb>
+
     <!-- Header -->
     <div class="header">
-      <Typography.Title :level="4" style="margin: 0"> My Todos </Typography.Title>
+      <Typography.Title :level="4" style="margin: 0"> Todos </Typography.Title>
 
       <Space>
         <!-- Search -->
@@ -177,9 +233,9 @@ import { h } from "vue"
           @change="onSortOrderChange"
         />
 
-        <!-- Bulk delete -->
+        <!-- Bulk delete (only visible when items are selected and user has delete permission) -->
         <Popconfirm
-          v-if="hasSelected"
+          v-if="hasSelected && can('todos:delete')"
           :title="`Delete ${selectedCount} selected todo(s)?`"
           ok-text="Yes"
           cancel-text="No"
@@ -193,12 +249,19 @@ import { h } from "vue"
           </Button>
         </Popconfirm>
 
-        <!-- Create button -->
-        <Button type="primary" @click="openCreateModal">
+        <!-- Create button (permission-gated) -->
+        <Button v-if="can('todos:create')" type="primary" @click="openCreateModal">
           <template #icon>
             <PlusOutlined />
           </template>
           Create Todo
+        </Button>
+
+        <!-- Settings button (visible if user can update or delete the project) -->
+        <Button v-if="canAny(['project:update', 'project:delete'])" @click="goToSettings">
+          <template #icon>
+            <SettingOutlined />
+          </template>
         </Button>
       </Space>
     </div>
@@ -211,10 +274,10 @@ import { h } from "vue"
       v-else-if="!loading && todos.length === 0"
       :description="searchQuery ? 'No todos match your search' : 'No todos yet'"
     >
-      <Button v-if="!searchQuery" type="primary" @click="openCreateModal">
+      <Button v-if="!searchQuery && can('todos:create')" type="primary" @click="openCreateModal">
         Create your first todo
       </Button>
-      <Button v-else type="default" @click="clearSearch"> Clear search </Button>
+      <Button v-else-if="searchQuery" type="default" @click="clearSearch"> Clear search </Button>
     </Empty>
 
     <!-- Table -->
@@ -242,12 +305,20 @@ import { h } from "vue"
                 <EyeOutlined />
               </template>
             </Button>
-            <Button type="text" size="small" @click="openEditModal(record)">
+            <!-- Edit button (permission-gated) -->
+            <Button
+              v-if="can('todos:update')"
+              type="text"
+              size="small"
+              @click="openEditModal(record)"
+            >
               <template #icon>
                 <EditOutlined />
               </template>
             </Button>
+            <!-- Delete button (permission-gated) -->
             <Popconfirm
+              v-if="can('todos:delete')"
               title="Delete this todo?"
               ok-text="Yes"
               cancel-text="No"

@@ -14,10 +14,20 @@ import {
 } from "ant-design-vue"
 import { ArrowLeftOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons-vue"
 import { useTodos } from "@/composables/useTodos"
+import { useOrgs } from "@/composables/useOrgs"
+import { useProjects } from "@/composables/useProjects"
+import { usePermissions } from "@/composables/usePermissions"
+import { useAuthStore } from "@/stores/auth"
 import TodoFormModal from "@/components/TodoFormModal.vue"
 
 const route = useRoute()
 const router = useRouter()
+
+// Extract multi-tenant identifiers and todo ID from route params
+const orgId = route.params.orgId
+const projectId = route.params.projectId
+const todoId = route.params.id
+
 const {
   currentTodo,
   loading,
@@ -29,17 +39,31 @@ const {
   openEditModal,
   closeModal,
   handleSubmit,
+  setContext,
 } = useTodos()
 
-// Get todo ID from route
-const todoId = route.params.id
+const { fetchOrgById, currentOrg } = useOrgs()
+const { fetchProjectById, currentProject } = useProjects()
+const { can, loadPermissions } = usePermissions()
+const authStore = useAuthStore()
 
-// Fetch todo on mount
+// Set multi-tenant context and load supporting data before fetching the todo
 onMounted(async () => {
+  // Scope API calls to the correct org/project
+  setContext(orgId, projectId)
+
+  // Fetch org and project names for breadcrumb display
+  fetchOrgById(orgId)
+  fetchProjectById(orgId, projectId)
+
+  // Load user permissions for this org to gate UI actions
+  loadPermissions(orgId, authStore.currentUser.id)
+
+  // Fetch the individual todo
   await fetchTodoById(todoId)
 })
 
-// Clear current todo when leaving
+// Clear current todo when navigating away (route param disappears)
 watch(
   () => route.params.id,
   (newId, oldId) => {
@@ -49,9 +73,9 @@ watch(
   },
 )
 
-// Go back to list
+// Navigate back to the project-level todos list
 function goBack() {
-  router.push("/todos")
+  router.push(`/orgs/${orgId}/projects/${projectId}`)
 }
 
 // Handle edit
@@ -61,10 +85,10 @@ function handleEdit() {
   }
 }
 
-// Handle delete
+// Handle delete, then redirect back to project
 async function handleDelete() {
   await deleteTodo(todoId)
-  router.push("/todos")
+  router.push(`/orgs/${orgId}/projects/${projectId}`)
 }
 
 // Format date
@@ -75,12 +99,20 @@ function formatDate(dateString) {
 
 <template>
   <div class="todo-detail">
-    <!-- Breadcrumb -->
+    <!-- Breadcrumb navigation for multi-tenant hierarchy -->
     <Breadcrumb style="margin-bottom: 16px">
       <Breadcrumb.Item>
-        <a @click="goBack">Todos</a>
+        <router-link to="/orgs">Organizations</router-link>
       </Breadcrumb.Item>
-      <Breadcrumb.Item>Detail</Breadcrumb.Item>
+      <Breadcrumb.Item>
+        <router-link :to="`/orgs/${orgId}`">{{ currentOrg?.name || "..." }}</router-link>
+      </Breadcrumb.Item>
+      <Breadcrumb.Item>
+        <router-link :to="`/orgs/${orgId}/projects/${projectId}`">
+          {{ currentProject?.name || "..." }}
+        </router-link>
+      </Breadcrumb.Item>
+      <Breadcrumb.Item>{{ currentTodo?.title || "Detail" }}</Breadcrumb.Item>
     </Breadcrumb>
 
     <!-- Loading state -->
@@ -114,13 +146,16 @@ function formatDate(dateString) {
         </Space>
 
         <Space>
-          <Button type="primary" @click="handleEdit">
+          <!-- Edit button (permission-gated) -->
+          <Button v-if="can('todos:update')" type="primary" @click="handleEdit">
             <template #icon>
               <EditOutlined />
             </template>
             Edit
           </Button>
+          <!-- Delete button (permission-gated) -->
           <Popconfirm
+            v-if="can('todos:delete')"
             title="Delete this todo?"
             ok-text="Yes"
             cancel-text="No"
