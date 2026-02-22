@@ -1,12 +1,25 @@
 /**
  * Todos API service
- * Handles all CRUD operations for todos
+ * Handles all CRUD operations for todos within a project (multi-tenant)
+ * All endpoints are scoped under /orgs/{orgId}/projects/{projectId}/todos
  */
 
 import request from "@/utils/request"
 
 /**
- * Get paginated list of todos
+ * Build the base URL for todos scoped to an organization and project
+ * @param {string} orgId - Organization UUID
+ * @param {string} projectId - Project UUID
+ * @returns {string} Base URL path for todos
+ */
+function basePath(orgId, projectId) {
+  return `/orgs/${orgId}/projects/${projectId}/todos`
+}
+
+/**
+ * Get paginated list of todos for a project
+ * @param {string} orgId - Organization UUID
+ * @param {string} projectId - Project UUID
  * @param {Object} params - Query parameters
  * @param {number} [params.page=1] - Page number
  * @param {number} [params.limit=10] - Items per page
@@ -15,33 +28,39 @@ import request from "@/utils/request"
  * @param {string} [params.search=''] - Search term to filter by title (case-insensitive, max 255 chars)
  * @returns {Promise} API response with todos and pagination
  */
-export function getTodos(params = {}) {
-  return request.get("/todos", { params })
+export function getTodos(orgId, projectId, params = {}) {
+  return request.get(basePath(orgId, projectId), { params })
 }
 
 /**
  * Get a single todo by ID
+ * @param {string} orgId - Organization UUID
+ * @param {string} projectId - Project UUID
  * @param {string} todoId - Todo UUID
  * @returns {Promise} API response with todo data
  */
-export function getTodoById(todoId) {
-  return request.get(`/todos/${todoId}`)
+export function getTodoById(orgId, projectId, todoId) {
+  return request.get(`${basePath(orgId, projectId)}/${todoId}`)
 }
 
 /**
- * Create a new todo
+ * Create a new todo within a project
+ * @param {string} orgId - Organization UUID
+ * @param {string} projectId - Project UUID
  * @param {Object} data - Todo data
  * @param {string} data.title - Todo title (required)
  * @param {string} [data.description] - Optional description
  * @param {boolean} [data.is_completed] - Completion status
  * @returns {Promise} API response with created todo
  */
-export function createTodo(data) {
-  return request.post("/todos", data)
+export function createTodo(orgId, projectId, data) {
+  return request.post(basePath(orgId, projectId), data)
 }
 
 /**
  * Update an existing todo
+ * @param {string} orgId - Organization UUID
+ * @param {string} projectId - Project UUID
  * @param {string} todoId - Todo UUID
  * @param {Object} data - Updated todo data
  * @param {string} data.title - Todo title (required)
@@ -49,26 +68,30 @@ export function createTodo(data) {
  * @param {boolean} [data.is_completed] - Completion status
  * @returns {Promise} API response with updated todo
  */
-export function updateTodo(todoId, data) {
-  return request.put(`/todos/${todoId}`, data)
+export function updateTodo(orgId, projectId, todoId, data) {
+  return request.put(`${basePath(orgId, projectId)}/${todoId}`, data)
 }
 
 /**
  * Delete a single todo
+ * @param {string} orgId - Organization UUID
+ * @param {string} projectId - Project UUID
  * @param {string} todoId - Todo UUID
  * @returns {Promise} API response
  */
-export function deleteTodo(todoId) {
-  return request.delete(`/todos/${todoId}`)
+export function deleteTodo(orgId, projectId, todoId) {
+  return request.delete(`${basePath(orgId, projectId)}/${todoId}`)
 }
 
 /**
  * Delete multiple todos
+ * @param {string} orgId - Organization UUID
+ * @param {string} projectId - Project UUID
  * @param {string[]} ids - Array of todo UUIDs
  * @returns {Promise} API response
  */
-export function deleteTodos(ids) {
-  return request.delete("/todos", {
+export function deleteTodos(orgId, projectId, ids) {
+  return request.delete(basePath(orgId, projectId), {
     params: { ids: ids.join(",") },
   })
 }
