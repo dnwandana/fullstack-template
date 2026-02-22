@@ -49,7 +49,7 @@ export function useAuth() {
     error.value = ""
     try {
       await authStore.signin(formState.username, formState.password)
-      router.push("/todos")
+      router.push("/orgs")
     } catch (err) {
       error.value = err.message
     }
