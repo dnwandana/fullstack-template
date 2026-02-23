@@ -14,16 +14,7 @@
 
 import { reactive, ref, computed, watch, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import {
-  Tabs,
-  Form,
-  Input,
-  Button,
-  Space,
-  Popconfirm,
-  Typography,
-  Breadcrumb,
-} from "ant-design-vue"
+import { Tabs, Form, Input, Button, Space, Popconfirm, Typography } from "ant-design-vue"
 import { PlusOutlined } from "@ant-design/icons-vue"
 
 import { useOrgs } from "@/composables/useOrgs"
@@ -60,7 +51,7 @@ const invitationsComposable = useInvitations()
 const { can, loadPermissions } = usePermissions()
 
 // Destructure frequently used values for cleaner template bindings
-const { currentOrg, fetchOrgById } = orgsComposable
+const { fetchOrgById } = orgsComposable
 const { currentProject, fetchProjectById, deleteProject } = projectsComposable
 const { projectMembers, fetchProjectMembers, handleRoleChange, handleRemove } = membersComposable
 const { roles, fetchRoles } = rolesComposable
@@ -177,11 +168,22 @@ function onRevoke(invitationId) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Active tab — driven by ?tab query param (defaults to "general").
+ * This keeps the sidebar "Members" link (?tab=members) in sync with the tab UI.
+ */
+const activeTab = computed(() => route.query.tab || "general")
+
+/**
  * Fetch the relevant data when the user switches tabs.
+ * Also updates the URL query param to keep sidebar highlighting in sync.
  * Uses project-scoped fetches for members.
  * @param {string} activeKey - The key of the newly active tab
  */
 function onTabChange(activeKey) {
+  // Update URL query param so sidebar highlighting stays in sync
+  const query = activeKey === "general" ? {} : { tab: activeKey }
+  router.replace({ path: route.path, query })
+
   if (activeKey === "members") {
     fetchProjectMembers(orgId, projectId)
     // Roles are org-level but needed for the role dropdown in MembersTable
@@ -194,64 +196,29 @@ function onTabChange(activeKey) {
 }
 
 // ---------------------------------------------------------------------------
-// Navigation helpers
-// ---------------------------------------------------------------------------
-
-/** Navigate back to the organizations list */
-function goToOrgs() {
-  router.push("/orgs")
-}
-
-/** Navigate to this org's projects list */
-function goToOrgProjects() {
-  router.push(`/orgs/${orgId}`)
-}
-
-/** Navigate to this project's todos list */
-function goToProjectTodos() {
-  router.push(`/orgs/${orgId}/projects/${projectId}`)
-}
-
-// ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 
 onMounted(async () => {
-  // Fetch org and project details so breadcrumbs and the general form are populated
+  // Fetch org and project details so the general form is populated
   await fetchOrgById(orgId)
   await fetchProjectById(orgId, projectId)
   // Load permissions so `can()` checks work throughout the tabs
   loadPermissions(orgId, authStore.currentUser.id)
+  // If arriving via sidebar with ?tab=members, fetch members data immediately
+  if (route.query.tab && route.query.tab !== "general") {
+    onTabChange(route.query.tab)
+  }
 })
 </script>
 
 <template>
   <div class="project-settings">
-    <!-- Breadcrumb: Organizations > [Org Name] > [Project Name] > Settings -->
-    <Breadcrumb style="margin-bottom: 16px">
-      <Breadcrumb.Item>
-        <a @click="goToOrgs">Organizations</a>
-      </Breadcrumb.Item>
-      <Breadcrumb.Item>
-        <a @click="goToOrgProjects">
-          <template v-if="currentOrg">{{ currentOrg.name }}</template>
-          <template v-else>...</template>
-        </a>
-      </Breadcrumb.Item>
-      <Breadcrumb.Item>
-        <a @click="goToProjectTodos">
-          <template v-if="currentProject">{{ currentProject.name }}</template>
-          <template v-else>...</template>
-        </a>
-      </Breadcrumb.Item>
-      <Breadcrumb.Item>Settings</Breadcrumb.Item>
-    </Breadcrumb>
-
     <!-- Page title -->
     <Typography.Title :level="4" style="margin-bottom: 24px"> Project Settings </Typography.Title>
 
     <!-- Tabbed settings sections -->
-    <Tabs default-active-key="general" @change="onTabChange">
+    <Tabs :active-key="activeTab" @change="onTabChange">
       <!-- ================================================================ -->
       <!-- Tab 1: General — project name, description, delete               -->
       <!-- ================================================================ -->

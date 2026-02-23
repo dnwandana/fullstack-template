@@ -4,9 +4,8 @@
  *
  * Features:
  *   - Reads orgId from route params to scope all operations
- *   - Breadcrumb navigation back to the organizations list
  *   - Fetches the org (for name/title), projects list, and user permissions on mount
- *   - Permission-gated Settings and Create Project buttons
+ *   - Permission-gated Create Project button
  *   - Skeleton loading state while data is being fetched
  *   - Empty state with a prompt to create the first project
  *   - Responsive card grid matching OrgsListView layout
@@ -15,18 +14,8 @@
 
 import { onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import {
-  Row,
-  Col,
-  Card,
-  Button,
-  Typography,
-  Empty,
-  Skeleton,
-  Space,
-  Breadcrumb,
-} from "ant-design-vue"
-import { PlusOutlined, SettingOutlined } from "@ant-design/icons-vue"
+import { Row, Col, Card, Button, Typography, Empty, Skeleton } from "ant-design-vue"
+import { PlusOutlined } from "@ant-design/icons-vue"
 import { useOrgs } from "@/composables/useOrgs"
 import { useProjects } from "@/composables/useProjects"
 import { usePermissions } from "@/composables/usePermissions"
@@ -53,7 +42,7 @@ const {
   fetchProjects,
 } = useProjects()
 
-const { can, canAny, loadPermissions } = usePermissions()
+const { can, loadPermissions } = usePermissions()
 
 /**
  * Navigate to the todos list for a specific project within this org.
@@ -61,21 +50,6 @@ const { can, canAny, loadPermissions } = usePermissions()
  */
 function viewTodos(projectId) {
   router.push(`/orgs/${orgId}/projects/${projectId}`)
-}
-
-/**
- * Navigate to the organization settings page.
- * Only accessible to users with org:update or org:delete permissions.
- */
-function goToSettings() {
-  router.push(`/orgs/${orgId}/settings`)
-}
-
-/**
- * Navigate back to the organizations list.
- */
-function goToOrgs() {
-  router.push("/orgs")
 }
 
 /**
@@ -97,18 +71,6 @@ onMounted(async () => {
 
 <template>
   <div class="projects-list">
-    <!-- Breadcrumb navigation -->
-    <Breadcrumb style="margin-bottom: 16px">
-      <Breadcrumb.Item>
-        <a @click="goToOrgs">Organizations</a>
-      </Breadcrumb.Item>
-      <Breadcrumb.Item>
-        <!-- Show org name once loaded, fallback to "..." while loading -->
-        <template v-if="currentOrg">{{ currentOrg.name }}</template>
-        <template v-else>...</template>
-      </Breadcrumb.Item>
-    </Breadcrumb>
-
     <!-- Header row with org title and action buttons -->
     <div class="header">
       <Typography.Title :level="4" style="margin: 0">
@@ -116,23 +78,12 @@ onMounted(async () => {
         <template v-else>Organization</template>
       </Typography.Title>
 
-      <Space>
-        <!-- Settings gear — only visible with org:update or org:delete permission -->
-        <Button v-if="canAny(['org:update', 'org:delete'])" @click="goToSettings">
-          <template #icon>
-            <SettingOutlined />
-          </template>
-          Settings
-        </Button>
-
-        <!-- Create project — only visible with project:create permission -->
-        <Button v-if="can('project:create')" type="primary" @click="openCreateModal">
-          <template #icon>
-            <PlusOutlined />
-          </template>
-          Create Project
-        </Button>
-      </Space>
+      <Button v-if="can('project:create')" type="primary" @click="openCreateModal">
+        <template #icon>
+          <PlusOutlined />
+        </template>
+        Create Project
+      </Button>
     </div>
 
     <!-- Loading skeleton shown while fetching and no projects are cached yet -->

@@ -12,18 +12,9 @@ import {
   Empty,
   Skeleton,
   Input,
-  Breadcrumb,
 } from "ant-design-vue"
-import {
-  PlusOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  EyeOutlined,
-  SettingOutlined,
-} from "@ant-design/icons-vue"
+import { PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons-vue"
 import { useTodos } from "@/composables/useTodos"
-import { useOrgs } from "@/composables/useOrgs"
-import { useProjects } from "@/composables/useProjects"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 import TodoFormModal from "@/components/TodoFormModal.vue"
@@ -61,9 +52,7 @@ const {
   setContext,
 } = useTodos()
 
-const { fetchOrgById, currentOrg } = useOrgs()
-const { fetchProjectById, currentProject } = useProjects()
-const { can, canAny, loadPermissions } = usePermissions()
+const { can, loadPermissions } = usePermissions()
 const authStore = useAuthStore()
 
 // Table columns
@@ -135,11 +124,6 @@ function viewTodo(id) {
   router.push(`/orgs/${orgId}/projects/${projectId}/todos/${id}`)
 }
 
-// Navigate to project settings page
-function goToSettings() {
-  router.push(`/orgs/${orgId}/projects/${projectId}/settings`)
-}
-
 // Handle delete with confirmation
 async function handleDelete(id) {
   await deleteTodo(id)
@@ -177,10 +161,6 @@ onMounted(async () => {
   // Set org/project context so the store scopes API calls correctly
   setContext(orgId, projectId)
 
-  // Fetch org and project names for breadcrumb display
-  fetchOrgById(orgId)
-  fetchProjectById(orgId, projectId)
-
   // Load user permissions for this org to gate UI actions
   loadPermissions(orgId, authStore.currentUser.id)
 
@@ -191,18 +171,6 @@ onMounted(async () => {
 
 <template>
   <div class="todos-list">
-    <!-- Breadcrumb navigation for multi-tenant hierarchy -->
-    <Breadcrumb style="margin-bottom: 16px">
-      <Breadcrumb.Item>
-        <router-link to="/orgs">Organizations</router-link>
-      </Breadcrumb.Item>
-      <Breadcrumb.Item>
-        <router-link :to="`/orgs/${orgId}`">{{ currentOrg?.name || "..." }}</router-link>
-      </Breadcrumb.Item>
-      <Breadcrumb.Item>{{ currentProject?.name || "..." }}</Breadcrumb.Item>
-      <Breadcrumb.Item>Todos</Breadcrumb.Item>
-    </Breadcrumb>
-
     <!-- Header -->
     <div class="header">
       <Typography.Title :level="4" style="margin: 0"> Todos </Typography.Title>
@@ -255,13 +223,6 @@ onMounted(async () => {
             <PlusOutlined />
           </template>
           Create Todo
-        </Button>
-
-        <!-- Settings button (visible if user can update or delete the project) -->
-        <Button v-if="canAny(['project:update', 'project:delete'])" @click="goToSettings">
-          <template #icon>
-            <SettingOutlined />
-          </template>
         </Button>
       </Space>
     </div>

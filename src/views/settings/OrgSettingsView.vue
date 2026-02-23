@@ -24,7 +24,6 @@ import {
   Table,
   Tag,
   Typography,
-  Breadcrumb,
 } from "ant-design-vue"
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons-vue"
 
@@ -221,11 +220,22 @@ function onRevoke(invitationId) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Active tab — driven by ?tab query param (defaults to "general").
+ * This keeps the sidebar "Members" link (?tab=members) in sync with the tab UI.
+ */
+const activeTab = computed(() => route.query.tab || "general")
+
+/**
  * Fetch the relevant data when the user switches tabs.
+ * Also updates the URL query param to keep sidebar highlighting in sync.
  * This avoids loading all data up front and keeps each tab's data fresh.
  * @param {string} activeKey - The key of the newly active tab
  */
 function onTabChange(activeKey) {
+  // Update URL query param so sidebar highlighting stays in sync
+  const query = activeKey === "general" ? {} : { tab: activeKey }
+  router.replace({ path: route.path, query })
+
   if (activeKey === "members") {
     fetchOrgMembers(orgId)
     fetchRoles(orgId)
@@ -239,54 +249,30 @@ function onTabChange(activeKey) {
 }
 
 // ---------------------------------------------------------------------------
-// Navigation helpers
-// ---------------------------------------------------------------------------
-
-/** Navigate back to the organizations list */
-function goToOrgs() {
-  router.push("/orgs")
-}
-
-/** Navigate to this org's projects list */
-function goToOrgProjects() {
-  router.push(`/orgs/${orgId}`)
-}
-
-// ---------------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------------
 
 onMounted(async () => {
-  // Fetch the org details so the breadcrumb and general form are populated
+  // Fetch the org details so the general form is populated
   await fetchOrgById(orgId)
   // Load permissions so `can()` checks work throughout the tabs
   loadPermissions(orgId, authStore.currentUser.id)
+  // If arriving via sidebar with ?tab=members, fetch tab data immediately
+  if (route.query.tab && route.query.tab !== "general") {
+    onTabChange(route.query.tab)
+  }
 })
 </script>
 
 <template>
   <div class="org-settings">
-    <!-- Breadcrumb navigation: Organizations > [Org Name] > Settings -->
-    <Breadcrumb style="margin-bottom: 16px">
-      <Breadcrumb.Item>
-        <a @click="goToOrgs">Organizations</a>
-      </Breadcrumb.Item>
-      <Breadcrumb.Item>
-        <a @click="goToOrgProjects">
-          <template v-if="currentOrg">{{ currentOrg.name }}</template>
-          <template v-else>...</template>
-        </a>
-      </Breadcrumb.Item>
-      <Breadcrumb.Item>Settings</Breadcrumb.Item>
-    </Breadcrumb>
-
     <!-- Page title -->
     <Typography.Title :level="4" style="margin-bottom: 24px">
       Organization Settings
     </Typography.Title>
 
     <!-- Tabbed settings sections -->
-    <Tabs default-active-key="general" @change="onTabChange">
+    <Tabs :active-key="activeTab" @change="onTabChange">
       <!-- ================================================================ -->
       <!-- Tab 1: General — org name, description, delete                   -->
       <!-- ================================================================ -->

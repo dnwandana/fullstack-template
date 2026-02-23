@@ -7,15 +7,12 @@ import {
   Space,
   Tag,
   Typography,
-  Breadcrumb,
   Spin,
   Popconfirm,
   Result,
 } from "ant-design-vue"
 import { ArrowLeftOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons-vue"
 import { useTodos } from "@/composables/useTodos"
-import { useOrgs } from "@/composables/useOrgs"
-import { useProjects } from "@/composables/useProjects"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 import TodoFormModal from "@/components/TodoFormModal.vue"
@@ -42,8 +39,6 @@ const {
   setContext,
 } = useTodos()
 
-const { fetchOrgById, currentOrg } = useOrgs()
-const { fetchProjectById, currentProject } = useProjects()
 const { can, loadPermissions } = usePermissions()
 const authStore = useAuthStore()
 
@@ -51,10 +46,6 @@ const authStore = useAuthStore()
 onMounted(async () => {
   // Scope API calls to the correct org/project
   setContext(orgId, projectId)
-
-  // Fetch org and project names for breadcrumb display
-  fetchOrgById(orgId)
-  fetchProjectById(orgId, projectId)
 
   // Load user permissions for this org to gate UI actions
   loadPermissions(orgId, authStore.currentUser.id)
@@ -99,22 +90,6 @@ function formatDate(dateString) {
 
 <template>
   <div class="todo-detail">
-    <!-- Breadcrumb navigation for multi-tenant hierarchy -->
-    <Breadcrumb style="margin-bottom: 16px">
-      <Breadcrumb.Item>
-        <router-link to="/orgs">Organizations</router-link>
-      </Breadcrumb.Item>
-      <Breadcrumb.Item>
-        <router-link :to="`/orgs/${orgId}`">{{ currentOrg?.name || "..." }}</router-link>
-      </Breadcrumb.Item>
-      <Breadcrumb.Item>
-        <router-link :to="`/orgs/${orgId}/projects/${projectId}`">
-          {{ currentProject?.name || "..." }}
-        </router-link>
-      </Breadcrumb.Item>
-      <Breadcrumb.Item>{{ currentTodo?.title || "Detail" }}</Breadcrumb.Item>
-    </Breadcrumb>
-
     <!-- Loading state -->
     <div v-if="loading" class="loading-container">
       <Spin size="large" />
