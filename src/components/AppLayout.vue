@@ -1,12 +1,13 @@
 <script setup>
-import { computed, onMounted } from "vue"
+import { computed, ref, watch, onMounted } from "vue"
 import { useRouter, useRoute } from "vue-router"
-import { Layout, Breadcrumb, Button, Space, Typography, Badge } from "ant-design-vue"
-import { SettingOutlined, BellOutlined, LogoutOutlined, UserOutlined } from "@ant-design/icons-vue"
+import { Layout, Button, Space, Typography, Badge, Select } from "ant-design-vue"
+import { BellOutlined, LogoutOutlined, UserOutlined } from "@ant-design/icons-vue"
 import { useAuthStore } from "@/stores/auth"
 import { useOrgsStore } from "@/stores/orgs"
 import { useProjectsStore } from "@/stores/projects"
 import { useInvitations } from "@/composables/useInvitations"
+import AppSidebar from "@/components/AppSidebar.vue"
 
 const router = useRouter()
 const route = useRoute()
@@ -15,87 +16,88 @@ const orgsStore = useOrgsStore()
 const projectsStore = useProjectsStore()
 const { pendingCount, fetchMyInvitations } = useInvitations()
 
+// Sidebar collapse state
+const collapsed = ref(false)
+
 // Computed
 const currentUser = computed(() => authStore.currentUser)
 
-// Fetch pending invitations count on mount (only if authenticated)
-onMounted(() => {
-  if (authStore.isAuthenticated) {
-    fetchMyInvitations()
-  }
+// Route params as computed for reactivity
+const currentOrgId = computed(() => route.params.orgId || null)
+const currentProjectId = computed(() => route.params.projectId || null)
+
+// Org selector options
+const orgOptions = computed(() =>
+  orgsStore.orgs.map((org) => ({
+    value: org.id,
+    label: org.name,
+  })),
+)
+
+// Project selector options
+const projectOptions = computed(() =>
+  projectsStore.projects.map((project) => ({
+    value: project.id,
+    label: project.name,
+  })),
+)
+
+// Only show value in selector when it has a matching option (avoids UUID flash on direct URL nav)
+const selectedOrgId = computed(() => {
+  if (!currentOrgId.value) return null
+  return orgOptions.value.some((o) => o.value === currentOrgId.value) ? currentOrgId.value : null
+})
+const selectedProjectId = computed(() => {
+  if (!currentProjectId.value) return null
+  return projectOptions.value.some((o) => o.value === currentProjectId.value)
+    ? currentProjectId.value
+    : null
 })
 
 /**
- * Build breadcrumb items based on current route.
- * Each item has a label for display and an optional path for navigation.
- * The last item in the list is rendered as plain text (no link).
- * @returns {Array<{label: string, path: string|null}>}
+ * Handle org selection change.
+ * Navigates to the selected org's projects list and clears project context.
  */
-const breadcrumbItems = computed(() => {
-  const items = []
-  const params = route.params
-
-  // Always show "Organizations" as first crumb when inside org-related pages
-  if (route.path.startsWith("/orgs") || route.path === "/invitations") {
-    items.push({ label: "Organizations", path: "/orgs" })
-  }
-
-  // Add org name if we're in an org context
-  if (params.orgId) {
-    const orgName = orgsStore.currentOrg?.name || "..."
-    items.push({ label: orgName, path: `/orgs/${params.orgId}` })
-  }
-
-  // Add project name if we're in a project context
-  if (params.projectId) {
-    const projectName = projectsStore.currentProject?.name || "..."
-    items.push({
-      label: projectName,
-      path: `/orgs/${params.orgId}/projects/${params.projectId}`,
-    })
-  }
-
-  // Add page-specific trailing segment (no link — it's the current page)
-  if (route.name === "TodoDetail") {
-    items.push({ label: "Todo Detail", path: null })
-  } else if (route.name === "OrgSettings") {
-    items.push({ label: "Settings", path: null })
-  } else if (route.name === "ProjectSettings") {
-    items.push({ label: "Settings", path: null })
-  } else if (route.name === "MyInvitations") {
-    // Invitations page stands alone — replace all prior items
-    return [{ label: "My Invitations", path: null }]
-  }
-
-  return items
-})
-
-/**
- * Navigate to the appropriate settings page based on current context.
- * If inside a project, go to project settings; otherwise org settings.
- */
-function goToSettings() {
-  const params = route.params
-  if (params.projectId) {
-    router.push(`/orgs/${params.orgId}/projects/${params.projectId}/settings`)
-  } else if (params.orgId) {
-    router.push(`/orgs/${params.orgId}/settings`)
+function onOrgChange(orgId) {
+  if (orgId) {
+    router.push(`/orgs/${orgId}`)
+  } else {
+    router.push("/orgs")
   }
 }
 
 /**
- * Whether settings gear should be shown.
- * Visible when inside an org or project context, but hidden on settings pages themselves.
+ * Handle project selection change.
+ * Navigates to the selected project's todos list within the current org.
  */
-const showSettingsGear = computed(() => {
-  const params = route.params
-  const isSettingsPage = route.name === "OrgSettings" || route.name === "ProjectSettings"
-  // Don't show gear if already on a settings page
-  if (isSettingsPage) return false
-  // Show gear when we have an org context
-  if (params.orgId) return true
-  return false
+function onProjectChange(projectId) {
+  if (projectId && currentOrgId.value) {
+    router.push(`/orgs/${currentOrgId.value}/projects/${projectId}`)
+  } else if (currentOrgId.value) {
+    router.push(`/orgs/${currentOrgId.value}`)
+  }
+}
+
+// Fetch orgs list on mount for the org selector
+onMounted(() => {
+  if (authStore.isAuthenticated) {
+    orgsStore.fetchOrgs()
+    fetchMyInvitations()
+  }
 })
+
+// When orgId changes, fetch projects for the new org
+watch(
+  currentOrgId,
+  (newOrgId) => {
+    if (newOrgId) {
+      projectsStore.fetchProjects(newOrgId)
+    } else {
+      projectsStore.clearProjects()
+    }
+  },
+  { immediate: true },
+)
 
 // Handle logout
 function handleLogout() {
@@ -115,8 +117,8 @@ function navigateTo(path) {
     <Layout.Header
       style="display: flex; align-items: center; justify-content: space-between; padding: 0 24px"
     >
-      <!-- Left side: Logo + Breadcrumb -->
-      <div style="display: flex; align-items: center; gap: 16px">
+      <!-- Left side: Logo + Org/Project selectors -->
+      <div style="display: flex; align-items: center; gap: 12px">
         <Typography.Title
           :level="4"
           style="color: white; margin: 0; cursor: pointer; white-space: nowrap"
@@ -125,29 +127,34 @@ function navigateTo(path) {
           Todo App
         </Typography.Title>
 
-        <!-- Dynamic breadcrumb built from route context -->
-        <Breadcrumb style="margin: 0">
-          <Breadcrumb.Item v-for="(item, index) in breadcrumbItems" :key="index">
-            <!-- Render a link for all items except the last one -->
-            <router-link
-              v-if="item.path && index < breadcrumbItems.length - 1"
-              :to="item.path"
-              style="color: rgba(255, 255, 255, 0.65)"
-            >
-              {{ item.label }}
-            </router-link>
-            <span v-else style="color: rgba(255, 255, 255, 0.85)">{{ item.label }}</span>
-          </Breadcrumb.Item>
-        </Breadcrumb>
+        <!-- Org selector — always visible -->
+        <Select
+          :value="selectedOrgId"
+          :options="orgOptions"
+          placeholder="Select organization"
+          style="min-width: 180px"
+          :bordered="false"
+          allow-clear
+          @change="onOrgChange"
+          class="header-select"
+        />
+
+        <!-- Project selector — visible only when an org is selected -->
+        <Select
+          v-if="currentOrgId"
+          :value="selectedProjectId"
+          :options="projectOptions"
+          placeholder="Select project"
+          style="min-width: 180px"
+          :bordered="false"
+          allow-clear
+          @change="onProjectChange"
+          class="header-select"
+        />
       </div>
 
-      <!-- Right side: Settings + Invitations + User -->
+      <!-- Right side: Invitations + User + Logout -->
       <Space :size="16">
-        <!-- Settings gear — only shown in org/project context, not on settings pages -->
-        <Button v-if="showSettingsGear" type="text" @click="goToSettings" style="color: white">
-          <template #icon><SettingOutlined /></template>
-        </Button>
-
         <!-- Invitations badge — shows pending count -->
         <Badge :count="pendingCount" :offset="[-5, 5]">
           <Button type="text" @click="navigateTo('/invitations')" style="color: white">
@@ -173,23 +180,65 @@ function navigateTo(path) {
       </Space>
     </Layout.Header>
 
-    <!-- Content -->
-    <Layout.Content style="padding: 24px; background: #f5f5f5">
-      <div
-        style="
-          background: white;
-          padding: 24px;
-          min-height: calc(100vh - 64px - 70px - 48px);
-          border-radius: 8px;
-        "
+    <!-- Body: Sidebar + Content -->
+    <Layout>
+      <!-- Sidebar -->
+      <Layout.Sider
+        v-model:collapsed="collapsed"
+        collapsible
+        :width="200"
+        :collapsed-width="64"
+        theme="light"
+        style="background: #fff"
       >
-        <slot></slot>
-      </div>
-    </Layout.Content>
+        <AppSidebar />
+      </Layout.Sider>
 
-    <!-- Footer -->
-    <Layout.Footer style="text-align: center">
-      Todo App ©{{ new Date().getFullYear() }}
-    </Layout.Footer>
+      <!-- Content + Footer -->
+      <Layout>
+        <Layout.Content style="padding: 24px; background: #f5f5f5">
+          <div
+            style="
+              background: white;
+              padding: 24px;
+              min-height: calc(100vh - 64px - 70px - 48px);
+              border-radius: 8px;
+            "
+          >
+            <slot></slot>
+          </div>
+        </Layout.Content>
+
+        <Layout.Footer style="text-align: center">
+          Todo App ©{{ new Date().getFullYear() }}
+        </Layout.Footer>
+      </Layout>
+    </Layout>
   </Layout>
 </template>
+
+<style scoped>
+/* Style the header selects to match the dark theme */
+:deep(.header-select .ant-select-selector) {
+  background: transparent !important;
+  color: white !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+:deep(.header-select .ant-select-selection-item) {
+  color: white !important;
+}
+
+:deep(.header-select .ant-select-selection-placeholder) {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+:deep(.header-select .ant-select-arrow) {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+:deep(.header-select .ant-select-clear) {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+</style>
