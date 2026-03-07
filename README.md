@@ -5,7 +5,6 @@ A fully-featured Vue 3 starter template with authentication, CRUD operations, an
 This is my personal project that can be used together with the following backend repositories:
 
 - [express-template](https://github.com/dnwandana/express-template) - Node.js/Express backend
-- [go-api-template](https://github.com/dnwandana/go-api-template) - Go backend
 
 ## Features
 
@@ -45,7 +44,6 @@ This is my personal project that can be used together with the following backend
 This Vue template is designed to work with compatible backend APIs. You can use one of these backend templates:
 
 - [express-template](https://github.com/dnwandana/express-template) - Express.js with JWT auth, todo CRUD, PostgreSQL
-- [go-api-template](https://github.com/dnwandana/go-api-template) - Go with JWT auth, todo CRUD, PostgreSQL
 
 Both backends provide:
 
