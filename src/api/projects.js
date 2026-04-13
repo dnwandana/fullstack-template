@@ -3,7 +3,7 @@
  * Handles CRUD operations for projects within an organization
  */
 
-import request from "@/utils/request"
+import { request } from "@/utils/http"
 
 /**
  * Get list of projects for an organization
@@ -56,5 +56,5 @@ export function updateProject(orgId, projectId, data) {
  * @returns {Promise} API response
  */
 export function deleteProject(orgId, projectId) {
-  return request.delete(`/orgs/${orgId}/projects/${projectId}`)
+  return request.del(`/orgs/${orgId}/projects/${projectId}`)
 }

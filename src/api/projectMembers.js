@@ -4,7 +4,7 @@
  * All endpoints are nested under the parent organization and project
  */
 
-import request from "@/utils/request"
+import { request } from "@/utils/http"
 
 /**
  * List all members of a project
@@ -38,5 +38,5 @@ export function updateProjectMemberRole(orgId, projectId, userId, roleId) {
  * @returns {Promise} API response
  */
 export function removeProjectMember(orgId, projectId, userId) {
-  return request.delete(`/orgs/${orgId}/projects/${projectId}/members/${userId}`)
+  return request.del(`/orgs/${orgId}/projects/${projectId}/members/${userId}`)
 }

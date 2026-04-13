@@ -3,7 +3,7 @@
  * Retrieves the list of all available permissions in the system
  */
 
-import request from "@/utils/request"
+import { request } from "@/utils/http"
 
 /**
  * List all available permissions

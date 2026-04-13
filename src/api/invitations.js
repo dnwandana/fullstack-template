@@ -4,7 +4,7 @@
  * Supports both organization-level and project-level invitations
  */
 
-import request from "@/utils/request"
+import { request } from "@/utils/http"
 
 /**
  * Invite a user to an organization
@@ -76,5 +76,5 @@ export function declineInvitation(invitationId) {
  * @returns {Promise} API response
  */
 export function revokeInvitation(orgId, invitationId) {
-  return request.delete(`/orgs/${orgId}/invitations/${invitationId}`)
+  return request.del(`/orgs/${orgId}/invitations/${invitationId}`)
 }

@@ -4,7 +4,7 @@
  * Supports both system-defined and custom roles
  */
 
-import request from "@/utils/request"
+import { request } from "@/utils/http"
 
 /**
  * List all roles in an organization (system + custom)
@@ -59,5 +59,5 @@ export function updateRole(orgId, roleId, data) {
  * @returns {Promise} API response
  */
 export function deleteRole(orgId, roleId) {
-  return request.delete(`/orgs/${orgId}/roles/${roleId}`)
+  return request.del(`/orgs/${orgId}/roles/${roleId}`)
 }

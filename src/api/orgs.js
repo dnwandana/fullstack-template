@@ -3,7 +3,7 @@
  * Handles CRUD operations for user organizations
  */
 
-import request from "@/utils/request"
+import { request } from "@/utils/http"
 
 /**
  * Get list of organizations the current user belongs to
@@ -51,5 +51,5 @@ export function updateOrg(orgId, data) {
  * @returns {Promise} API response
  */
 export function deleteOrg(orgId) {
-  return request.delete(`/orgs/${orgId}`)
+  return request.del(`/orgs/${orgId}`)
 }

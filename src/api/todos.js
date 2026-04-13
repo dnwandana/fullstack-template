@@ -4,7 +4,7 @@
  * All endpoints are scoped under /orgs/{orgId}/projects/{projectId}/todos
  */
 
-import request from "@/utils/request"
+import { request } from "@/utils/http"
 
 /**
  * Build the base URL for todos scoped to an organization and project
@@ -29,7 +29,7 @@ function basePath(orgId, projectId) {
  * @returns {Promise} API response with todos and pagination
  */
 export function getTodos(orgId, projectId, params = {}) {
-  return request.get(basePath(orgId, projectId), { params })
+  return request.get(basePath(orgId, projectId), params)
 }
 
 /**
@@ -80,7 +80,7 @@ export function updateTodo(orgId, projectId, todoId, data) {
  * @returns {Promise} API response
  */
 export function deleteTodo(orgId, projectId, todoId) {
-  return request.delete(`${basePath(orgId, projectId)}/${todoId}`)
+  return request.del(`${basePath(orgId, projectId)}/${todoId}`)
 }
 
 /**
@@ -91,7 +91,5 @@ export function deleteTodo(orgId, projectId, todoId) {
  * @returns {Promise} API response
  */
 export function deleteTodos(orgId, projectId, ids) {
-  return request.delete(basePath(orgId, projectId), {
-    params: { ids: ids.join(",") },
-  })
+  return request.del(basePath(orgId, projectId), { ids: ids.join(",") })
 }

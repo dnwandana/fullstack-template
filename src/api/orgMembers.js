@@ -3,7 +3,7 @@
  * Handles listing, updating roles, and removing members within an organization
  */
 
-import request from "@/utils/request"
+import { request } from "@/utils/http"
 
 /**
  * List all members of an organization
@@ -32,5 +32,5 @@ export function updateOrgMemberRole(orgId, userId, roleId) {
  * @returns {Promise} API response
  */
 export function removeOrgMember(orgId, userId) {
-  return request.delete(`/orgs/${orgId}/members/${userId}`)
+  return request.del(`/orgs/${orgId}/members/${userId}`)
 }
