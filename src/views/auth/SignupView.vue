@@ -11,7 +11,7 @@ const {
   loading,
   usernameRules,
   passwordRules,
-  confirmPasswordRules,
+  confirmation_passwordRules,
   handleSignup,
 } = useAuth()
 
@@ -62,9 +62,9 @@ function goToLogin() {
           </Input.Password>
         </Form.Item>
 
-        <Form.Item name="confirmPassword" :rules="confirmPasswordRules">
+        <Form.Item name="confirmation_password" :rules="confirmation_passwordRules">
           <Input.Password
-            v-model:value="formState.confirmPassword"
+            v-model:value="formState.confirmation_password"
             placeholder="Confirm Password"
             size="large"
           >

@@ -14,7 +14,7 @@ export function useAuth() {
   const formState = reactive({
     username: "",
     password: "",
-    confirmPassword: "",
+    confirmation_password: "",
   })
 
   // Error state
@@ -31,7 +31,7 @@ export function useAuth() {
     { min: 8, message: "Password must be at least 8 characters" },
   ]
 
-  const confirmPasswordRules = [
+  const confirmation_passwordRules = [
     { required: true, message: "Please confirm your password" },
     {
       validator: async (_rule, value) => {
@@ -61,7 +61,11 @@ export function useAuth() {
   async function handleSignup() {
     error.value = ""
     try {
-      await authStore.signup(formState.username, formState.password)
+      await authStore.signup(
+        formState.username,
+        formState.password,
+        formState.confirmation_password
+      )
       router.push("/login")
     } catch (err) {
       error.value = err.message
@@ -82,7 +86,7 @@ export function useAuth() {
   function resetForm() {
     formState.username = ""
     formState.password = ""
-    formState.confirmPassword = ""
+    formState.confirmation_password = ""
     error.value = ""
   }
 
@@ -96,7 +100,7 @@ export function useAuth() {
     // Validation rules
     usernameRules,
     passwordRules,
-    confirmPasswordRules,
+    confirmation_passwordRules,
     // Actions
     handleSignin,
     handleSignup,
