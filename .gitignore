@@ -40,3 +40,14 @@ __screenshots__/
 .env.local
 .env.development
 .env.production
+
+# Playwright
+.playwright-cli/
+.playwright-mcp/
+
+# Coding Agents
+.agents/
+docs/
+
+# OpenAPI Spec
+openapi.json
