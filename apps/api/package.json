@@ -1,7 +1,7 @@
 {
-  "name": "express-template",
+  "name": "@fullstack/api",
   "version": "0.0.1",
-  "description": "Express Template",
+  "private": true,
   "main": "src/index.js",
   "type": "module",
   "engines": {
@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "build": "node -e \"console.log('API build step not required')\"",
     "migrate": "knex migrate:latest",
     "migrate:make": "knex migrate:make",
     "migrate:rollback": "knex migrate:rollback",
