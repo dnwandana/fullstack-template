@@ -2,6 +2,21 @@
 
 A production-ready RESTful API template built with Express.js, featuring PostgreSQL, JWT authentication, and a multi-tenant architecture with organization-based access control. Designed to jumpstart your next Node.js API project.
 
+## Monorepo Usage
+
+This package now lives at `apps/api` inside the monorepo.
+
+From the repository root, run:
+
+```bash
+corepack pnpm dev:api
+corepack pnpm build:api
+corepack pnpm lint:api
+corepack pnpm test:api
+```
+
+You can still run package-local commands from `apps/api` with `pnpm`.
+
 ## Features
 
 ### Authentication & Security

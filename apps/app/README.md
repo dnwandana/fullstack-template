@@ -2,6 +2,20 @@
 
 A fully-featured Vue 3 starter template with authentication, CRUD operations, and a scalable architecture pattern. Built with modern best practices and ready for production.
 
+## Monorepo Usage
+
+This package now lives at `apps/app` inside the monorepo.
+
+From the repository root, run:
+
+```bash
+corepack pnpm dev:app
+corepack pnpm build:app
+corepack pnpm lint:app
+```
+
+You can still run package-local commands from `apps/app` with `pnpm`.
+
 This is my personal project that can be used together with the following backend repositories:
 
 - [express-template](https://github.com/dnwandana/express-template) - Node.js/Express backend
