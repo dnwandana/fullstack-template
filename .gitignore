@@ -1,0 +1,16 @@
+# Workspace artifacts
+node_modules/
+.pnpm-store/
+.turbo/
+
+# Local tooling caches
+.corepack/
+
+# Playwright
+.playwright-cli/
+.playwright-mcp/
+
+# Coding agents
+.agents/
+docs/
+skills-lock.json

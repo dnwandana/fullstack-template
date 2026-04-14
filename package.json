@@ -1,0 +1,26 @@
+{
+  "name": "fullstack-template",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:api": "turbo run dev --filter=@fullstack/api",
+    "dev:app": "turbo run dev --filter=@fullstack/app",
+    "build": "turbo run build",
+    "build:api": "turbo run build --filter=@fullstack/api",
+    "build:app": "turbo run build --filter=@fullstack/app",
+    "lint": "turbo run lint",
+    "lint:api": "turbo run lint --filter=@fullstack/api",
+    "lint:app": "turbo run lint --filter=@fullstack/app",
+    "test": "turbo run test",
+    "test:api": "turbo run test --filter=@fullstack/api",
+    "format": "turbo run format",
+    "format:api": "turbo run format --filter=@fullstack/api",
+    "format:app": "turbo run format --filter=@fullstack/app"
+  },
+  "devDependencies": {
+    "pnpm": "^10.33.0",
+    "turbo": "^2.9.6"
+  }
+}
