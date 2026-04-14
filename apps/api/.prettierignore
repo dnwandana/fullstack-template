@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+logs
+.env
+database/migrations
+database/seeds
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

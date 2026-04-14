@@ -1,0 +1,49 @@
+{
+  "name": "express-template",
+  "version": "0.0.1",
+  "description": "Express Template",
+  "main": "src/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "migrate": "knex migrate:latest",
+    "migrate:make": "knex migrate:make",
+    "migrate:rollback": "knex migrate:rollback",
+    "seed": "knex seed:run",
+    "seed:make": "knex seed:make",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "argon2": "^0.43.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "hpp": "^0.2.3",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.3",
+    "knex": "^3.1.0",
+    "morgan": "^1.10.1",
+    "pg": "^8.16.3",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11",
+    "oxlint": "^1.41.0",
+    "prettier": "^3.8.1",
+    "supertest": "^7.2.2",
+    "vitest": "^4.0.18"
+  }
+}

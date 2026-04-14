@@ -1,0 +1,3068 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Multi-Tenant Express API",
+    "description": "Multi-tenant REST API with Organization → Project → Resource hierarchy, RBAC permissions, and invitation system.",
+    "version": "2.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "User authentication and token management"
+    },
+    {
+      "name": "Organizations",
+      "description": "Organization CRUD operations"
+    },
+    {
+      "name": "Organization Members",
+      "description": "Manage organization membership and roles"
+    },
+    {
+      "name": "Projects",
+      "description": "Project CRUD operations within organizations"
+    },
+    {
+      "name": "Project Members",
+      "description": "Manage project membership and roles"
+    },
+    {
+      "name": "Todos",
+      "description": "Todo CRUD operations within projects"
+    },
+    {
+      "name": "Roles",
+      "description": "Custom role and permission management within organizations"
+    },
+    {
+      "name": "Invitations",
+      "description": "Invite users to organizations and projects"
+    },
+    {
+      "name": "Permissions",
+      "description": "List available permissions"
+    },
+    {
+      "name": "Health",
+      "description": "Service health monitoring"
+    }
+  ],
+  "security": [
+    {
+      "AccessToken": []
+    }
+  ],
+  "paths": {
+    "/api/auth/signup": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Create user account",
+        "description": "Register a new user account with username and password.",
+        "operationId": "signup",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "username": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["id", "username"]
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "message": "Created",
+                  "data": {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "username": "johndoe"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          }
+        }
+      }
+    },
+    "/api/auth/signin": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Sign in user",
+        "description": "Authenticate with credentials and receive access/refresh tokens.",
+        "operationId": "signin",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SigninRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authentication successful",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/SigninResponseData"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "message": "OK",
+                  "data": {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "username": "johndoe",
+                    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Refresh access token",
+        "description": "Get a new access token using a valid refresh token.",
+        "operationId": "refreshToken",
+        "security": [
+          {
+            "RefreshToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Token refreshed successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/RefreshResponseData"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "message": "OK",
+                  "data": {
+                    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/orgs": {
+      "post": {
+        "tags": ["Organizations"],
+        "summary": "Create organization",
+        "description": "Create a new organization. The authenticated user becomes the owner.",
+        "operationId": "createOrganization",
+        "security": [{ "AccessToken": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrganizationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Organization created successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Organization"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "get": {
+        "tags": ["Organizations"],
+        "summary": "List user's organizations",
+        "description": "Retrieve all organizations the authenticated user belongs to.",
+        "operationId": "listOrganizations",
+        "security": [{ "AccessToken": [] }],
+        "responses": {
+          "200": {
+            "description": "Organizations retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Organization"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}": {
+      "get": {
+        "tags": ["Organizations"],
+        "summary": "Get organization details",
+        "description": "Retrieve details of a specific organization.",
+        "operationId": "getOrganization",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OrgIdParam" }],
+        "responses": {
+          "200": {
+            "description": "Organization retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Organization"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Organizations"],
+        "summary": "Update organization",
+        "description": "Update an organization's name or description.",
+        "operationId": "updateOrganization",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OrgIdParam" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOrganizationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Organization updated successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Organization"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Organizations"],
+        "summary": "Delete organization",
+        "description": "Delete an organization. Only the owner can perform this action.",
+        "operationId": "deleteOrganization",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OrgIdParam" }],
+        "responses": {
+          "200": {
+            "description": "Organization deleted successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                },
+                "example": {
+                  "message": "Organization deleted",
+                  "data": null
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/members": {
+      "get": {
+        "tags": ["Organization Members"],
+        "summary": "List organization members",
+        "description": "Retrieve all members of an organization with their roles.",
+        "operationId": "listOrgMembers",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OrgIdParam" }],
+        "responses": {
+          "200": {
+            "description": "Members retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/OrgMember"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/members/{user_id}": {
+      "put": {
+        "tags": ["Organization Members"],
+        "summary": "Update member role",
+        "description": "Update the role of an organization member.",
+        "operationId": "updateOrgMemberRole",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/UserIdParam" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRoleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Member role updated successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/OrgMember"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Organization Members"],
+        "summary": "Remove member",
+        "description": "Remove a member from the organization.",
+        "operationId": "removeOrgMember",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/UserIdParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Member removed successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                },
+                "example": {
+                  "message": "Member removed",
+                  "data": null
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/projects": {
+      "post": {
+        "tags": ["Projects"],
+        "summary": "Create project",
+        "description": "Create a new project within an organization.",
+        "operationId": "createProject",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OrgIdParam" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Project created successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Project"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "get": {
+        "tags": ["Projects"],
+        "summary": "List organization's projects",
+        "description": "Retrieve all projects within an organization.",
+        "operationId": "listProjects",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OrgIdParam" }],
+        "responses": {
+          "200": {
+            "description": "Projects retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Project"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/projects/{project_id}": {
+      "get": {
+        "tags": ["Projects"],
+        "summary": "Get project details",
+        "description": "Retrieve details of a specific project.",
+        "operationId": "getProject",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Project"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Projects"],
+        "summary": "Update project",
+        "description": "Update a project's name or description.",
+        "operationId": "updateProject",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Project updated successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Project"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Projects"],
+        "summary": "Delete project",
+        "description": "Delete a project and all its resources.",
+        "operationId": "deleteProject",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project deleted successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                },
+                "example": {
+                  "message": "Project deleted",
+                  "data": null
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/projects/{project_id}/members": {
+      "get": {
+        "tags": ["Project Members"],
+        "summary": "List project members",
+        "description": "Retrieve all members of a project with their roles.",
+        "operationId": "listProjectMembers",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project members retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ProjectMember"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/projects/{project_id}/members/{user_id}": {
+      "put": {
+        "tags": ["Project Members"],
+        "summary": "Update project member role",
+        "description": "Update the role of a project member.",
+        "operationId": "updateProjectMemberRole",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" },
+          { "$ref": "#/components/parameters/UserIdParam" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRoleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Project member role updated successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/ProjectMember"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Project Members"],
+        "summary": "Remove project member",
+        "description": "Remove a member from the project.",
+        "operationId": "removeProjectMember",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" },
+          { "$ref": "#/components/parameters/UserIdParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project member removed successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                },
+                "example": {
+                  "message": "Member removed",
+                  "data": null
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/projects/{project_id}/todos": {
+      "post": {
+        "tags": ["Todos"],
+        "summary": "Create todo",
+        "description": "Create a new todo within a project.",
+        "operationId": "createTodo",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTodoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Todo created successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Todo"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "get": {
+        "tags": ["Todos"],
+        "summary": "List todos",
+        "description": "Retrieve a paginated list of todos within a project. Supports search, sorting, and pagination.",
+        "operationId": "listTodos",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" },
+          { "$ref": "#/components/parameters/PageParam" },
+          { "$ref": "#/components/parameters/LimitParam" },
+          { "$ref": "#/components/parameters/SortByParam" },
+          { "$ref": "#/components/parameters/SortOrderParam" },
+          { "$ref": "#/components/parameters/SearchParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Todos retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Todo"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": ["message", "data", "pagination"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Todos"],
+        "summary": "Bulk delete todos",
+        "description": "Delete multiple todos by comma-separated UUIDs in the query string. Maximum 50 IDs per request.",
+        "operationId": "bulkDeleteTodos",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" },
+          {
+            "name": "ids",
+            "in": "query",
+            "required": true,
+            "description": "Comma-separated list of todo UUIDs to delete (max 50)",
+            "schema": {
+              "type": "string"
+            },
+            "example": "550e8400-e29b-41d4-a716-446655440000,550e8400-e29b-41d4-a716-446655440001"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Todos deleted successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                },
+                "example": {
+                  "message": "Todos deleted",
+                  "data": null
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/projects/{project_id}/todos/{todo_id}": {
+      "get": {
+        "tags": ["Todos"],
+        "summary": "Get todo",
+        "description": "Retrieve a specific todo by ID.",
+        "operationId": "getTodo",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" },
+          { "$ref": "#/components/parameters/TodoIdParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Todo retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Todo"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Todos"],
+        "summary": "Update todo",
+        "description": "Update a specific todo by ID.",
+        "operationId": "updateTodo",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" },
+          { "$ref": "#/components/parameters/TodoIdParam" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTodoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Todo updated successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Todo"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Todos"],
+        "summary": "Delete todo",
+        "description": "Delete a specific todo by ID.",
+        "operationId": "deleteTodo",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" },
+          { "$ref": "#/components/parameters/TodoIdParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Todo deleted successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                },
+                "example": {
+                  "message": "Todo deleted",
+                  "data": null
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/roles": {
+      "post": {
+        "tags": ["Roles"],
+        "summary": "Create custom role",
+        "description": "Create a custom role with specific permissions within an organization.",
+        "operationId": "createRole",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OrgIdParam" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Role created successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/RoleWithPermissions"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "get": {
+        "tags": ["Roles"],
+        "summary": "List roles",
+        "description": "Retrieve all roles (system and custom) for an organization.",
+        "operationId": "listRoles",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OrgIdParam" }],
+        "responses": {
+          "200": {
+            "description": "Roles retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Role"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/roles/{role_id}": {
+      "get": {
+        "tags": ["Roles"],
+        "summary": "Get role with permissions",
+        "description": "Retrieve a specific role and its associated permissions.",
+        "operationId": "getRole",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/RoleIdParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Role retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/RoleWithPermissions"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "tags": ["Roles"],
+        "summary": "Update role permissions",
+        "description": "Update a custom role's name, description, or permissions. System roles cannot be modified.",
+        "operationId": "updateRole",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/RoleIdParam" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRoleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Role updated successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/RoleWithPermissions"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Roles"],
+        "summary": "Delete custom role",
+        "description": "Delete a custom role. System roles cannot be deleted.",
+        "operationId": "deleteRole",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/RoleIdParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Role deleted successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                },
+                "example": {
+                  "message": "Role deleted",
+                  "data": null
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/invitations": {
+      "post": {
+        "tags": ["Invitations"],
+        "summary": "Invite to organization",
+        "description": "Send an invitation to join an organization. Specify the invitee by username or email.",
+        "operationId": "inviteToOrg",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OrgIdParam" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrgInvitationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Invitation created successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Invitation"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "get": {
+        "tags": ["Invitations"],
+        "summary": "List organization invitations",
+        "description": "Retrieve all invitations for an organization.",
+        "operationId": "listOrgInvitations",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/OrgIdParam" }],
+        "responses": {
+          "200": {
+            "description": "Invitations retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Invitation"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/projects/{project_id}/invitations": {
+      "post": {
+        "tags": ["Invitations"],
+        "summary": "Invite to project",
+        "description": "Send an invitation to join a project. Specify the invitee by username or email.",
+        "operationId": "inviteToProject",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/ProjectIdParam" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectInvitationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Invitation created successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Invitation"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/invitations": {
+      "get": {
+        "tags": ["Invitations"],
+        "summary": "List my pending invitations",
+        "description": "Retrieve all pending invitations for the authenticated user.",
+        "operationId": "listMyInvitations",
+        "security": [{ "AccessToken": [] }],
+        "responses": {
+          "200": {
+            "description": "Invitations retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Invitation"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/invitations/{invitation_id}/accept": {
+      "post": {
+        "tags": ["Invitations"],
+        "summary": "Accept invitation",
+        "description": "Accept a pending invitation to join an organization or project.",
+        "operationId": "acceptInvitation",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/InvitationIdParam" }],
+        "responses": {
+          "200": {
+            "description": "Invitation accepted successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                },
+                "example": {
+                  "message": "Invitation accepted",
+                  "data": null
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/invitations/{invitation_id}/decline": {
+      "post": {
+        "tags": ["Invitations"],
+        "summary": "Decline invitation",
+        "description": "Decline a pending invitation.",
+        "operationId": "declineInvitation",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/InvitationIdParam" }],
+        "responses": {
+          "200": {
+            "description": "Invitation declined successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                },
+                "example": {
+                  "message": "Invitation declined",
+                  "data": null
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/invitations/{invitation_id}": {
+      "delete": {
+        "tags": ["Invitations"],
+        "summary": "Revoke invitation",
+        "description": "Revoke a pending invitation. Only users with appropriate permissions can revoke invitations.",
+        "operationId": "revokeInvitation",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/InvitationIdParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invitation revoked successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                },
+                "example": {
+                  "message": "Invitation revoked",
+                  "data": null
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/permissions": {
+      "get": {
+        "tags": ["Permissions"],
+        "summary": "List all available permissions",
+        "description": "Retrieve the full list of available permissions that can be assigned to roles.",
+        "operationId": "listPermissions",
+        "security": [{ "AccessToken": [] }],
+        "responses": {
+          "200": {
+            "description": "Permissions retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Permission"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health check",
+        "description": "Returns service health status including database connectivity. Mounted before rate limiting so load balancers are not throttled.",
+        "operationId": "healthCheck",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "message": "healthy",
+                  "data": {
+                    "status": "healthy",
+                    "timestamp": "2026-02-22T12:00:00.000Z",
+                    "uptime": 3600.5,
+                    "database": "ok"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service is unhealthy",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                },
+                "example": {
+                  "message": "unhealthy",
+                  "data": {
+                    "status": "unhealthy",
+                    "timestamp": "2026-02-22T12:00:00.000Z",
+                    "uptime": 3600.5,
+                    "database": "error"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "AccessToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-access-token",
+        "description": "JWT access token"
+      },
+      "RefreshToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-refresh-token",
+        "description": "JWT refresh token"
+      }
+    },
+    "headers": {
+      "X-Request-Id": {
+        "description": "Correlation ID for request tracing. Echoes the request header if provided, otherwise a generated UUID.",
+        "schema": {
+          "type": "string",
+          "example": "550e8400-e29b-41d4-a716-446655440000"
+        }
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User unique identifier"
+          },
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 30,
+            "pattern": "^[a-zA-Z0-9._-]+$",
+            "description": "Unique username"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true,
+            "description": "User email address"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["id", "username", "created_at", "updated_at"]
+      },
+      "Organization": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "Organization name"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Organization description"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User ID of the organization creator"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["id", "name", "created_by", "created_at", "updated_at"]
+      },
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Parent organization ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "Project name"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Project description"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User ID of the project creator"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["id", "org_id", "name", "created_by", "created_at", "updated_at"]
+      },
+      "Todo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User ID of the todo creator"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000,
+            "nullable": true
+          },
+          "is_completed": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["id", "user_id", "title", "is_completed", "created_at", "updated_at"]
+      },
+      "Role": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Parent organization ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "Role name"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "description": "Role description"
+          },
+          "is_system": {
+            "type": "boolean",
+            "description": "Whether this is a system-defined role (cannot be modified or deleted)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["id", "org_id", "name", "is_system", "created_at", "updated_at"]
+      },
+      "RoleWithPermissions": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Role" },
+          {
+            "type": "object",
+            "properties": {
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Permission"
+                },
+                "description": "List of permissions assigned to this role"
+              }
+            },
+            "required": ["permissions"]
+          }
+        ]
+      },
+      "Permission": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "Permission name (e.g., 'org:update', 'project:create')"
+          },
+          "description": {
+            "type": "string",
+            "description": "Human-readable description of the permission"
+          },
+          "resource": {
+            "type": "string",
+            "description": "Resource this permission applies to (e.g., 'org', 'project', 'todo')"
+          },
+          "action": {
+            "type": "string",
+            "description": "Action this permission grants (e.g., 'create', 'read', 'update', 'delete')"
+          }
+        },
+        "required": ["id", "name", "description", "resource", "action"]
+      },
+      "OrgMember": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "joined_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "username": {
+            "type": "string",
+            "description": "Member's username"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true,
+            "description": "Member's email"
+          },
+          "role_name": {
+            "type": "string",
+            "description": "Name of the assigned role"
+          }
+        },
+        "required": ["user_id", "org_id", "role_id", "joined_at", "username", "role_name"]
+      },
+      "ProjectMember": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "joined_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "username": {
+            "type": "string",
+            "description": "Member's username"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true,
+            "description": "Member's email"
+          },
+          "role_name": {
+            "type": "string",
+            "description": "Name of the assigned role"
+          }
+        },
+        "required": ["user_id", "project_id", "role_id", "joined_at", "username", "role_name"]
+      },
+      "Invitation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Organization the invitation is for"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Project the invitation is for (null for org-level invitations)"
+          },
+          "inviter_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User ID of who sent the invitation"
+          },
+          "invitee_email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true,
+            "description": "Email of the invited user (if invited by email)"
+          },
+          "invitee_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "User ID of the invited user (if invited by username)"
+          },
+          "role_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Role to assign upon acceptance"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "accepted", "declined", "revoked", "expired"],
+            "description": "Current invitation status"
+          },
+          "token": {
+            "type": "string",
+            "description": "Unique invitation token"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the invitation expires"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "org_id",
+          "inviter_id",
+          "role_id",
+          "status",
+          "token",
+          "expires_at",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "current_page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "total_pages": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "items_per_page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "has_next_page": {
+            "type": "boolean"
+          },
+          "has_previous_page": {
+            "type": "boolean"
+          },
+          "next_page": {
+            "type": "integer",
+            "nullable": true
+          },
+          "previous_page": {
+            "type": "integer",
+            "nullable": true
+          }
+        },
+        "required": [
+          "current_page",
+          "total_pages",
+          "total_items",
+          "items_per_page",
+          "has_next_page",
+          "has_previous_page",
+          "next_page",
+          "previous_page"
+        ]
+      },
+      "ApiResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "nullable": true
+          }
+        },
+        "required": ["message"]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["message"]
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "enum": ["healthy", "unhealthy"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["healthy", "unhealthy"]
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "uptime": {
+                "type": "number",
+                "description": "Server uptime in seconds"
+              },
+              "database": {
+                "type": "string",
+                "enum": ["ok", "error"]
+              }
+            },
+            "required": ["status", "timestamp", "uptime", "database"]
+          }
+        },
+        "required": ["message", "data"]
+      },
+      "SignupRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 30,
+            "pattern": "^[a-zA-Z0-9._-]+$",
+            "description": "Unique username (3-30 characters, alphanumeric and . _ - only)"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 72,
+            "description": "Password (8-72 characters)"
+          },
+          "confirmation_password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 72,
+            "description": "Must match the password field"
+          }
+        },
+        "required": ["username", "password", "confirmation_password"]
+      },
+      "SigninRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 30,
+            "pattern": "^[a-zA-Z0-9._-]+$"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 72
+          }
+        },
+        "required": ["username", "password"]
+      },
+      "SigninResponseData": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "access_token": {
+            "type": "string",
+            "description": "JWT access token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "JWT refresh token"
+          }
+        },
+        "required": ["id", "username", "access_token", "refresh_token"]
+      },
+      "RefreshResponseData": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "New JWT access token"
+          }
+        },
+        "required": ["access_token"]
+      },
+      "CreateOrganizationRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Organization name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional organization description"
+          }
+        },
+        "required": ["name"]
+      },
+      "UpdateOrganizationRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Organization name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Organization description"
+          }
+        },
+        "required": ["name"]
+      },
+      "CreateProjectRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Project name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional project description"
+          }
+        },
+        "required": ["name"]
+      },
+      "UpdateProjectRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Project name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Project description"
+          }
+        },
+        "required": ["name"]
+      },
+      "CreateTodoRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Todo title"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional description"
+          },
+          "is_completed": {
+            "type": "boolean",
+            "description": "Completion status"
+          }
+        },
+        "required": ["title"]
+      },
+      "UpdateTodoRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "is_completed": {
+            "type": "boolean"
+          }
+        },
+        "required": ["title"]
+      },
+      "UpdateMemberRoleRequest": {
+        "type": "object",
+        "properties": {
+          "role_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the role to assign"
+          }
+        },
+        "required": ["role_id"]
+      },
+      "CreateRoleRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Role name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional role description"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Array of permission IDs to assign to the role"
+          }
+        },
+        "required": ["name", "permissions"]
+      },
+      "UpdateRoleRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Role name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Role description"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Array of permission IDs to assign to the role"
+          }
+        },
+        "required": ["name", "permissions"]
+      },
+      "CreateOrgInvitationRequest": {
+        "type": "object",
+        "properties": {
+          "role_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Role to assign upon acceptance"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username of the user to invite (use username or email, not both)"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email of the user to invite (use username or email, not both)"
+          }
+        },
+        "required": ["role_id"],
+        "oneOf": [
+          {
+            "required": ["username"],
+            "properties": {
+              "username": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "required": ["email"],
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email"
+              }
+            }
+          }
+        ]
+      },
+      "CreateProjectInvitationRequest": {
+        "type": "object",
+        "properties": {
+          "role_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Role to assign upon acceptance"
+          },
+          "username": {
+            "type": "string",
+            "description": "Username of the user to invite (use username or email, not both)"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email of the user to invite (use username or email, not both)"
+          }
+        },
+        "required": ["role_id"],
+        "oneOf": [
+          {
+            "required": ["username"],
+            "properties": {
+              "username": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "required": ["email"],
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "parameters": {
+      "OrgIdParam": {
+        "name": "org_id",
+        "in": "path",
+        "required": true,
+        "description": "UUID of the organization",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "example": "550e8400-e29b-41d4-a716-446655440000"
+      },
+      "ProjectIdParam": {
+        "name": "project_id",
+        "in": "path",
+        "required": true,
+        "description": "UUID of the project",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "example": "660e8400-e29b-41d4-a716-446655440000"
+      },
+      "TodoIdParam": {
+        "name": "todo_id",
+        "in": "path",
+        "required": true,
+        "description": "UUID of the todo",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "example": "770e8400-e29b-41d4-a716-446655440000"
+      },
+      "RoleIdParam": {
+        "name": "role_id",
+        "in": "path",
+        "required": true,
+        "description": "UUID of the role",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "example": "880e8400-e29b-41d4-a716-446655440000"
+      },
+      "InvitationIdParam": {
+        "name": "invitation_id",
+        "in": "path",
+        "required": true,
+        "description": "UUID of the invitation",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "example": "990e8400-e29b-41d4-a716-446655440000"
+      },
+      "UserIdParam": {
+        "name": "user_id",
+        "in": "path",
+        "required": true,
+        "description": "UUID of the user",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "example": "aa0e8400-e29b-41d4-a716-446655440000"
+      },
+      "PageParam": {
+        "name": "page",
+        "in": "query",
+        "description": "Page number for pagination",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      "LimitParam": {
+        "name": "limit",
+        "in": "query",
+        "description": "Number of items per page",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
+        }
+      },
+      "SearchParam": {
+        "name": "search",
+        "in": "query",
+        "description": "Search term to filter results (case-insensitive)",
+        "schema": {
+          "type": "string",
+          "maxLength": 255
+        }
+      },
+      "SortByParam": {
+        "name": "sort_by",
+        "in": "query",
+        "description": "Field to sort by",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "SortOrderParam": {
+        "name": "sort_order",
+        "in": "query",
+        "description": "Sort order",
+        "schema": {
+          "type": "string",
+          "enum": ["asc", "desc"],
+          "default": "desc"
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request data",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "validation": {
+                "summary": "Validation error",
+                "value": {
+                  "message": "\"name\" is required"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Authentication required or invalid credentials",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "noToken": {
+                "summary": "No token provided",
+                "value": {
+                  "message": "No token provided"
+                }
+              },
+              "invalid": {
+                "summary": "Invalid token",
+                "value": {
+                  "message": "Invalid token"
+                }
+              },
+              "expired": {
+                "summary": "Token expired",
+                "value": {
+                  "message": "Token expired"
+                }
+              },
+              "credentials": {
+                "summary": "Invalid credentials",
+                "value": {
+                  "message": "invalid credentials"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Insufficient permissions",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "message": "You do not have permission to perform this action"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/X-Request-Id"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "examples": {
+              "resource": {
+                "summary": "Resource not found",
+                "value": {
+                  "message": "Resource not found"
+                }
+              },
+              "route": {
+                "summary": "Route not found",
+                "value": {
+                  "message": "Not Found"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
