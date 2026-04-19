@@ -89,7 +89,7 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 2. **Token attachment**: Every API call includes `credentials: 'include'` so cookies are sent automatically by the browser
 3. **Token refresh**: Automatic on 401 responses. Server rotates both tokens via httpOnly cookies.
 4. **Logout**: `AppLayout.vue` → `authStore.logout()` → `POST /auth/logout` (best-effort, cookies sent automatically) → clears all localStorage → redirects to `/login`
-5. **Route protection**: `router.beforeEach` guard calls `authStore.initAuth()` on first nav, then checks `requiresAuth`/`requiresGuest` meta flags
+5. **Route protection**: `router.beforeEach` guard calls `authStore.initAuth()` (which calls `GET /auth/me` to verify cookie validity) on first nav, then checks `requiresAuth`/`requiresGuest` meta flags
 6. **Permission loading**: On entering org-scoped pages, `loadPermissions(orgId, userId)` resolves the user's role and extracts permission name strings for UI gating via `can()` and `canAny()`
 
 ## Store Catalog
@@ -135,7 +135,7 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 
 | Module         | File                    | Exports                                                                                                                                  |
 | -------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| auth           | `api/auth.js`           | `signup`, `signin`, `refreshToken`, `logout`                                                                                             |
+| auth           | `api/auth.js`           | `signup`, `signin`, `getMe`, `refreshToken`, `logout`                                                                                    |
 | orgs           | `api/orgs.js`           | `getOrgs`, `getOrg`, `createOrg`, `updateOrg`, `deleteOrg`                                                                               |
 | projects       | `api/projects.js`       | `getProjects`, `getProject`, `createProject`, `updateProject`, `deleteProject`                                                           |
 | todos          | `api/todos.js`          | `getTodos`, `getTodoById`, `createTodo`, `updateTodo`, `deleteTodo`, `deleteTodos`                                                       |
