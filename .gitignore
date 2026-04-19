@@ -14,3 +14,8 @@ node_modules/
 .agents/
 docs/
 skills-lock.json
+
+# Environment files
+.env
+.env.*
+!.env.example

@@ -15,7 +15,7 @@ const envSchema = joi.object({
   LOG_LEVEL: joi.string().valid("error", "warn", "info", "debug").default("info"),
   LOG_TO_FILE: joi.string().valid("true", "false").default("true"),
   CORS_ALLOWED_ORIGINS: joi.string().default("http://localhost:8080"),
-  RATE_LIMIT_AUTH_MAX: joi.number().integer().min(1).default(10),
+  RATE_LIMIT_AUTH_MAX: joi.number().integer().min(1).max(50).default(10),
   RATE_LIMIT_GENERAL_MAX: joi.number().integer().min(1).default(100),
   JWT_ISSUER: joi.string().required(),
   JWT_AUDIENCE: joi.string().required(),
@@ -60,6 +60,13 @@ const validateEnv = () => {
   if (error) {
     const details = error.details.map((d) => `  - ${d.message}`).join("\n")
     console.error(`Environment validation failed:\n${details}`)
+    process.exit(1)
+  }
+
+  if (value.ACCESS_TOKEN_SECRET === value.REFRESH_TOKEN_SECRET) {
+    console.error(
+      "Environment validation failed:\n  - ACCESS_TOKEN_SECRET and REFRESH_TOKEN_SECRET must be different",
+    )
     process.exit(1)
   }
 

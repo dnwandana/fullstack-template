@@ -5,7 +5,7 @@ const config = {
   connection: {
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_URL?.includes("sslmode=require")
-      ? { rejectUnauthorized: process.env.NODE_ENV === "production" }
+      ? { rejectUnauthorized: true }
       : false,
   },
   useNullAsDefault: true,
