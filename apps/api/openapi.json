@@ -135,7 +135,7 @@
       "post": {
         "tags": ["Authentication"],
         "summary": "Sign in user",
-        "description": "Authenticate with credentials. Server sets httpOnly cookies (access_token, refresh_token). Account is locked for 15 minutes after 5 failed attempts.",
+        "description": "Authenticate with credentials. Server sets httpOnly cookies (access_token, refresh_token). After 5 consecutive failed attempts the account is locked for 15 minutes — locked accounts receive the same 401 response as invalid credentials to prevent enumeration.",
         "operationId": "signin",
         "security": [],
         "requestBody": {
@@ -192,9 +192,20 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "description": "Account temporarily locked due to too many failed login attempts",
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Get current user",
+        "description": "Verify cookie validity and return the authenticated user's profile. Used by clients to check session status on startup.",
+        "operationId": "getMe",
+        "security": [{ "AccessToken": [] }],
+        "responses": {
+          "200": {
+            "description": "User profile retrieved successfully",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/X-Request-Id"
@@ -203,13 +214,33 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/SigninResponseData"
+                        }
+                      }
+                    }
+                  ]
                 },
                 "example": {
-                  "message": "Account is temporarily locked. Try again later."
+                  "message": "OK",
+                  "data": {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "username": "johndoe"
+                  }
                 }
               }
             }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           }
         }
       }
@@ -746,7 +777,7 @@
       "get": {
         "tags": ["Projects"],
         "summary": "List organization's projects",
-        "description": "Retrieve all projects within an organization.",
+        "description": "Retrieve projects within an organization. Owners and admins see all projects; other members see only projects they belong to.",
         "operationId": "listProjects",
         "security": [{ "AccessToken": [] }],
         "parameters": [{ "$ref": "#/components/parameters/OrgIdParam" }],
