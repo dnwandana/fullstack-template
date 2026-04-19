@@ -17,7 +17,7 @@ npm run build
 # Preview production build
 npm run preview
 
-# Lint code (runs both oxlint and eslint with auto-fix)
+# Lint code (runs oxlint then eslint sequentially via npm-run-all2)
 npm run lint
 
 # Format code with Prettier
@@ -26,81 +26,148 @@ npm run format
 
 ## Architecture Overview
 
-This is a Vue 3 SPA built with Vite, using a Pinia store composables pattern for state management. The app implements JWT-based authentication with automatic token refresh.
+Vue 3 SPA built with Vite, using a Pinia store + composables pattern for state management. The app implements JWT-based authentication with automatic token refresh via a custom fetch-based HTTP client.
 
 ### Tech Stack
 
 - **Vue 3** with Composition API (no TypeScript)
-- **Pinia** for state management
+- **Pinia** for state management (composition API setup syntax)
 - **Ant Design Vue** for UI components
-- **Axios** for HTTP requests
+- **Native fetch API** for HTTP requests (custom client in `src/utils/http.js`)
 - **Vue Router** with navigation guards
 
 ### Layered Architecture
 
 ```
 ├── src/
-│   ├── api/          # API service layer (pure HTTP calls)
+│   ├── api/          # API service layer (pure HTTP calls via custom client)
 │   ├── stores/       # Pinia stores (business logic, state)
 │   ├── composables/  # Composables (form handling, UI state, validation)
-│   ├── views/        # Page components
-│   ├── components/   # Reusable components
+│   ├── views/        # Page components (lazy-loaded via dynamic imports)
+│   ├── components/   # Reusable components (modals, tables, layout)
 │   ├── router/       # Vue Router config with auth guards
-│   └── utils/        # Utilities (axios instance, localStorage)
+│   └── utils/        # Utilities (HTTP client, localStorage wrappers)
 ```
 
-### Key Architectural Patterns
+## Route Table
 
-**1. API Layer (`src/api/`)**
+| Path                                         | Name            | Component                                 | Auth Meta       |
+| -------------------------------------------- | --------------- | ----------------------------------------- | --------------- |
+| `/login`                                     | Login           | `views/auth/LoginView.vue`                | `requiresGuest` |
+| `/signup`                                    | Signup          | `views/auth/SignupView.vue`               | `requiresGuest` |
+| `/`                                          | —               | redirect to `/orgs`                       | —               |
+| `/orgs`                                      | OrgsList        | `views/orgs/OrgsListView.vue`             | `requiresAuth`  |
+| `/orgs/:orgId`                               | ProjectsList    | `views/projects/ProjectsListView.vue`     | `requiresAuth`  |
+| `/orgs/:orgId/settings`                      | OrgSettings     | `views/settings/OrgSettingsView.vue`      | `requiresAuth`  |
+| `/orgs/:orgId/projects/:projectId`           | TodosList       | `views/todos/TodosListView.vue`           | `requiresAuth`  |
+| `/orgs/:orgId/projects/:projectId/todos/:id` | TodoDetail      | `views/todos/TodoDetailView.vue`          | `requiresAuth`  |
+| `/orgs/:orgId/projects/:projectId/settings`  | ProjectSettings | `views/settings/ProjectSettingsView.vue`  | `requiresAuth`  |
+| `/invitations`                               | MyInvitations   | `views/invitations/MyInvitationsView.vue` | `requiresAuth`  |
+| `/:pathMatch(.*)*`                           | —               | redirect to `/orgs`                       | —               |
 
-- Pure HTTP service functions using the configured axios instance
-- No business logic, just request/response handling
-- Example: `signup()`, `signin()`, `getTodos()`, `createTodo()`
+**Navigation guard**: Unauthenticated users on `requiresAuth` routes are redirected to `/login` with `?redirect=`. Authenticated users on `requiresGuest` routes are redirected to `/orgs`. Auth store is initialized from localStorage on first navigation.
 
-**2. Store Layer (`src/stores/`)**
+## HTTP Client (`src/utils/http.js`)
 
-- Pinia stores using composition API setup syntax
-- Manage domain state and orchestrate API calls
-- Handle success/error messages via Ant Design's `message`
-- Example: `useAuthStore`, `useTodosStore`
+Custom fetch-based client (NOT Axios). Key behaviors:
 
-**3. Composables Layer (`src/composables/`)**
+- **Base URL**: `VITE_API_BASE_URL` env var (default: `http://localhost:3000/api`)
+- **Timeout**: 10 seconds via `AbortController`
+- **Auth header**: Access token attached via `x-access-token` header on every request
+- **Token refresh flow**: On 401 responses:
+  1. Queues concurrent requests in `failedQueue` to prevent refresh race conditions
+  2. Sends refresh token via `x-refresh-token` header to `POST /auth/refresh`
+  3. On success: stores both new `access_token` AND `refresh_token` (rotation), replays queued requests
+  4. On failure: clears auth data, redirects to `/login`
+- **Excluded from refresh retry**: `/auth/signin`, `/auth/signup`, `/auth/refresh`
+- **Error handling**: Non-401 errors trigger `message.error()` toast automatically
+- **Exports**: `baseURL` (const), `HttpError` (class), `request` (object with `send`, `get`, `post`, `put`, `del`)
 
-- Bridge between stores and components
-- Handle form state, validation rules, UI interactions
-- Expose convenience computed properties
-- Example: `useAuth()`, `useTodos()`
+## Authentication Flow
 
-**4. Axios Interceptors (`src/utils/request.js`)**
+1. **Signin**: `LoginView.vue` → `useAuth().handleSignin()` → `useAuthStore().signin()` → `api/auth.js signin()` → `POST /auth/signin` → stores `access_token` + `refresh_token` + user data in localStorage → redirects to `/orgs`
+2. **Token attachment**: Every API call includes `x-access-token` header via the HTTP client
+3. **Token refresh**: Automatic on 401 responses. On refresh, both `access_token` AND `refresh_token` are stored (server rotates both tokens).
+4. **Logout**: `AppLayout.vue` → `authStore.logout()` → `POST /auth/logout` (best-effort, sends `x-refresh-token` header) → clears all localStorage → redirects to `/login`
+5. **Route protection**: `router.beforeEach` guard calls `authStore.initAuth()` on first nav, then checks `requiresAuth`/`requiresGuest` meta flags
+6. **Permission loading**: On entering org-scoped pages, `loadPermissions(orgId, userId)` resolves the user's role and extracts permission name strings for UI gating via `can()` and `canAny()`
 
-- Request interceptor: Attaches access token via `x-access-token` header
-- Response interceptor: Handles 401 errors with automatic token refresh
-- Uses `x-refresh-token` header for refresh endpoint
-- Queues concurrent requests during refresh to prevent race conditions
-- Redirects to `/login` on refresh failure
+## Store Catalog
 
-### Authentication Flow
+| Store                 | File                    | State                                                                                                                      | Key Actions                                                                                                                                                 |
+| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useAuthStore`        | `stores/auth.js`        | `user`, `loading`                                                                                                          | `initAuth`, `signup`, `signin`, `logout`                                                                                                                    |
+| `useOrgsStore`        | `stores/orgs.js`        | `orgs`, `currentOrg`, `loading`                                                                                            | `fetchOrgs`, `fetchOrgById`, `createOrg`, `updateOrg`, `deleteOrg`                                                                                          |
+| `useProjectsStore`    | `stores/projects.js`    | `projects`, `currentProject`, `loading`                                                                                    | `fetchProjects`, `fetchProjectById`, `createProject`, `updateProject`, `deleteProject`                                                                      |
+| `useTodosStore`       | `stores/todos.js`       | `todos`, `currentTodo`, `pagination`, `selectedIds`, `sortBy`, `sortOrder`, `searchQuery`, `orgId`, `projectId`, `loading` | `setContext`, `fetchTodos`, `fetchTodoById`, `createTodo`, `updateTodo`, `deleteTodo`, `bulkDelete`, `toggleSelection`, `selectAll`, `setSort`, `setSearch` |
+| `useRolesStore`       | `stores/roles.js`       | `roles`, `currentRole`, `allPermissions`, `userPermissions`, `loading`                                                     | `fetchRoles`, `fetchRoleById`, `createRole`, `updateRole`, `deleteRole`, `fetchAllPermissions`, `loadUserPermissions`                                       |
+| `useMembersStore`     | `stores/members.js`     | `orgMembers`, `projectMembers`, `loading`                                                                                  | `fetchOrgMembers`, `fetchProjectMembers`, `updateOrgMemberRole`, `removeOrgMember`, `updateProjectMemberRole`, `removeProjectMember`                        |
+| `useInvitationsStore` | `stores/invitations.js` | `orgInvitations`, `myInvitations`, `loading`                                                                               | `fetchOrgInvitations`, `fetchMyInvitations`, `inviteToOrg`, `inviteToProject`, `acceptInvitation`, `declineInvitation`, `revokeInvitation`                  |
 
-1. Login stores `access_token` and `refresh_token` in localStorage
-2. All API calls include access token via `x-access-token` header
-3. On 401 response, interceptor attempts refresh using `x-refresh-token`
-4. Refresh stores new access token and retries failed request
-5. Router guard checks `isAuthenticated` before protected routes
+## Composable Catalog
 
-### Environment Configuration
+| Composable       | File                            | Returns                                                                                                                                                                                                                                  |
+| ---------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useAuth`        | `composables/useAuth.js`        | `formState`, `error`, `loading`, `isAuthenticated`, `currentUser`, validation rules, `handleSignin`, `handleSignup`, `handleLogout`, `resetForm`                                                                                         |
+| `useOrgs`        | `composables/useOrgs.js`        | `orgs`, `currentOrg`, `loading`, modal state, validation rules, CRUD wrappers, `openCreateModal`, `openEditModal`, `closeModal`, `handleSubmit`                                                                                          |
+| `useProjects`    | `composables/useProjects.js`    | `projects`, `currentProject`, `loading`, modal state, validation rules, CRUD wrappers, `openCreateModal`, `openEditModal`, `closeModal`, `handleSubmit`                                                                                  |
+| `useTodos`       | `composables/useTodos.js`       | `todos`, `pagination`, `loading`, `selectedIds`, `sortBy`, `sortOrder`, `searchQuery`, `currentTodo`, modal state, validation rules, CRUD wrappers, `setContext`, pagination/sort/search handlers, `isSelected`, `handleSelectionChange` |
+| `useRoles`       | `composables/useRoles.js`       | `roles`, `currentRole`, `allPermissions`, `loading`, modal state, validation rules, CRUD wrappers, `openCreateModal`, `openEditModal`, `closeModal`, `handleSubmit`                                                                      |
+| `useMembers`     | `composables/useMembers.js`     | `orgMembers`, `projectMembers`, `loading`, role-change modal state, `fetchOrgMembers`, `fetchProjectMembers`, `openRoleModal`, `closeRoleModal`, `handleRoleChange`, `handleRemove`                                                      |
+| `useInvitations` | `composables/useInvitations.js` | `orgInvitations`, `myInvitations`, `loading`, `pendingCount`, invite modal state, `fetchOrgInvitations`, `fetchMyInvitations`, `openInviteModal`, `closeInviteModal`, `handleInvite`, `handleAccept`, `handleDecline`, `handleRevoke`    |
+| `usePermissions` | `composables/usePermissions.js` | `userPermissions`, `can(permission)`, `canAny(permissions[])`, `loadPermissions(orgId, userId)`, `clearPermissions`                                                                                                                      |
+
+## Component Catalog
+
+| Component          | File                              | Purpose                                                                                                                            |
+| ------------------ | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `AppLayout`        | `components/AppLayout.vue`        | Main shell: header with org/project selectors, pending invitations badge, logout button, collapsible sidebar, content slot, footer |
+| `AppSidebar`       | `components/AppSidebar.vue`       | Context-aware navigation menu that adapts based on current route (org list, org-scoped, or project-scoped)                         |
+| `OrgFormModal`     | `components/OrgFormModal.vue`     | Create/edit organization modal form (name + description)                                                                           |
+| `ProjectFormModal` | `components/ProjectFormModal.vue` | Create/edit project modal form (name + description)                                                                                |
+| `TodoFormModal`    | `components/TodoFormModal.vue`    | Create/edit todo modal form (title + description + completed checkbox)                                                             |
+| `RoleFormModal`    | `components/RoleFormModal.vue`    | Create/edit role modal with permissions grouped by resource as checkboxes                                                          |
+| `InviteFormModal`  | `components/InviteFormModal.vue`  | Invite member modal — toggle between username/email input, with role selection dropdown                                            |
+| `MembersTable`     | `components/MembersTable.vue`     | Members table with inline role-change dropdown and remove button with confirmation                                                 |
+| `InvitationsTable` | `components/InvitationsTable.vue` | Invitations table with color-coded status tags and revoke button for pending invitations                                           |
+
+## API Service Catalog
+
+| Module         | File                    | Exports                                                                                                                                  |
+| -------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| auth           | `api/auth.js`           | `signup`, `signin`, `refreshToken`, `logout`                                                                                             |
+| orgs           | `api/orgs.js`           | `getOrgs`, `getOrg`, `createOrg`, `updateOrg`, `deleteOrg`                                                                               |
+| projects       | `api/projects.js`       | `getProjects`, `getProject`, `createProject`, `updateProject`, `deleteProject`                                                           |
+| todos          | `api/todos.js`          | `getTodos`, `getTodoById`, `createTodo`, `updateTodo`, `deleteTodo`, `deleteTodos`                                                       |
+| roles          | `api/roles.js`          | `getRoles`, `getRole`, `createRole`, `updateRole`, `deleteRole`                                                                          |
+| permissions    | `api/permissions.js`    | `getPermissions`                                                                                                                         |
+| invitations    | `api/invitations.js`    | `inviteToOrg`, `inviteToProject`, `listOrgInvitations`, `listMyInvitations`, `acceptInvitation`, `declineInvitation`, `revokeInvitation` |
+| orgMembers     | `api/orgMembers.js`     | `getOrgMembers`, `updateOrgMemberRole`, `removeOrgMember`                                                                                |
+| projectMembers | `api/projectMembers.js` | `getProjectMembers`, `updateProjectMemberRole`, `removeProjectMember`                                                                    |
+
+## Utility Files
+
+| File               | Exports                                                                                                                         |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `utils/http.js`    | `baseURL` (const), `HttpError` (class), `request` object (`send`, `get`, `post`, `put`, `del`)                                  |
+| `utils/storage.js` | `getAccessToken`, `getRefreshToken`, `setTokens`, `clearTokens`, `getUserData`, `setUserData`, `clearUserData`, `clearAuthData` |
+
+## Environment Configuration
 
 - `VITE_API_BASE_URL` - Backend API base URL (default: `http://localhost:3000/api`)
 - Copy `.env.example` to `.env` to configure
 
-### Code Style
+## Code Style
 
-- **Linting**: Dual-linter setup with oxlint (fast) and eslint (comprehensive)
+- **Linting**: Dual-linter setup with oxlint (fast) then eslint (comprehensive) via npm-run-all2
 - **Formatting**: Prettier with semicolons disabled, double quotes, 100 char width
 - **Import alias**: `@` maps to `src/` directory
+- **No tests** currently exist for the frontend app
 
-### File Naming
+## File Naming
 
 - Views: `*View.vue` (e.g., `LoginView.vue`, `TodosListView.vue`)
 - Components: PascalCase (e.g., `AppLayout.vue`, `TodoFormModal.vue`)
 - Stores: camelCase with `use` prefix (e.g., `useAuthStore`)
 - Composables: camelCase with `use` prefix (e.g., `useAuth`, `useTodos`)
+- API modules: camelCase (e.g., `auth.js`, `orgMembers.js`)
