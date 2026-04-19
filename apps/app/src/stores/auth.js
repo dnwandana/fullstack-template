@@ -6,7 +6,7 @@ import { defineStore } from "pinia"
 import { ref, computed } from "vue"
 import { message } from "ant-design-vue"
 import { signup as apiSignup, signin as apiSignin, logout as apiLogout } from "@/api/auth"
-import { setTokens, setUserData, getUserData, getAccessToken, clearAuthData } from "@/utils/storage"
+import { setUserData, getUserData, clearUserData } from "@/utils/storage"
 
 export const useAuthStore = defineStore("auth", () => {
   // State
@@ -14,7 +14,7 @@ export const useAuthStore = defineStore("auth", () => {
   const loading = ref(false)
 
   // Getters
-  const isAuthenticated = computed(() => !!user.value && !!getAccessToken())
+  const isAuthenticated = computed(() => !!user.value)
   const currentUser = computed(() => user.value)
 
   // Actions
@@ -25,8 +25,7 @@ export const useAuthStore = defineStore("auth", () => {
    */
   function initAuth() {
     const storedUser = getUserData()
-    const token = getAccessToken()
-    if (storedUser && token) {
+    if (storedUser) {
       user.value = storedUser
     }
   }
@@ -60,12 +59,8 @@ export const useAuthStore = defineStore("auth", () => {
     loading.value = true
     try {
       const response = await apiSignin(username, password)
-      const { id, username: name, access_token, refresh_token } = response.data.data
+      const { id, username: name } = response.data.data
 
-      // Store tokens
-      setTokens(access_token, refresh_token)
-
-      // Store user data
       const userData = { id, username: name }
       setUserData(userData)
       user.value = userData
@@ -89,7 +84,7 @@ export const useAuthStore = defineStore("auth", () => {
     } catch {
       // Best-effort — always clear local state even if API call fails
     }
-    clearAuthData()
+    clearUserData()
     user.value = null
     message.success("Logged out successfully")
   }

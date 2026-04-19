@@ -1,5 +1,5 @@
 import { message } from "ant-design-vue"
-import { getAccessToken, getRefreshToken, setTokens, clearAuthData } from "./storage"
+import { clearUserData } from "./storage"
 
 // ---------------------------------------------------------------------------
 // Config
@@ -62,22 +62,11 @@ async function handleRefresh(originalOptions) {
   }
 
   isRefreshing = true
-  const refreshTokenValue = getRefreshToken()
-
-  if (!refreshTokenValue) {
-    isRefreshing = false
-    clearAuthData()
-    window.location.href = "/login"
-    throw new HttpError(401, null, "No refresh token available")
-  }
 
   try {
     const response = await fetch(`${baseURL}/auth/refresh`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-refresh-token": refreshTokenValue,
-      },
+      credentials: "include",
     })
 
     if (!response.ok) {
@@ -85,21 +74,16 @@ async function handleRefresh(originalOptions) {
       throw new HttpError(response.status, errorData, errorData.message || "Refresh failed")
     }
 
-    const data = await response.json()
-    const newAccessToken = data.data.access_token
-    const newRefreshToken = data.data.refresh_token
-    setTokens(newAccessToken, newRefreshToken || refreshTokenValue)
+    await response.json()
+    processQueue(null, true)
 
-    processQueue(null, newAccessToken)
-
-    // Retry the original request with the new token
     return send(originalOptions.method, originalOptions.url, {
       ...originalOptions,
       _retry: true,
     })
   } catch (error) {
     processQueue(error)
-    clearAuthData()
+    clearUserData()
     window.location.href = "/login"
     throw error
   } finally {
@@ -140,12 +124,7 @@ async function send(method, url, options = {}) {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
 
-  // Merge headers — always attach auth token
   const headers = { ...customHeaders }
-  const token = getAccessToken()
-  if (token) {
-    headers["x-access-token"] = token
-  }
   if (body) {
     headers["Content-Type"] = "application/json"
   }
@@ -154,6 +133,7 @@ async function send(method, url, options = {}) {
 
   try {
     const fetchOptions = { method, headers, signal: controller.signal }
+    fetchOptions.credentials = "include"
     if (method !== "GET" && body) {
       fetchOptions.body = JSON.stringify(body)
     }
