@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken"
+import crypto from "node:crypto"
 
 /**
  * Generates a signed JSON Web Token for a given user.
@@ -30,6 +31,7 @@ export const generateRefreshToken = (id) => {
   const jwtPayload = {
     id,
     type: "refresh",
+    jti: crypto.randomUUID(),
   }
 
   return jwt.sign(jwtPayload, process.env.REFRESH_TOKEN_SECRET, {

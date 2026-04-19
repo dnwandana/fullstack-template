@@ -8,5 +8,6 @@ const router = Router()
 router.post("/signup", authLimiter, authController.signup)
 router.post("/signin", authLimiter, authController.signin)
 router.post("/refresh", authLimiter, requireRefreshToken, authController.refreshAccessToken)
+router.post("/logout", requireRefreshToken, authController.logout)
 
 export default router
