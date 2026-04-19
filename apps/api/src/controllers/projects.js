@@ -95,18 +95,21 @@ export const createProject = async (req, res, next) => {
 }
 
 /**
- * GET /api/orgs/:org_id/projects — List projects the user is a member of.
+ * GET /api/orgs/:org_id/projects — List projects.
  *
- * Returns only projects where the authenticated user is an explicit member,
- * scoped to the current organization.
+ * Org owners and admins see all projects in the organization.
+ * Other members see only projects they are an explicit member of.
  *
- * @param {Object} req - Express request object (req.org.id, req.user.id set by middleware)
+ * @param {Object} req - Express request object (req.org.id, req.org.role_name set by middleware)
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
 export const getProjects = async (req, res, next) => {
   try {
-    const projects = await projectModel.findManyByUserId(req.org.id, req.user.id)
+    const isAdminOrOwner = ["owner", "admin"].includes(req.org.role_name)
+    const projects = isAdminOrOwner
+      ? await projectModel.findManyByOrgId(req.org.id)
+      : await projectModel.findManyByUserId(req.org.id, req.user.id)
 
     return res.json(
       apiResponse({
