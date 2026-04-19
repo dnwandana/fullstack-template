@@ -64,7 +64,7 @@ export function useAuth() {
       await authStore.signup(
         formState.username,
         formState.password,
-        formState.confirmation_password
+        formState.confirmation_password,
       )
       router.push("/login")
     } catch (err) {
