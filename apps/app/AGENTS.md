@@ -26,7 +26,7 @@ npm run format
 
 ## Architecture Overview
 
-Vue 3 SPA built with Vite, using a Pinia store + composables pattern for state management. The app implements JWT-based authentication with automatic token refresh via a custom fetch-based HTTP client.
+Vue 3 SPA built with Vite, using a Pinia store + composables pattern for state management. The app implements cookie-based authentication with automatic token refresh via a custom fetch-based HTTP client (httpOnly cookies set by the server).
 
 ### Tech Stack
 
@@ -73,11 +73,11 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 
 - **Base URL**: `VITE_API_BASE_URL` env var (default: `http://localhost:3000/api`)
 - **Timeout**: 10 seconds via `AbortController`
-- **Auth header**: Access token attached via `x-access-token` header on every request
+- **Auth cookies**: `credentials: 'include'` on all fetch calls, cookies set by server
 - **Token refresh flow**: On 401 responses:
   1. Queues concurrent requests in `failedQueue` to prevent refresh race conditions
-  2. Sends refresh token via `x-refresh-token` header to `POST /auth/refresh`
-  3. On success: stores both new `access_token` AND `refresh_token` (rotation), replays queued requests
+  2. Sends refresh request (cookie-based) to `POST /auth/refresh`
+  3. On success: server rotates and sets new httpOnly cookies, replays queued requests
   4. On failure: clears auth data, redirects to `/login`
 - **Excluded from refresh retry**: `/auth/signin`, `/auth/signup`, `/auth/refresh`
 - **Error handling**: Non-401 errors trigger `message.error()` toast automatically
@@ -85,10 +85,10 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 
 ## Authentication Flow
 
-1. **Signin**: `LoginView.vue` → `useAuth().handleSignin()` → `useAuthStore().signin()` → `api/auth.js signin()` → `POST /auth/signin` → stores `access_token` + `refresh_token` + user data in localStorage → redirects to `/orgs`
-2. **Token attachment**: Every API call includes `x-access-token` header via the HTTP client
-3. **Token refresh**: Automatic on 401 responses. On refresh, both `access_token` AND `refresh_token` are stored (server rotates both tokens).
-4. **Logout**: `AppLayout.vue` → `authStore.logout()` → `POST /auth/logout` (best-effort, sends `x-refresh-token` header) → clears all localStorage → redirects to `/login`
+1. **Signin**: `LoginView.vue` → `useAuth().handleSignin()` → `useAuthStore().signin()` → `api/auth.js signin()` → `POST /auth/signin` → server sets httpOnly cookies (`access_token` + `refresh_token`) + returns user data → stores user data in localStorage → redirects to `/orgs`
+2. **Token attachment**: Every API call includes `credentials: 'include'` so cookies are sent automatically by the browser
+3. **Token refresh**: Automatic on 401 responses. Server rotates both tokens via httpOnly cookies.
+4. **Logout**: `AppLayout.vue` → `authStore.logout()` → `POST /auth/logout` (best-effort, cookies sent automatically) → clears all localStorage → redirects to `/login`
 5. **Route protection**: `router.beforeEach` guard calls `authStore.initAuth()` on first nav, then checks `requiresAuth`/`requiresGuest` meta flags
 6. **Permission loading**: On entering org-scoped pages, `loadPermissions(orgId, userId)` resolves the user's role and extracts permission name strings for UI gating via `can()` and `canAny()`
 
@@ -147,10 +147,10 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 
 ## Utility Files
 
-| File               | Exports                                                                                                                         |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `utils/http.js`    | `baseURL` (const), `HttpError` (class), `request` object (`send`, `get`, `post`, `put`, `del`)                                  |
-| `utils/storage.js` | `getAccessToken`, `getRefreshToken`, `setTokens`, `clearTokens`, `getUserData`, `setUserData`, `clearUserData`, `clearAuthData` |
+| File               | Exports                                                                                        |
+| ------------------ | ---------------------------------------------------------------------------------------------- |
+| `utils/http.js`    | `baseURL` (const), `HttpError` (class), `request` object (`send`, `get`, `post`, `put`, `del`) |
+| `utils/storage.js` | `getUserData`, `setUserData`, `clearUserData`, `clearAuthData`                                 |
 
 ## Environment Configuration
 

@@ -56,7 +56,7 @@ The template includes JWT-based authentication. To customize:
 **Keep the auth system** - Update API endpoints in:
 
 - `src/api/auth.js` - Modify endpoint paths
-- `src/utils/request.js` - Update token headers if needed
+- `src/utils/http.js` - Update fetch client options if needed
 
 **Remove auth entirely** - See "Removing Features" section below
 
@@ -83,7 +83,7 @@ Create a new API service file. This layer only handles HTTP requests:
 
 ```javascript
 // src/api/posts.js
-import request from '@/utils/request'
+import { request } from '@/utils/http'
 
 export function getPosts(params = {}) {
   return request.get('/posts', { params })
@@ -102,7 +102,7 @@ export function updatePost(id, data) {
 }
 
 export function deletePost(id) {
-  return request.delete(`/posts/${id}`)
+  return request.del(`/posts/${id}`)
 }
 ```
 
@@ -461,7 +461,7 @@ Customize Ant Design in `vite.config.js`:
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     vue(),
     // Add theme configuration
@@ -477,7 +477,7 @@ export default defineConfig({
       },
     },
   },
-})
+}))
 ```
 
 ### Global Styles
@@ -507,7 +507,7 @@ async function fetchData() {
     items.value = response.data.data.items
     return response.data
   } catch (error) {
-    // Axios error is already handled by request interceptor
+    // Non-401 errors are already handled by the HTTP client (toast notification)
     items.value = []
     throw error
   } finally {
@@ -530,7 +530,7 @@ message.info('Here is some information')
 ### localStorage Helpers
 
 ```javascript
-import { setUserData, getUserData, clearAuthData } from '@/utils/storage'
+import { setUserData, getUserData, clearUserData } from '@/utils/storage'
 
 // Save user data
 setUserData({ id: 1, username: 'john' })
@@ -538,9 +538,11 @@ setUserData({ id: 1, username: 'john' })
 // Retrieve user data
 const user = getUserData()
 
-// Clear auth data (logout)
-clearAuthData()
+// Clear user data (logout)
+clearUserData()
 ```
+
+Auth tokens are stored as httpOnly cookies (managed by the server) — no token management needed in localStorage.
 
 ## Next Steps
 

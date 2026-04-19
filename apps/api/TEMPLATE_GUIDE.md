@@ -7,7 +7,8 @@ This guide explains how to use this Express API template as a starting point for
 This template provides a production-ready foundation for building RESTful APIs with Express.js, PostgreSQL, and JWT authentication. It includes:
 
 - Clean MVC architecture
-- JWT authentication with access/refresh tokens
+- JWT authentication with access/refresh tokens delivered as httpOnly cookies
+- Password complexity requirements and account lockout protection
 - Standardized error handling and API responses
 - Input validation with Joi
 - Database migrations with Knex.js
@@ -334,13 +335,13 @@ const refreshToken = generateRefreshToken(userId)
 
 - Short-lived (15 minutes by default)
 - Used for API requests
-- Sent in `x-access-token` header
+- Delivered as httpOnly cookie (`access_token`), scoped to `/api`
 
 **Refresh Token:**
 
 - Long-lived (7 days by default)
 - Used to get new access tokens
-- Sent in `x-refresh-token` header
+- Delivered as httpOnly cookie (`refresh_token`), scoped to `/api/auth`
 
 #### `src/utils/argon2.js` - Password Hashing
 
@@ -748,30 +749,31 @@ npm run dev
 **Test with cURL:**
 
 ```bash
-# 1. Sign in to get tokens
+# 1. Sign in — server sets httpOnly cookies
 curl -X POST http://localhost:3000/api/auth/signin \
   -H "Content-Type: application/json" \
+  -c cookies.txt \
   -d '{"username":"yourusername","password":"yourpassword"}'
 
-# 2. Create a category (replace ACCESS_TOKEN)
+# 2. Create a category (cookies sent automatically)
 curl -X POST http://localhost:3000/api/categories \
   -H "Content-Type: application/json" \
-  -H "x-access-token: YOUR_ACCESS_TOKEN" \
+  -b cookies.txt \
   -d '{"name":"Work","color":"#3B82F6"}'
 
 # 3. Get all categories
 curl http://localhost:3000/api/categories \
-  -H "x-access-token: YOUR_ACCESS_TOKEN"
+  -b cookies.txt
 
 # 4. Update a category (replace CATEGORY_ID)
 curl -X PUT http://localhost:3000/api/categories/CATEGORY_ID \
   -H "Content-Type: application/json" \
-  -H "x-access-token: YOUR_ACCESS_TOKEN" \
+  -b cookies.txt \
   -d '{"name":"Personal","color":"#10B981"}'
 
 # 5. Delete a category
 curl -X DELETE http://localhost:3000/api/categories/CATEGORY_ID \
-  -H "x-access-token: YOUR_ACCESS_TOKEN"
+  -b cookies.txt
 ```
 
 ## Database Management
@@ -838,23 +840,25 @@ npm run seed
 ### Authentication Flow
 
 1. **Signup** (`POST /api/auth/signup`)
-   - User provides username and password
+   - User provides username and password (must meet complexity requirements)
    - Password is hashed with Argon2
    - User record is created
 
 2. **Signin** (`POST /api/auth/signin`)
    - User provides credentials
    - Password is verified
-   - Access token (15min) and refresh token (7d) are returned
+   - Access token (15min) and refresh token (7d) are set as httpOnly cookies
+   - Response body returns `{ id, username }` only (no tokens in body)
+   - After 5 failed attempts, the account is locked for 15 minutes
 
 3. **Access Protected Routes**
-   - Include access token in `x-access-token` header
+   - Browser automatically sends the `access_token` httpOnly cookie
    - `requireAccessToken` middleware verifies the token
    - `req.user.id` contains the authenticated user's ID
 
 4. **Refresh Token** (`POST /api/auth/refresh`)
-   - Include refresh token in `x-refresh-token` header
-   - Returns a new access token
+   - Browser sends the `refresh_token` httpOnly cookie
+   - Server rotates both tokens and sets new cookies
 
 ### Adding Protected Routes
 
@@ -1155,18 +1159,24 @@ db.select("todos.*", "users.username")
 
 **"No token provided"**
 
-- Ensure `x-access-token` header is set
-- Check header name (not `Authorization`)
+- Ensure the `access_token` httpOnly cookie is being sent
+- Check CORS configuration includes `credentials: true`
+- Verify the frontend uses `credentials: 'include'` on fetch calls
 
 **"Token expired"**
 
 - Access tokens expire after 15 minutes
-- Use refresh token to get new access token
+- The frontend should automatically refresh via the `refresh_token` cookie
 
 **"Invalid token"**
 
-- Verify token is correctly copied
 - Check JWT secrets match between generation and verification
+- Ensure cookies aren't being corrupted by proxies
+
+**"Account is temporarily locked"**
+
+- 5 failed signin attempts trigger a 15-minute lockout
+- Wait for the lockout period to expire
 
 **Database connection errors**
 

@@ -21,15 +21,18 @@ You can still run package-local commands from `apps/api` with `pnpm`.
 
 ### Authentication & Security
 
-- **JWT Authentication**: Dual-token system with access tokens (15min) and refresh tokens (7 days), pinned to HS256
+- **JWT Authentication**: Dual-token system with access tokens (15min) and refresh tokens (7 days), pinned to HS256, delivered as httpOnly cookies
 - **Password Hashing**: Argon2 for secure password storage
-- **Security Headers**: Helmet with strict Content Security Policy and referrer protection
-- **CORS**: Configurable allowed origins via environment variable
+- **Password Complexity**: Requires uppercase, lowercase, digit, and special character
+- **Account Lockout**: 5 failed login attempts locks the account for 15 minutes
+- **Security Headers**: Helmet with strict Content Security Policy, referrer protection, and HSTS (1-year max-age with preload)
+- **CORS**: Configurable allowed origins with credentials support for cookie-based auth
 - **Rate Limiting**: Configurable per-route and global rate limits (express-rate-limit)
 - **HPP Protection**: HTTP Parameter Pollution prevention
 - **Input Validation**: Joi schemas for request validation with ILIKE wildcard sanitization
-- **Environment Validation**: Startup checks for required variables and secret strength
+- **Environment Validation**: Startup checks for required variables, secret strength, and placeholder detection
 - **Body Size Limits**: 100kb cap on JSON and URL-encoded payloads
+- **Request ID Validation**: Incoming `X-Request-Id` headers validated as proper UUIDs (rejects malformed input)
 - **Pagination & Search**: Reusable utility for paginated queries with sorting and case-insensitive search
 
 ### Multi-Tenant Architecture
@@ -49,8 +52,8 @@ You can still run package-local commands from `apps/api` with `pnpm`.
 
 ### Observability & Reliability
 
-- **Request ID Tracking**: Automatic `X-Request-Id` correlation across logs and responses (accepts incoming or generates UUID)
-- **Health Check**: `GET /health` endpoint with database connectivity probe, exempt from rate limiting
+- **Request ID Tracking**: Automatic `X-Request-Id` correlation across logs and responses (accepts valid UUIDs or generates one)
+- **Health Check**: `GET /health` endpoint with database connectivity probe, exempt from rate limiting (production response omits uptime and database details)
 - **Logging**: Winston + Morgan for structured logging with daily rotation, request IDs in every log entry
 
 ### Developer Experience
@@ -71,6 +74,7 @@ You can still run package-local commands from `apps/api` with `pnpm`.
 | **Database**       | PostgreSQL ^8.16.3                     | Relational database        |
 | **ORM**            | Knex.js ^3.1.0                         | Query builder & migrations |
 | **Authentication** | JWT ^9.0.3, Argon2 ^0.43.1             | Token-based auth & hashing |
+| **Cookies**        | cookie-parser ^1.4.7                   | httpOnly cookie management |
 | **Validation**     | Joi ^17.13.3                           | Schema validation          |
 | **Security**       | Helmet ^8.1.0, CORS ^2.8.5, HPP ^0.2.3 | Security middleware        |
 | **Rate Limiting**  | express-rate-limit ^8.2.1              | Request throttling         |
@@ -131,7 +135,7 @@ Create a `.env` file in the project root with the following variables:
 postgresql://username:password@localhost:5432/database_name
 ```
 
-**Security Note:** JWT secrets must be at least 32 characters. The server validates all required environment variables at startup and will refuse to start with missing or weak secrets. Generate secrets with:
+**Security Note:** JWT secrets must be at least 32 characters, must differ from each other, and must not contain placeholder values like "changeme". The server validates all required environment variables at startup and will refuse to start with missing, weak, or placeholder secrets. Generate secrets with:
 
 ```bash
 openssl rand -hex 32
@@ -253,7 +257,7 @@ npm run test:watch    # Run tests in watch mode
 npm run test:coverage # Run tests with coverage report
 ```
 
-Tests use a real PostgreSQL test database configured in `.env.test`. The global setup runs migrations and truncates tables before tests, then rolls back migrations on teardown. Tests cover auth, health, todos (multi-tenant paths), organizations, permissions enforcement, cross-tenant isolation, and cascade deletes.
+Tests use a real PostgreSQL test database configured in `.env.test`. The global setup runs migrations and truncates tables before tests, then rolls back migrations on teardown. Tests cover auth (including account lockout, cookie-based auth, token rotation), health, todos (multi-tenant paths), organizations, permissions enforcement, cross-tenant isolation, and cascade deletes.
 
 ### Linting & Formatting
 
@@ -295,11 +299,12 @@ This template includes an OpenAPI 3.0 specification (`openapi.json`) that docume
 
 ### Authentication Endpoints
 
-| Method | Endpoint            | Description                | Auth Required |
-| ------ | ------------------- | -------------------------- | ------------- |
-| POST   | `/api/auth/signup`  | Create new user account    | No            |
-| POST   | `/api/auth/signin`  | Sign in and receive tokens | No            |
-| POST   | `/api/auth/refresh` | Refresh access token       | Refresh Token |
+| Method | Endpoint            | Description                                | Auth Required |
+| ------ | ------------------- | ------------------------------------------ | ------------- |
+| POST   | `/api/auth/signup`  | Create new user account                    | No            |
+| POST   | `/api/auth/signin`  | Sign in; server sets httpOnly auth cookies | No            |
+| POST   | `/api/auth/refresh` | Rotate tokens via httpOnly cookie          | Refresh Token |
+| POST   | `/api/auth/logout`  | Revoke refresh token, clear cookies        | Refresh Token |
 
 ### Organization Endpoints
 
@@ -378,17 +383,14 @@ This template includes an OpenAPI 3.0 specification (`openapi.json`) that docume
 
 ### Authentication Format
 
-Protected endpoints require the access token in the `x-access-token` header:
+Authentication uses **httpOnly cookies** set by the server. Tokens are never exposed to client-side JavaScript.
 
-```
-x-access-token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
+- **Signin**: Server sets `access_token` (httpOnly, path `/api`, 15min) and `refresh_token` (httpOnly, path `/api/auth`, 7d) cookies. The response body returns `{ id, username }` only — no tokens.
+- **Token refresh**: The browser automatically sends the `refresh_token` cookie. Server rotates both tokens and sets new cookies. Response body is `{ data: null }`.
+- **Authenticated requests**: The browser automatically sends the `access_token` cookie with every request under `/api`.
+- **Logout**: Server revokes the refresh token and clears both cookies.
 
-Token refresh requires the refresh token in the `x-refresh-token` header:
-
-```
-x-refresh-token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
+**Cookie properties**: `httpOnly`, `Secure` (production only), `SameSite=Strict`, scoped to appropriate paths.
 
 ## System Roles & Permissions
 
@@ -464,13 +466,14 @@ express-template/
 │   ├── utils/               # Utility functions
 │   │   ├── argon2.js         # Password hashing
 │   │   ├── constant.js       # HTTP constants
+│   │   ├── cookies.js        # httpOnly cookie helpers (set/clear auth cookies)
 │   │   ├── http-error.js     # Custom error class
 │   │   ├── jwt.js            # JWT utilities
 │   │   ├── logger.js         # Winston logger
 │   │   ├── pagination.js     # Reusable pagination & search
 │   │   ├── response.js       # Response formatter
 │   │   ├── sanitize.js       # Input sanitization (ILIKE escaping)
-│   │   └── validate-env.js   # Startup environment validation
+│   │   └── validate-env.js   # Startup environment validation (incl. placeholder detection)
 │   ├── app.js                # Express app configuration (middleware + routes)
 │   └── index.js              # Entry point (env validation + server start)
 ├── database/
@@ -479,8 +482,8 @@ express-template/
 ├── logs/                    # Application logs (created at runtime)
 │   ├── error-YYYY-MM-DD.log    # Error logs
 │   └── combined-YYYY-MM-DD.log # All logs
-├── tests/                   # Test suite (64 tests across 8 files)
-│   ├── unit/                  # Unit tests (pure logic)
+├── tests/                   # Test suite
+│   ├── unit/                  # Unit tests (http-error, pagination, sanitize, request-id)
 │   ├── integration/           # Integration tests (HTTP endpoints)
 │   ├── helpers.js             # Test utilities
 │   └── global-setup.js        # DB setup/teardown
@@ -522,9 +525,12 @@ npm start
 ### Security Considerations
 
 - Use HTTPS in production
-- JWT secrets are validated at startup (minimum 32 characters)
-- Helmet enforces strict Content Security Policy (`default-src: 'none'`) and `no-referrer` policy
-- CORS is restricted to explicit origins configured via `CORS_ALLOWED_ORIGINS`
+- JWT secrets are validated at startup (minimum 32 characters, no placeholders)
+- Tokens delivered as httpOnly cookies — not accessible via JavaScript (XSS protection)
+- Passwords require uppercase, lowercase, digit, and special character
+- Account lockout after 5 failed login attempts (15-minute lock)
+- Helmet enforces strict Content Security Policy (`default-src: 'none'`), `no-referrer` policy, and HSTS with preload
+- CORS is restricted to explicit origins configured via `CORS_ALLOWED_ORIGINS`, with credentials support
 - Rate limiting on auth endpoints (10 req/15min) and globally (100 req/15min), configurable via env vars
 - HPP middleware prevents HTTP Parameter Pollution attacks
 - Request body size is capped at 100kb to prevent payload abuse

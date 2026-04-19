@@ -4,10 +4,10 @@ A production-ready monorepo for building multi-tenant SaaS applications. Combine
 
 ## What's inside
 
-| App | Stack | Purpose |
-|-----|-------|---------|
-| `apps/api` | Express 5, PostgreSQL, Knex.js | REST API with auth, RBAC, multi-tenancy |
-| `apps/app` | Vue 3, Pinia, Ant Design Vue, Vite | Single-page app consuming the API |
+| App        | Stack                              | Purpose                                 |
+| ---------- | ---------------------------------- | --------------------------------------- |
+| `apps/api` | Express 5, PostgreSQL, Knex.js     | REST API with auth, RBAC, multi-tenancy |
+| `apps/app` | Vue 3, Pinia, Ant Design Vue, Vite | Single-page app consuming the API       |
 
 ## Architecture at a glance
 
@@ -19,7 +19,7 @@ Organization
 
 - **Multi-tenancy**: Shared PostgreSQL database, tenant-scoped via `org_id`/`project_id` columns
 - **RBAC**: 4 system roles (owner / admin / member / viewer) + custom roles, 16 granular permissions
-- **Auth**: Dual-token JWT (`x-access-token` + `x-refresh-token`), Argon2 password hashing
+- **Auth**: Dual-token JWT via httpOnly cookies, Argon2 password hashing, password complexity, account lockout
 - **Invitations**: Invite by username or email, 7-day expiry, accept/decline flow
 
 ## Prerequisites
@@ -99,13 +99,13 @@ corepack pnpm dev:app   # http://localhost:8080
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start both apps in watch mode |
-| `pnpm build` | Build both apps |
-| `pnpm lint` | Lint both apps |
-| `pnpm test` | Run all tests (API only currently) |
-| `pnpm format` | Format both apps with Prettier |
+| Command       | Description                        |
+| ------------- | ---------------------------------- |
+| `pnpm dev`    | Start both apps in watch mode      |
+| `pnpm build`  | Build both apps                    |
+| `pnpm lint`   | Lint both apps                     |
+| `pnpm test`   | Run all tests (API only currently) |
+| `pnpm format` | Format both apps with Prettier     |
 
 Append `:api` or `:app` to target a single workspace (e.g. `pnpm test:api`).
 
@@ -113,13 +113,14 @@ Append `:api` or `:app` to target a single workspace (e.g. `pnpm test:api`).
 
 ### Authentication endpoints (public)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/auth/signup` | Register — returns `{ id, username, email }` |
-| POST | `/api/auth/signin` | Login — returns tokens + user info |
-| POST | `/api/auth/refresh` | Rotate access token via `x-refresh-token` header |
+| Method | Path                | Description                                      |
+| ------ | ------------------- | ------------------------------------------------ |
+| POST   | `/api/auth/signup`  | Register — returns `{ id, username, email }`         |
+| POST   | `/api/auth/signin`  | Login — sets httpOnly auth cookies, returns user info |
+| POST   | `/api/auth/refresh` | Rotate tokens via httpOnly cookie                     |
+| POST   | `/api/auth/logout`  | Revoke refresh token, clear cookies                  |
 
-### Protected endpoints (require `x-access-token` header)
+### Protected endpoints (authenticated via httpOnly `access_token` cookie)
 
 ```
 GET  /api/invitations                              # User's pending invitations
@@ -143,7 +144,7 @@ POST /api/orgs/:org_id/roles                       # Create custom role
 Health check (no auth, not rate-limited):
 
 ```
-GET /health    # { status, db, uptime }
+GET /health    # { status, uptime, database } (production omits uptime/database)
 ```
 
 ### Response format
@@ -156,12 +157,14 @@ GET /health    # { status, db, uptime }
 }
 ```
 
-### Token headers
+### Authentication cookies
 
-The API uses custom headers (not `Authorization: Bearer`):
+The API uses httpOnly cookies (not headers) for token management:
 
-- `x-access-token` — short-lived access token (default 15 min)
-- `x-refresh-token` — long-lived refresh token (default 7 days)
+- `access_token` — httpOnly cookie, short-lived (default 15 min), scoped to `/api`
+- `refresh_token` — httpOnly cookie, long-lived (default 7 days), scoped to `/api/auth`
+
+Tokens are set by the server on signin/refresh and never exposed to JavaScript. Both use `Secure` (production), `SameSite=Strict`.
 
 ## Testing
 

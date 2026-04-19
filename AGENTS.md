@@ -23,7 +23,7 @@ corepack pnpm test:api      # Vitest + Supertest against real PostgreSQL
 
 ## Key architectural facts
 
-- **Auth headers**: `x-access-token` and `x-refresh-token` — NOT `Authorization: Bearer`
+- **Auth cookies**: `access_token` and `refresh_token` — httpOnly, Secure, SameSite=Strict cookies set by the server
 - **Multi-tenancy**: Shared database, tenant isolation via `org_id`/`project_id` columns
 - **RBAC**: `requirePermission(name)` middleware, permissions resolved on `req.permissions`
 - **Request context**: `req.id` (request ID), `req.user`, `req.org`, `req.project`, `req.permissions`
