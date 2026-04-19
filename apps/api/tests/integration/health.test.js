@@ -33,9 +33,7 @@ describe("GET /health", () => {
   })
 
   it("should replace an invalid X-Request-Id with a generated UUID", async () => {
-    const res = await (await request())
-      .get("/health")
-      .set("x-request-id", "not-a-uuid")
+    const res = await (await request()).get("/health").set("x-request-id", "not-a-uuid")
 
     expect(res.headers["x-request-id"]).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,

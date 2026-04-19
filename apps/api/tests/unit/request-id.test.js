@@ -16,9 +16,7 @@ describe("requestId middleware", () => {
     requestId(req, res, next)
 
     expect(req.id).toBeDefined()
-    expect(req.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    )
+    expect(req.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
     expect(res.setHeader).toHaveBeenCalledWith("x-request-id", req.id)
     expect(next).toHaveBeenCalled()
   })
@@ -41,9 +39,7 @@ describe("requestId middleware", () => {
     requestId(req, res, next)
 
     expect(req.id).not.toBe("not-a-uuid")
-    expect(req.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    )
+    expect(req.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)
     expect(next).toHaveBeenCalled()
   })
 

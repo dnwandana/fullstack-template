@@ -5,6 +5,7 @@ import {
   getAuthHeaders,
   createTestOrg,
   cleanAllTables,
+  extractCookies,
 } from "../helpers.js"
 
 afterEach(async () => {
@@ -168,10 +169,7 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
         password: "Testpass123!",
       })
 
-      const setCookieHeader = signinRes.headers["set-cookie"]
-      const newUserCookie = Array.isArray(setCookieHeader)
-        ? setCookieHeader.map((c) => c.split(";")[0]).join("; ")
-        : setCookieHeader.split(";")[0]
+      const newUserCookie = extractCookies(signinRes)
 
       const acceptRes = await (await request())
         .post(`/api/invitations/${invitationId}/accept`)
@@ -206,10 +204,7 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
         password: "Testpass123!",
       })
 
-      const setCookieHeader = signinRes.headers["set-cookie"]
-      const wrongUserCookie = Array.isArray(setCookieHeader)
-        ? setCookieHeader.map((c) => c.split(";")[0]).join("; ")
-        : setCookieHeader.split(";")[0]
+      const wrongUserCookie = extractCookies(signinRes)
 
       const acceptRes = await (await request())
         .post(`/api/invitations/${invitationId}/accept`)

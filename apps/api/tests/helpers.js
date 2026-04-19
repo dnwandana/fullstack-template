@@ -302,3 +302,18 @@ export async function seedPermissions() {
 
   await db("permissions").insert(permissions)
 }
+
+/**
+ * Extracts cookie name=value pairs from a Supertest response's Set-Cookie header.
+ * Returns a string suitable for use as a Cookie header in subsequent requests.
+ *
+ * @param {import("supertest").Response} res - Supertest response
+ * @returns {string} Semicolon-separated cookie name=value pairs
+ */
+export function extractCookies(res) {
+  const setCookieHeader = res.headers["set-cookie"]
+  if (!setCookieHeader) return ""
+  return Array.isArray(setCookieHeader)
+    ? setCookieHeader.map((c) => c.split(";")[0]).join("; ")
+    : setCookieHeader.split(";")[0]
+}

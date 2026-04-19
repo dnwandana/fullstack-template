@@ -1,4 +1,4 @@
-import { request, cleanAllTables } from "../helpers.js"
+import { request, cleanAllTables, extractCookies } from "../helpers.js"
 
 afterEach(async () => {
   await cleanAllTables()
@@ -112,14 +112,6 @@ describe("POST /api/auth/signup", () => {
   })
 })
 
-function extractCookies(res) {
-  const setCookieHeader = res.headers["set-cookie"]
-  if (!setCookieHeader) return ""
-  return Array.isArray(setCookieHeader)
-    ? setCookieHeader.map((c) => c.split(";")[0]).join("; ")
-    : setCookieHeader.split(";")[0]
-}
-
 describe("POST /api/auth/signin", () => {
   it("should sign in with valid credentials", async () => {
     const agent = await request()
@@ -196,8 +188,8 @@ describe("POST /api/auth/signin", () => {
       password: "Testpass123!",
     })
 
-    expect(res.status).toBe(403)
-    expect(res.body.message).toMatch(/locked/i)
+    expect(res.status).toBe(401)
+    expect(res.body.message).toContain("invalid credentials")
   })
 
   it("should reset failed attempts on successful login", async () => {
@@ -318,6 +310,43 @@ describe("POST /api/auth/logout", () => {
   it("should return 401 without refresh token cookie", async () => {
     const agent = await request()
     const res = await agent.post("/api/auth/logout")
+
+    expect(res.status).toBe(401)
+  })
+})
+
+describe("GET /api/auth/me", () => {
+  it("should return current user with valid access token", async () => {
+    const agent = await request()
+    await agent.post("/api/auth/signup").send({
+      username: "meuser",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
+    })
+    const signinRes = await agent.post("/api/auth/signin").send({
+      username: "meuser",
+      password: "Testpass123!",
+    })
+
+    const cookieStr = extractCookies(signinRes)
+
+    const res = await agent.get("/api/auth/me").set("Cookie", cookieStr)
+
+    expect(res.status).toBe(200)
+    expect(res.body.data.id).toBeDefined()
+    expect(res.body.data.username).toBe("meuser")
+  })
+
+  it("should return 401 without access token", async () => {
+    const res = await (await request()).get("/api/auth/me")
+
+    expect(res.status).toBe(401)
+  })
+
+  it("should return 401 with invalid access token", async () => {
+    const agent = await request()
+
+    const res = await agent.get("/api/auth/me").set("Cookie", "access_token=invalidtoken")
 
     expect(res.status).toBe(401)
   })
