@@ -95,18 +95,18 @@ export const createProject = async (req, res, next) => {
 }
 
 /**
- * GET /api/orgs/:org_id/projects — List all projects in the organization.
+ * GET /api/orgs/:org_id/projects — List projects the user is a member of.
  *
- * The permission middleware already gates access via project:read,
- * so all org projects are returned regardless of project-level membership.
+ * Returns only projects where the authenticated user is an explicit member,
+ * scoped to the current organization.
  *
- * @param {Object} req - Express request object (req.org.id set by middleware)
+ * @param {Object} req - Express request object (req.org.id, req.user.id set by middleware)
  * @param {Object} res - Express response object
  * @param {Function} next - Express next middleware function
  */
 export const getProjects = async (req, res, next) => {
   try {
-    const projects = await projectModel.findManyByOrgId(req.org.id)
+    const projects = await projectModel.findManyByUserId(req.org.id, req.user.id)
 
     return res.json(
       apiResponse({

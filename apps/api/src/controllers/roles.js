@@ -225,7 +225,7 @@ export const updateRole = async (req, res, next) => {
     // Update role metadata and permissions atomically
     const [updatedRole] = await db.transaction(async (trx) => {
       const [updated] = await trx("roles")
-        .where({ id: roleId })
+        .where({ id: roleId, org_id: req.org.id })
         .update(updateData)
         .returning(["id", "org_id", "name", "description", "is_system", "created_at", "updated_at"])
 
@@ -308,7 +308,7 @@ export const deleteRole = async (req, res, next) => {
       )
     }
 
-    await roleModel.remove({ id: roleId })
+    await roleModel.remove({ id: roleId, org_id: req.org.id })
 
     return res.json(
       apiResponse({

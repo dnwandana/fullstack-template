@@ -8,6 +8,7 @@ import { errorHandler, notFoundHandler } from "./middlewares/error.js"
 import { generalLimiter } from "./middlewares/rate-limit.js"
 import { httpLogger, requestLogger } from "./middlewares/logger.js"
 import { requestId } from "./middlewares/request-id.js"
+import cookieParser from "cookie-parser"
 
 const app = express()
 app.set("trust proxy", 1)
@@ -20,6 +21,7 @@ app.use(
   helmet({
     contentSecurityPolicy: { directives: { defaultSrc: ["'none'"] } },
     referrerPolicy: { policy: "no-referrer" },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
   }),
 )
 app.use(
@@ -28,7 +30,8 @@ app.use(
       "http://localhost:8080",
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "x-access-token", "x-refresh-token"],
+    allowedHeaders: ["Content-Type"],
+    credentials: true,
   }),
 )
 
@@ -36,6 +39,7 @@ app.use(
 app.use(express.json({ limit: "100kb" }))
 app.use(express.urlencoded({ extended: true, limit: "100kb" }))
 app.use(hpp())
+app.use(cookieParser())
 
 // health check — before rate limiting so load balancers aren't throttled
 app.use("/health", healthRoutes)
