@@ -80,7 +80,7 @@ No pre-commit hooks. Run `npm run lint:fix && npm run format:fix` before committ
 
 Authorization middleware sets `req.user = { id }` from decoded JWT. Tenant resolution middleware builds up context:
 
-- `resolveOrg` (on `/:org_id` routes): validates org_id UUID, loads org (404 if not found), verifies membership (403 if not member), loads permissions → sets `req.org = { id }` and `req.permissions = [...]`
+- `resolveOrg` (on `/:org_id` routes): validates org_id UUID, loads org (404 if not found), verifies membership (403 if not member), loads permissions → sets `req.org = { id, role_name }` and `req.permissions = [...]`
 - `resolveProject` (on `/:project_id` routes): validates project_id UUID, loads project scoped to org (404 if not found), merges project-level permissions with org-level permissions → sets `req.project = { id }`
 - `requirePermission(name)`: higher-order middleware that checks `req.permissions.includes(name)`, returns 403 if missing
 
@@ -91,7 +91,7 @@ Authorization middleware sets `req.user = { id }` from decoded JWT. Tenant resol
 ```
 req.id          // Request ID (from requestId middleware)
 req.user        // { id } from JWT
-req.org         // { id } from resolveOrg
+req.org         // { id, role_name } from resolveOrg
 req.project     // { id } from resolveProject
 req.permissions // ["todos:create", ...] merged org + project permissions
 ```
@@ -199,6 +199,7 @@ DELETE `/api/orgs/:org_id/projects/:project_id/todos?ids=id1,id2,id3` — comma-
 | GET    | `/health`           | Inline handler                      | No                  | No (before limiter) |
 | POST   | `/api/auth/signup`  | `authentication.signup`             | No                  | authLimiter         |
 | POST   | `/api/auth/signin`  | `authentication.signin`             | No                  | authLimiter         |
+| GET    | `/api/auth/me`      | `authentication.getMe`              | requireAccessToken  | authLimiter         |
 | POST   | `/api/auth/refresh` | `authentication.refreshAccessToken` | requireRefreshToken | authLimiter         |
 | POST   | `/api/auth/logout`  | `authentication.logout`             | requireRefreshToken | authLimiter         |
 
@@ -288,7 +289,7 @@ DELETE `/api/orgs/:org_id/projects/:project_id/todos?ids=id1,id2,id3` — comma-
 
 | File                 | Exports                                                                                                              |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `users.js`           | `create`, `findOne`, `findOneWithPassword`                                                                           |
+| `users.js`           | `create`, `findOne`, `findOneWithPassword`, `incrementFailedAttempts`                                                |
 | `refresh-tokens.js`  | `hashToken`, `create`, `findActiveByHash`, `revokeById`, `revokeAllForUser`, `purgeOld`                              |
 | `organizations.js`   | `create`, `findOne`, `findManyByUserId`, `update`, `remove`                                                          |
 | `org-members.js`     | `create`, `findOne`, `findManyByOrgId`, `findMemberWithPermissions`, `getPermissions`, `updateRole`, `remove`        |
@@ -303,7 +304,7 @@ DELETE `/api/orgs/:org_id/projects/:project_id/todos?ids=id1,id2,id3` — comma-
 
 | File                | Exports                                                                                                                                                |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `authentication.js` | `signup`, `signin`, `refreshAccessToken`, `logout`                                                                                                     |
+| `authentication.js` | `signup`, `signin`, `getMe`, `refreshAccessToken`, `logout`                                                                                            |
 | `organizations.js`  | `createOrg`, `getOrgs`, `getOrg`, `updateOrg`, `deleteOrg`                                                                                             |
 | `projects.js`       | `createProject`, `getProjects`, `getProject`, `updateProject`, `deleteProject`                                                                         |
 | `todos.js`          | `requireTodoIdParam` (middleware), `getTodos`, `getTodo`, `createTodo`, `updateTodo`, `deleteTodo`, `deleteTodos`                                      |

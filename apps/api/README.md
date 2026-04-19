@@ -303,6 +303,7 @@ This template includes an OpenAPI 3.0 specification (`openapi.json`) that docume
 | ------ | ------------------- | ------------------------------------------ | ------------- |
 | POST   | `/api/auth/signup`  | Create new user account                    | No            |
 | POST   | `/api/auth/signin`  | Sign in; server sets httpOnly auth cookies | No            |
+| GET    | `/api/auth/me`      | Verify cookie validity, return user        | Access Token  |
 | POST   | `/api/auth/refresh` | Rotate tokens via httpOnly cookie          | Refresh Token |
 | POST   | `/api/auth/logout`  | Revoke refresh token, clear cookies        | Refresh Token |
 
