@@ -27,7 +27,7 @@ export default async function setup() {
 
   // Truncate all tables (including permissions for a clean slate)
   await db.raw(
-    "TRUNCATE TABLE invitations, todos, project_members, projects, org_members, role_permissions, roles, organizations, permissions, users CASCADE",
+    "TRUNCATE TABLE refresh_tokens, invitations, todos, project_members, projects, org_members, role_permissions, roles, organizations, permissions, users CASCADE",
   )
 
   // Seed permissions (needed by all tests — persists across cleanAllTables calls)

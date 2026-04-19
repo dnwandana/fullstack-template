@@ -151,7 +151,7 @@ describe("POST /api/auth/signin", () => {
 })
 
 describe("POST /api/auth/refresh", () => {
-  it("should return a new access token", async () => {
+  it("should return new access and refresh tokens (rotation)", async () => {
     const agent = await request()
     await agent.post("/api/auth/signup").send({
       username: "refreshuser",
@@ -169,10 +169,63 @@ describe("POST /api/auth/refresh", () => {
 
     expect(res.status).toBe(200)
     expect(res.body.data.access_token).toBeDefined()
+    expect(res.body.data.refresh_token).toBeDefined()
+    expect(res.body.data.refresh_token).not.toBe(refreshToken)
+  })
+
+  it("should reject reused refresh token (rotation)", async () => {
+    const agent = await request()
+    await agent.post("/api/auth/signup").send({
+      username: "reuseuser",
+      password: "password123",
+      confirmation_password: "password123",
+    })
+    const signinRes = await agent.post("/api/auth/signin").send({
+      username: "reuseuser",
+      password: "password123",
+    })
+
+    const refreshToken = signinRes.body.data.refresh_token
+
+    await agent.post("/api/auth/refresh").set("x-refresh-token", refreshToken)
+
+    const res = await agent.post("/api/auth/refresh").set("x-refresh-token", refreshToken)
+
+    expect(res.status).toBe(401)
   })
 
   it("should reject request without refresh token", async () => {
     const res = await (await request()).post("/api/auth/refresh")
+
+    expect(res.status).toBe(401)
+  })
+})
+
+describe("POST /api/auth/logout", () => {
+  it("should revoke refresh token on logout", async () => {
+    const agent = await request()
+    await agent.post("/api/auth/signup").send({
+      username: "logoutuser",
+      password: "password123",
+      confirmation_password: "password123",
+    })
+    const signinRes = await agent.post("/api/auth/signin").send({
+      username: "logoutuser",
+      password: "password123",
+    })
+
+    const refreshToken = signinRes.body.data.refresh_token
+
+    const logoutRes = await agent.post("/api/auth/logout").set("x-refresh-token", refreshToken)
+    expect(logoutRes.status).toBe(200)
+
+    const refreshRes = await agent.post("/api/auth/refresh").set("x-refresh-token", refreshToken)
+    expect(refreshRes.status).toBe(401)
+  })
+
+  it("should return 401 with invalid JWT token (no info leakage)", async () => {
+    const agent = await request()
+    const res = await agent.post("/api/auth/logout").set("x-refresh-token", "sometoken")
 
     expect(res.status).toBe(401)
   })

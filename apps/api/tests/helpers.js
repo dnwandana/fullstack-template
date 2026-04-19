@@ -245,7 +245,7 @@ export async function cleanTable(tableName) {
 export async function cleanAllTables() {
   const { default: db } = await import("../src/config/database.js")
   await db.raw(
-    "TRUNCATE TABLE invitations, todos, project_members, projects, org_members, role_permissions, roles, organizations, users CASCADE",
+    "TRUNCATE TABLE refresh_tokens, invitations, todos, project_members, projects, org_members, role_permissions, roles, organizations, users CASCADE",
   )
 }
 
