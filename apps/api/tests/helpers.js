@@ -52,7 +52,7 @@ export async function createTestUser(overrides = {}) {
   const id = crypto.randomUUID()
   const username = overrides.username || `testuser_${id.slice(0, 8)}`
   const email = overrides.email || `${username}@test.com`
-  const password = overrides.password || "testpassword123"
+  const password = overrides.password || "Testpass123!"
   const hashedPassword = await hashPassword(password)
 
   const [user] = await db("users")
@@ -61,6 +61,8 @@ export async function createTestUser(overrides = {}) {
       username,
       email,
       password: hashedPassword,
+      failed_login_attempts: 0,
+      locked_until: null,
       created_at: new Date(),
       updated_at: new Date(),
     })
@@ -70,17 +72,28 @@ export async function createTestUser(overrides = {}) {
 }
 
 /**
- * Generates auth headers (access + refresh tokens) for a given user ID.
+ * Generates auth cookies (access + refresh tokens) for a given user ID.
  *
  * @param {string} userId - UUID of the user
- * @returns {Promise<Object>} Headers object with x-access-token and x-refresh-token
+ * @returns {Promise<Object>} Object with access_token and refresh_token cookie values
  */
-export async function getAuthHeaders(userId) {
+export async function getAuthCookies(userId) {
   const { generateAccessToken, generateRefreshToken } = await import("../src/utils/jwt.js")
   return {
-    "x-access-token": generateAccessToken(userId),
-    "x-refresh-token": generateRefreshToken(userId),
+    access_token: generateAccessToken(userId),
+    refresh_token: generateRefreshToken(userId),
   }
+}
+
+/**
+ * Generates auth headers with a Cookie header for a given user ID.
+ *
+ * @param {string} userId - UUID of the user
+ * @returns {Promise<Object>} Headers object with Cookie header containing both tokens
+ */
+export async function getAuthHeaders(userId) {
+  const cookies = await getAuthCookies(userId)
+  return { Cookie: `access_token=${cookies.access_token}; refresh_token=${cookies.refresh_token}` }
 }
 
 /**

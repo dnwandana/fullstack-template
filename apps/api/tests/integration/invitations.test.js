@@ -158,22 +158,24 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
       const signupRes = await (await request()).post("/api/auth/signup").send({
         username: "newuser",
         email: "newuser@test.com",
-        password: "password123",
-        confirmation_password: "password123",
+        password: "Testpass123!",
+        confirmation_password: "Testpass123!",
       })
       expect(signupRes.status).toBe(201)
 
       const signinRes = await (await request()).post("/api/auth/signin").send({
         username: "newuser",
-        password: "password123",
+        password: "Testpass123!",
       })
-      const newUserHeaders = {
-        "x-access-token": signinRes.body.data.access_token,
-      }
+
+      const setCookieHeader = signinRes.headers["set-cookie"]
+      const newUserCookie = Array.isArray(setCookieHeader)
+        ? setCookieHeader.map((c) => c.split(";")[0]).join("; ")
+        : setCookieHeader.split(";")[0]
 
       const acceptRes = await (await request())
         .post(`/api/invitations/${invitationId}/accept`)
-        .set(newUserHeaders)
+        .set("Cookie", newUserCookie)
         .send({ token: rawToken })
 
       expect(acceptRes.status).toBe(200)
@@ -195,21 +197,23 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
       await (await request()).post("/api/auth/signup").send({
         username: "wronguser",
         email: "wrong@test.com",
-        password: "password123",
-        confirmation_password: "password123",
+        password: "Testpass123!",
+        confirmation_password: "Testpass123!",
       })
 
       const signinRes = await (await request()).post("/api/auth/signin").send({
         username: "wronguser",
-        password: "password123",
+        password: "Testpass123!",
       })
-      const wrongUserHeaders = {
-        "x-access-token": signinRes.body.data.access_token,
-      }
+
+      const setCookieHeader = signinRes.headers["set-cookie"]
+      const wrongUserCookie = Array.isArray(setCookieHeader)
+        ? setCookieHeader.map((c) => c.split(";")[0]).join("; ")
+        : setCookieHeader.split(";")[0]
 
       const acceptRes = await (await request())
         .post(`/api/invitations/${invitationId}/accept`)
-        .set(wrongUserHeaders)
+        .set("Cookie", wrongUserCookie)
         .send({ token: rawToken })
 
       expect(acceptRes.status).toBe(403)

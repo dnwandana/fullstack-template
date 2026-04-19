@@ -8,8 +8,8 @@ describe("POST /api/auth/signup", () => {
   it("should create a new user", async () => {
     const res = await (await request()).post("/api/auth/signup").send({
       username: "newuser",
-      password: "password123",
-      confirmation_password: "password123",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
     })
 
     expect(res.status).toBe(201)
@@ -22,14 +22,14 @@ describe("POST /api/auth/signup", () => {
     const agent = await request()
     await agent.post("/api/auth/signup").send({
       username: "duplicate",
-      password: "password123",
-      confirmation_password: "password123",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
     })
 
     const res = await agent.post("/api/auth/signup").send({
       username: "duplicate",
-      password: "password456",
-      confirmation_password: "password456",
+      password: "Testpass456!",
+      confirmation_password: "Testpass456!",
     })
 
     expect(res.status).toBe(400)
@@ -39,8 +39,8 @@ describe("POST /api/auth/signup", () => {
   it("should reject username shorter than 3 characters", async () => {
     const res = await (await request()).post("/api/auth/signup").send({
       username: "ab",
-      password: "password123",
-      confirmation_password: "password123",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
     })
 
     expect(res.status).toBe(400)
@@ -56,11 +56,22 @@ describe("POST /api/auth/signup", () => {
     expect(res.status).toBe(400)
   })
 
+  it("should reject password without complexity requirements", async () => {
+    const res = await (await request()).post("/api/auth/signup").send({
+      username: "complexuser",
+      password: "simplepassword",
+      confirmation_password: "simplepassword",
+    })
+
+    expect(res.status).toBe(400)
+    expect(res.body.message).toMatch(/uppercase|digit|special/i)
+  })
+
   it("should reject mismatched confirmation_password", async () => {
     const res = await (await request()).post("/api/auth/signup").send({
       username: "validuser",
-      password: "password123",
-      confirmation_password: "differentpassword",
+      password: "Testpass123!",
+      confirmation_password: "Differentpass1!",
     })
 
     expect(res.status).toBe(400)
@@ -71,8 +82,8 @@ describe("POST /api/auth/signup", () => {
     const res = await (await request()).post("/api/auth/signup").send({
       username: "emailuser",
       email: "emailuser@test.com",
-      password: "password123",
-      confirmation_password: "password123",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
     })
 
     expect(res.status).toBe(201)
@@ -85,15 +96,15 @@ describe("POST /api/auth/signup", () => {
     await agent.post("/api/auth/signup").send({
       username: "emailuser1",
       email: "same@test.com",
-      password: "password123",
-      confirmation_password: "password123",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
     })
 
     const res = await agent.post("/api/auth/signup").send({
       username: "emailuser2",
       email: "same@test.com",
-      password: "password123",
-      confirmation_password: "password123",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
     })
 
     expect(res.status).toBe(400)
@@ -101,38 +112,52 @@ describe("POST /api/auth/signup", () => {
   })
 })
 
+function extractCookies(res) {
+  const setCookieHeader = res.headers["set-cookie"]
+  if (!setCookieHeader) return ""
+  return Array.isArray(setCookieHeader)
+    ? setCookieHeader.map((c) => c.split(";")[0]).join("; ")
+    : setCookieHeader.split(";")[0]
+}
+
 describe("POST /api/auth/signin", () => {
   it("should sign in with valid credentials", async () => {
     const agent = await request()
     await agent.post("/api/auth/signup").send({
       username: "loginuser",
-      password: "password123",
-      confirmation_password: "password123",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
     })
 
     const res = await agent.post("/api/auth/signin").send({
       username: "loginuser",
-      password: "password123",
+      password: "Testpass123!",
     })
 
     expect(res.status).toBe(200)
     expect(res.body.data.id).toBeDefined()
     expect(res.body.data.username).toBe("loginuser")
-    expect(res.body.data.access_token).toBeDefined()
-    expect(res.body.data.refresh_token).toBeDefined()
+    expect(res.headers["set-cookie"]).toBeDefined()
+    const cookieHeader = res.headers["set-cookie"]
+    const cookieStr = Array.isArray(cookieHeader) ? cookieHeader.join("; ") : cookieHeader
+    expect(cookieStr).toContain("access_token=")
+    expect(cookieStr).toContain("refresh_token=")
+    expect(cookieStr).toContain("HttpOnly")
+    expect(res.body.data.access_token).toBeUndefined()
+    expect(res.body.data.refresh_token).toBeUndefined()
   })
 
   it("should reject invalid password", async () => {
     const agent = await request()
     await agent.post("/api/auth/signup").send({
       username: "loginuser2",
-      password: "password123",
-      confirmation_password: "password123",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
     })
 
     const res = await agent.post("/api/auth/signin").send({
       username: "loginuser2",
-      password: "wrongpassword",
+      password: "Wrongpass1!",
     })
 
     expect(res.status).toBe(401)
@@ -142,54 +167,121 @@ describe("POST /api/auth/signin", () => {
   it("should reject non-existent username", async () => {
     const res = await (await request()).post("/api/auth/signin").send({
       username: "nonexistent",
-      password: "password123",
+      password: "Testpass123!",
     })
 
     expect(res.status).toBe(401)
     expect(res.body.message).toContain("invalid credentials")
   })
+
+  it("should lock account after 5 failed attempts", async () => {
+    const agent = await request()
+    await agent.post("/api/auth/signup").send({
+      username: "lockuser",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
+    })
+
+    // 5 failed attempts
+    for (let i = 0; i < 5; i++) {
+      await agent.post("/api/auth/signin").send({
+        username: "lockuser",
+        password: "Wrongpass1!",
+      })
+    }
+
+    // 6th attempt with correct password should be locked
+    const res = await agent.post("/api/auth/signin").send({
+      username: "lockuser",
+      password: "Testpass123!",
+    })
+
+    expect(res.status).toBe(403)
+    expect(res.body.message).toMatch(/locked/i)
+  })
+
+  it("should reset failed attempts on successful login", async () => {
+    const agent = await request()
+    await agent.post("/api/auth/signup").send({
+      username: "resetuser",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
+    })
+
+    // 3 failed attempts (below lockout threshold)
+    for (let i = 0; i < 3; i++) {
+      await agent.post("/api/auth/signin").send({
+        username: "resetuser",
+        password: "Wrongpass1!",
+      })
+    }
+
+    // Successful login should reset counter
+    const res = await agent.post("/api/auth/signin").send({
+      username: "resetuser",
+      password: "Testpass123!",
+    })
+
+    expect(res.status).toBe(200)
+
+    // Should be able to fail 5 more times before lockout (proves counter was reset)
+    for (let i = 0; i < 4; i++) {
+      await agent.post("/api/auth/signin").send({
+        username: "resetuser",
+        password: "Wrongpass1!",
+      })
+    }
+    const stillOk = await agent.post("/api/auth/signin").send({
+      username: "resetuser",
+      password: "Testpass123!",
+    })
+    expect(stillOk.status).toBe(200)
+  })
 })
 
 describe("POST /api/auth/refresh", () => {
-  it("should return new access and refresh tokens (rotation)", async () => {
+  it("should return new cookies on refresh (rotation)", async () => {
     const agent = await request()
     await agent.post("/api/auth/signup").send({
       username: "refreshuser",
-      password: "password123",
-      confirmation_password: "password123",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
     })
     const signinRes = await agent.post("/api/auth/signin").send({
       username: "refreshuser",
-      password: "password123",
+      password: "Testpass123!",
     })
 
-    const refreshToken = signinRes.body.data.refresh_token
+    const cookieStr = extractCookies(signinRes)
 
-    const res = await agent.post("/api/auth/refresh").set("x-refresh-token", refreshToken)
+    const res = await agent.post("/api/auth/refresh").set("Cookie", cookieStr)
 
     expect(res.status).toBe(200)
-    expect(res.body.data.access_token).toBeDefined()
-    expect(res.body.data.refresh_token).toBeDefined()
-    expect(res.body.data.refresh_token).not.toBe(refreshToken)
+    expect(res.headers["set-cookie"]).toBeDefined()
+    const newCookieStr = Array.isArray(res.headers["set-cookie"])
+      ? res.headers["set-cookie"].join("; ")
+      : res.headers["set-cookie"]
+    expect(newCookieStr).toContain("access_token=")
+    expect(newCookieStr).toContain("refresh_token=")
   })
 
   it("should reject reused refresh token (rotation)", async () => {
     const agent = await request()
     await agent.post("/api/auth/signup").send({
       username: "reuseuser",
-      password: "password123",
-      confirmation_password: "password123",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
     })
     const signinRes = await agent.post("/api/auth/signin").send({
       username: "reuseuser",
-      password: "password123",
+      password: "Testpass123!",
     })
 
-    const refreshToken = signinRes.body.data.refresh_token
+    const cookieStr = extractCookies(signinRes)
 
-    await agent.post("/api/auth/refresh").set("x-refresh-token", refreshToken)
+    await agent.post("/api/auth/refresh").set("Cookie", cookieStr)
 
-    const res = await agent.post("/api/auth/refresh").set("x-refresh-token", refreshToken)
+    const res = await agent.post("/api/auth/refresh").set("Cookie", cookieStr)
 
     expect(res.status).toBe(401)
   })
@@ -206,26 +298,26 @@ describe("POST /api/auth/logout", () => {
     const agent = await request()
     await agent.post("/api/auth/signup").send({
       username: "logoutuser",
-      password: "password123",
-      confirmation_password: "password123",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
     })
     const signinRes = await agent.post("/api/auth/signin").send({
       username: "logoutuser",
-      password: "password123",
+      password: "Testpass123!",
     })
 
-    const refreshToken = signinRes.body.data.refresh_token
+    const cookieStr = extractCookies(signinRes)
 
-    const logoutRes = await agent.post("/api/auth/logout").set("x-refresh-token", refreshToken)
+    const logoutRes = await agent.post("/api/auth/logout").set("Cookie", cookieStr)
     expect(logoutRes.status).toBe(200)
 
-    const refreshRes = await agent.post("/api/auth/refresh").set("x-refresh-token", refreshToken)
+    const refreshRes = await agent.post("/api/auth/refresh").set("Cookie", cookieStr)
     expect(refreshRes.status).toBe(401)
   })
 
-  it("should return 401 with invalid JWT token (no info leakage)", async () => {
+  it("should return 401 without refresh token cookie", async () => {
     const agent = await request()
-    const res = await agent.post("/api/auth/logout").set("x-refresh-token", "sometoken")
+    const res = await agent.post("/api/auth/logout")
 
     expect(res.status).toBe(401)
   })

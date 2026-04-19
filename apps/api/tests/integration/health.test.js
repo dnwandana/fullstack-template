@@ -25,11 +25,22 @@ describe("GET /health", () => {
     )
   })
 
-  it("should echo back a provided X-Request-Id", async () => {
-    const customId = "my-custom-request-id-12345"
+  it("should echo back a provided valid UUID X-Request-Id", async () => {
+    const customId = "550e8400-e29b-41d4-a716-446655440000"
     const res = await (await request()).get("/health").set("x-request-id", customId)
 
     expect(res.headers["x-request-id"]).toBe(customId)
+  })
+
+  it("should replace an invalid X-Request-Id with a generated UUID", async () => {
+    const res = await (await request())
+      .get("/health")
+      .set("x-request-id", "not-a-uuid")
+
+    expect(res.headers["x-request-id"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    )
+    expect(res.headers["x-request-id"]).not.toBe("not-a-uuid")
   })
 
   it("should not be rate limited", async () => {
