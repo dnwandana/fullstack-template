@@ -5,7 +5,12 @@
 import { defineStore } from "pinia"
 import { ref, computed } from "vue"
 import { message } from "ant-design-vue"
-import { signup as apiSignup, signin as apiSignin, logout as apiLogout } from "@/api/auth"
+import {
+  signup as apiSignup,
+  signin as apiSignin,
+  logout as apiLogout,
+  getMe as apiGetMe,
+} from "@/api/auth"
 import { setUserData, getUserData, clearUserData } from "@/utils/storage"
 
 export const useAuthStore = defineStore("auth", () => {
@@ -23,10 +28,15 @@ export const useAuthStore = defineStore("auth", () => {
    * Initialize auth state from localStorage
    * Called on app startup
    */
-  function initAuth() {
-    const storedUser = getUserData()
-    if (storedUser) {
-      user.value = storedUser
+  async function initAuth() {
+    try {
+      const response = await apiGetMe()
+      const userData = response.data.data
+      setUserData(userData)
+      user.value = userData
+    } catch {
+      clearUserData()
+      user.value = null
     }
   }
 

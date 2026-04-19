@@ -62,3 +62,11 @@ export function logout() {
     return { data, status: res.status }
   })
 }
+
+/**
+ * Get current authenticated user (verifies cookie validity)
+ * @returns {Promise} API response with user data { id, username }
+ */
+export function getMe() {
+  return request.get("/auth/me")
+}

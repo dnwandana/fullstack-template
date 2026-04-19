@@ -106,12 +106,12 @@ const router = createRouter({
  * - Initializes the auth store on first navigation if needed.
  * - Enforces `requiresAuth` and `requiresGuest` meta flags.
  */
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
-  // Initialize auth state from localStorage on first navigation
+  // Initialize auth state by verifying cookie validity on first navigation
   if (!authStore.user) {
-    authStore.initAuth()
+    await authStore.initAuth()
   }
 
   const isAuthenticated = authStore.isAuthenticated
