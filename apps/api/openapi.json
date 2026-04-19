@@ -101,6 +101,11 @@
                             },
                             "username": {
                               "type": "string"
+                            },
+                            "email": {
+                              "type": "string",
+                              "format": "email",
+                              "nullable": true
                             }
                           },
                           "required": ["id", "username"]
@@ -113,7 +118,8 @@
                   "message": "Created",
                   "data": {
                     "id": "550e8400-e29b-41d4-a716-446655440000",
-                    "username": "johndoe"
+                    "username": "johndoe",
+                    "email": "john@example.com"
                   }
                 }
               }
@@ -190,7 +196,7 @@
       "post": {
         "tags": ["Authentication"],
         "summary": "Refresh access token",
-        "description": "Get a new access token using a valid refresh token.",
+        "description": "Rotate tokens — revokes the current refresh token and returns a new access/refresh token pair.",
         "operationId": "refreshToken",
         "security": [
           {
@@ -223,8 +229,46 @@
                 "example": {
                   "message": "OK",
                   "data": {
-                    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    "access_token": "eyJ...",
+                    "refresh_token": "eyJ..."
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Logout",
+        "description": "Revoke the current refresh token. Idempotent — returns success even if the token is already revoked or missing.",
+        "operationId": "logout",
+        "security": [
+          {
+            "RefreshToken": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Logged out successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                },
+                "example": {
+                  "message": "Logged out",
+                  "data": null
                 }
               }
             }
@@ -1836,6 +1880,16 @@
         "operationId": "acceptInvitation",
         "security": [{ "AccessToken": [] }],
         "parameters": [{ "$ref": "#/components/parameters/InvitationIdParam" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Invitation accepted successfully",
@@ -2549,6 +2603,13 @@
             "pattern": "^[a-zA-Z0-9._-]+$",
             "description": "Unique username (3-30 characters, alphanumeric and . _ - only)"
           },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true,
+            "maxLength": 255,
+            "description": "Optional email address (unique if provided)"
+          },
           "password": {
             "type": "string",
             "minLength": 8,
@@ -2608,9 +2669,13 @@
           "access_token": {
             "type": "string",
             "description": "New JWT access token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "New JWT refresh token (rotation)"
           }
         },
-        "required": ["access_token"]
+        "required": ["access_token", "refresh_token"]
       },
       "CreateOrganizationRequest": {
         "type": "object",
@@ -2833,6 +2898,18 @@
             }
           }
         ]
+      },
+      "AcceptInvitationRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64,
+            "description": "Invitation token received by the invitee (64-character hex string)"
+          }
+        },
+        "required": ["token"]
       }
     },
     "parameters": {
