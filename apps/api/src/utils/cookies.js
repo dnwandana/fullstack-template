@@ -24,6 +24,7 @@ export function setRefreshTokenCookie(res, token) {
 }
 
 export function clearAuthCookies(res) {
-  res.cookie("access_token", "", { maxAge: 0, path: "/api" })
-  res.cookie("refresh_token", "", { maxAge: 0, path: "/api/auth" })
+  const opts = { maxAge: 0, httpOnly: true, secure: IS_PRODUCTION, sameSite: "strict" }
+  res.cookie("access_token", "", { ...opts, path: "/api" })
+  res.cookie("refresh_token", "", { ...opts, path: "/api/auth" })
 }

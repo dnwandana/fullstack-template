@@ -8,16 +8,15 @@ import * as refreshTokenModel from "../models/refresh-tokens.js"
 import db from "../config/database.js"
 import { hashPassword, verifyPassword } from "../utils/argon2.js"
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt.js"
-import {
-  setAccessTokenCookie,
-  setRefreshTokenCookie,
-  clearAuthCookies,
-} from "../utils/cookies.js"
+import { setAccessTokenCookie, setRefreshTokenCookie, clearAuthCookies } from "../utils/cookies.js"
 
 // Pre-computed dummy hash for timing-safe signin.
 // Ensures verifyPassword always runs, even when the user doesn't exist,
 // so response times don't reveal whether a username is valid.
 const dummyHash = await hashPassword("dummy-timing-safe-password")
+
+const MAX_FAILED_ATTEMPTS = 5
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000
 
 const signupSchema = joi
   .object({
@@ -177,25 +176,20 @@ export const signin = async (req, res, next) => {
 
     // Check account lockout (only for existing users)
     if (user?.locked_until && new Date(user.locked_until) > new Date()) {
-      throw new HttpError(
-        HTTP_STATUS_CODE.FORBIDDEN,
-        "Account is temporarily locked. Try again later.",
-      )
+      throw new HttpError(HTTP_STATUS_CODE.UNAUTHORIZED, "invalid credentials")
     }
 
     if (!user || !isPasswordValid) {
       // Increment failed login attempts for existing users
       if (user) {
-        const newAttempts = (user.failed_login_attempts || 0) + 1
-        if (newAttempts >= 5) {
+        const [updated] = await userModel.incrementFailedAttempts(user.id)
+        if (updated.failed_login_attempts >= MAX_FAILED_ATTEMPTS) {
           await db("users")
             .where({ id: user.id })
             .update({
               failed_login_attempts: 0,
-              locked_until: new Date(Date.now() + 15 * 60 * 1000),
+              locked_until: new Date(Date.now() + LOCKOUT_DURATION_MS),
             })
-        } else {
-          await db("users").where({ id: user.id }).update({ failed_login_attempts: newAttempts })
         }
       }
       throw new HttpError(HTTP_STATUS_CODE.UNAUTHORIZED, "invalid credentials")
@@ -317,6 +311,31 @@ export const logout = async (req, res, next) => {
       apiResponse({
         message: HTTP_STATUS_MESSAGE.OK,
         data: null,
+      }),
+    )
+  } catch (error) {
+    return next(error)
+  }
+}
+
+/**
+ * GET /api/auth/me — Return the authenticated user's identity.
+ * Used by the frontend to verify cookie validity on app startup.
+ *
+ * @param {Object} req - Express request object (req.user.id set by requireAccessToken middleware)
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+export const getMe = async (req, res, next) => {
+  try {
+    const user = await userModel.findOne({ id: req.user.id })
+    if (!user) {
+      throw new HttpError(HTTP_STATUS_CODE.NOT_FOUND, "User not found")
+    }
+    return res.json(
+      apiResponse({
+        message: HTTP_STATUS_MESSAGE.OK,
+        data: { id: user.id, username: user.username },
       }),
     )
   } catch (error) {

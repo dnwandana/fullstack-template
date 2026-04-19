@@ -15,7 +15,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  * 3. Confirms the authenticated user is a member and loads their permissions
  *
  * On success, sets:
- * - `req.org` — `{ id }` of the resolved organization
+ * - `req.org` — `{ id, role_name }` of the resolved organization
  * - `req.permissions` — flat array of permission name strings for the user in this org
  *
  * @param {Object} req - Express request object (must have req.user.id from auth middleware)
@@ -48,7 +48,7 @@ export const resolveOrg = async (req, res, next) => {
     const permissionNames = permissionRows.map((row) => row.name)
 
     // Attach org context and permissions to the request for downstream middleware/controllers
-    req.org = { id: org.id }
+    req.org = { id: org.id, role_name: membership.role_name }
     req.permissions = permissionNames
 
     next()

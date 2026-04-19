@@ -36,3 +36,18 @@ export const findOne = (conditions) => {
 export const findOneWithPassword = (conditions) => {
   return db.select("*").from(TABLE_NAME).where(conditions).first()
 }
+
+/**
+ * Atomically increment failed_login_attempts for a user.
+ * Returns the updated row with the new count.
+ * Uses raw SQL increment to prevent read-then-write race conditions.
+ *
+ * @param {string} userId - UUID of the user
+ * @returns {Promise<Object[]>} Array with the updated row containing failed_login_attempts
+ */
+export const incrementFailedAttempts = (userId) => {
+  return db("users")
+    .where({ id: userId })
+    .update({ failed_login_attempts: db.raw("failed_login_attempts + 1") })
+    .returning("failed_login_attempts")
+}

@@ -6,7 +6,7 @@ import logger from "../utils/logger.js"
 /**
  * Express middleware to require a valid access token for protected routes.
  *
- * Validates the access token in the Authorization header and sets the user in the request object.
+ * Validates the access token from httpOnly cookie and sets the user in the request object.
  *
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
@@ -75,7 +75,7 @@ export const requireAccessToken = (req, res, next) => {
 /**
  * Express middleware to require a valid refresh token for protected routes.
  *
- * Validates the refresh token in the Authorization header.
+ * Validates the refresh token from httpOnly cookie.
  *
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
