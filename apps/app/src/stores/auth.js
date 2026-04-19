@@ -5,7 +5,7 @@
 import { defineStore } from "pinia"
 import { ref, computed } from "vue"
 import { message } from "ant-design-vue"
-import { signup as apiSignup, signin as apiSignin } from "@/api/auth"
+import { signup as apiSignup, signin as apiSignin, logout as apiLogout } from "@/api/auth"
 import { setTokens, setUserData, getUserData, getAccessToken, clearAuthData } from "@/utils/storage"
 
 export const useAuthStore = defineStore("auth", () => {
@@ -83,7 +83,12 @@ export const useAuthStore = defineStore("auth", () => {
   /**
    * Logout user and clear all auth data
    */
-  function logout() {
+  async function logout() {
+    try {
+      await apiLogout()
+    } catch {
+      // Best-effort — always clear local state even if API call fails
+    }
     clearAuthData()
     user.value = null
     message.success("Logged out successfully")

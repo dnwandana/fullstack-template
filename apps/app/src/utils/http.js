@@ -1,17 +1,11 @@
 import { message } from "ant-design-vue"
-import {
-  getAccessToken,
-  getRefreshToken,
-  setTokens,
-  clearAuthData,
-} from "./storage"
+import { getAccessToken, getRefreshToken, setTokens, clearAuthData } from "./storage"
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-export const baseURL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api"
+export const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api"
 
 const DEFAULT_TIMEOUT = 10000
 
@@ -93,7 +87,8 @@ async function handleRefresh(originalOptions) {
 
     const data = await response.json()
     const newAccessToken = data.data.access_token
-    setTokens(newAccessToken, refreshTokenValue)
+    const newRefreshToken = data.data.refresh_token
+    setTokens(newAccessToken, newRefreshToken || refreshTokenValue)
 
     processQueue(null, newAccessToken)
 
@@ -168,8 +163,7 @@ async function send(method, url, options = {}) {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      const errorMessage =
-        errorData.message || response.statusText || "An error occurred"
+      const errorMessage = errorData.message || response.statusText || "An error occurred"
 
       // 401 handling — attempt token refresh (unless excluded endpoint or already retried)
       if (

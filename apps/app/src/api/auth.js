@@ -48,3 +48,21 @@ export function refreshToken() {
     return { data, status: res.status }
   })
 }
+
+/**
+ * Logout — revokes the refresh token server-side
+ * @returns {Promise} API response
+ */
+export function logout() {
+  const token = getRefreshToken()
+  return fetch(`${baseURL}/auth/logout`, {
+    method: "POST",
+    headers: { "x-refresh-token": token },
+  }).then(async (res) => {
+    if (!res.ok) {
+      return { data: null, status: res.status }
+    }
+    const data = await res.json()
+    return { data, status: res.status }
+  })
+}
