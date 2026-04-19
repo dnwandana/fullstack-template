@@ -1,7 +1,9 @@
+import crypto from "node:crypto"
 import db from "../config/database.js"
 
 const TABLE_NAME = "invitations"
-const COLUMNS = [
+
+const SAFE_COLUMNS = [
   "id",
   "org_id",
   "project_id",
@@ -10,14 +12,24 @@ const COLUMNS = [
   "invitee_id",
   "role_id",
   "status",
-  "token",
   "expires_at",
   "created_at",
   "updated_at",
 ]
 
 /**
+ * Hashes a raw invitation token with SHA-256 for secure storage.
+ *
+ * @param {string} rawToken - The raw invitation token string
+ * @returns {string} Hex-encoded SHA-256 hash
+ */
+export const hashToken = (rawToken) => {
+  return crypto.createHash("sha256").update(rawToken).digest("hex")
+}
+
+/**
  * Insert a new invitation into the database.
+ * The raw token is hashed via SHA-256 before storage — only the hash is persisted.
  *
  * @param {Object} invitation - Invitation data to insert
  * @param {string} invitation.org_id - UUID of the organization
@@ -26,22 +38,27 @@ const COLUMNS = [
  * @param {string} invitation.invitee_email - Email address of the invitee
  * @param {string} [invitation.invitee_id] - UUID of the invitee if they already have an account
  * @param {string} invitation.role_id - UUID of the role to assign upon acceptance
- * @param {string} invitation.token - Unique invitation token
+ * @param {string} invitation.token - Raw invitation token (will be hashed before storage)
  * @param {Date} invitation.expires_at - When this invitation expires
- * @returns {Promise<Object[]>} Array containing the newly created invitation
+ * @returns {Promise<Object[]>} Array containing the newly created invitation (safe columns only)
  */
 export const create = (invitation) => {
-  return db.insert(invitation).into(TABLE_NAME).returning(COLUMNS)
+  const { token, ...rest } = invitation
+  const tokenHash = hashToken(token)
+  return db
+    .insert({ ...rest, token_hash: tokenHash })
+    .into(TABLE_NAME)
+    .returning(SAFE_COLUMNS)
 }
 
 /**
  * Find a single invitation matching the given conditions.
  *
- * @param {Object} conditions - Key-value pairs to match against (e.g., { id }, { token })
+ * @param {Object} conditions - Key-value pairs to match against (e.g., { id }, { org_id })
  * @returns {Promise<Object|undefined>} The matched invitation or undefined
  */
 export const findOne = (conditions) => {
-  return db.select(COLUMNS).from(TABLE_NAME).where(conditions).first()
+  return db.select(SAFE_COLUMNS).from(TABLE_NAME).where(conditions).first()
 }
 
 /**
@@ -53,9 +70,10 @@ export const findOne = (conditions) => {
  * @returns {Promise<Object[]>} Array of enriched invitation records
  */
 export const findManyByOrgId = (orgId) => {
+  const qualifiedSafeCols = SAFE_COLUMNS.map((col) => `${TABLE_NAME}.${col}`)
   return db
     .select(
-      `${TABLE_NAME}.*`,
+      ...qualifiedSafeCols,
       "inviter.username as inviter_username",
       "invitee.username as invitee_username",
       "roles.name as role_name",
@@ -77,9 +95,10 @@ export const findManyByOrgId = (orgId) => {
  * @returns {Promise<Object[]>} Array of pending invitations with org/project/inviter details
  */
 export const findPendingByUserId = (userId) => {
+  const qualifiedSafeCols = SAFE_COLUMNS.map((col) => `${TABLE_NAME}.${col}`)
   return db
     .select(
-      `${TABLE_NAME}.*`,
+      ...qualifiedSafeCols,
       "organizations.name as org_name",
       "projects.name as project_name",
       "inviter.username as inviter_username",
@@ -105,7 +124,7 @@ export const findPendingByUserId = (userId) => {
  */
 export const findPendingByEmail = (email) => {
   return db
-    .select(COLUMNS)
+    .select(SAFE_COLUMNS)
     .from(TABLE_NAME)
     .where("invitee_email", email)
     .andWhere("status", "pending")
@@ -120,7 +139,7 @@ export const findPendingByEmail = (email) => {
  * @returns {Promise<Object[]>} Array containing the updated invitation
  */
 export const update = (conditions, data) => {
-  return db.update(data).from(TABLE_NAME).where(conditions).returning(COLUMNS)
+  return db.update(data).from(TABLE_NAME).where(conditions).returning(SAFE_COLUMNS)
 }
 
 /**

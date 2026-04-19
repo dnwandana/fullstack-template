@@ -43,6 +43,16 @@ const projectInviteSchema = joi
   .options({ stripUnknown: true })
 
 /**
+ * Joi schema for validating the accept-invitation request body.
+ * Requires the raw 64-character hex invitation token.
+ */
+const acceptSchema = joi
+  .object({
+    token: joi.string().length(64).required(),
+  })
+  .options({ stripUnknown: true })
+
+/**
  * Resolves the invitee user from either a username or email lookup.
  * Returns { inviteeId, inviteeEmail } — inviteeId may be null if the user
  * doesn't have an account yet (email-only invitation).
@@ -53,15 +63,12 @@ const projectInviteSchema = joi
  */
 const resolveInvitee = async (username, email) => {
   if (username) {
-    // Look up by username — user must exist
     const user = await userModel.findOne({ username })
     if (!user) {
       throw new HttpError(HTTP_STATUS_CODE.NOT_FOUND, "User not found")
     }
     return { inviteeId: user.id, inviteeEmail: user.email }
   }
-
-  // Look up by email — user may or may not exist
   const user = await userModel.findOne({ email })
   return { inviteeId: user?.id ?? null, inviteeEmail: email }
 }
@@ -69,9 +76,9 @@ const resolveInvitee = async (username, email) => {
 /**
  * POST /api/orgs/:org_id/invitations — Create an org-level invitation.
  *
- * Generates a secure random token and sets a 7-day expiry.
- * Validates that the invitee isn't already an org member and that
- * the specified role belongs to this organization.
+ * Generates a secure random token, hashes it with SHA-256 for storage,
+ * and sets a 7-day expiry. Validates that the invitee isn't already an
+ * org member and that the specified role belongs to this organization.
  *
  * @param {Object} req - Express request object (req.org.id, req.user.id set by middleware)
  * @param {Object} res - Express response object
@@ -86,16 +93,13 @@ export const createOrgInvitation = async (req, res, next) => {
 
     const { username, email, role_id: roleId } = value
 
-    // Verify the role belongs to this organization
     const role = await roleModel.findOne({ id: roleId, org_id: req.org.id })
     if (!role) {
       throw new HttpError(HTTP_STATUS_CODE.NOT_FOUND, "Role not found in this organization")
     }
 
-    // Resolve the invitee (by username or email)
     const { inviteeId, inviteeEmail } = await resolveInvitee(username, email)
 
-    // Check the invitee isn't already an org member
     if (inviteeId) {
       const existingMember = await orgMemberModel.findOne({
         user_id: inviteeId,
@@ -109,7 +113,6 @@ export const createOrgInvitation = async (req, res, next) => {
       }
     }
 
-    // Generate a secure invitation token and set expiry
     const token = crypto.randomBytes(32).toString("hex")
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + INVITATION_EXPIRY_DAYS)
@@ -132,7 +135,7 @@ export const createOrgInvitation = async (req, res, next) => {
     return res.status(HTTP_STATUS_CODE.CREATED).json(
       apiResponse({
         message: HTTP_STATUS_MESSAGE.CREATED,
-        data: invitation,
+        data: { ...invitation, token },
       }),
     )
   } catch (error) {
@@ -159,16 +162,13 @@ export const createProjectInvitation = async (req, res, next) => {
 
     const { username, email, role_id: roleId } = value
 
-    // Verify the role belongs to this organization
     const role = await roleModel.findOne({ id: roleId, org_id: req.org.id })
     if (!role) {
       throw new HttpError(HTTP_STATUS_CODE.NOT_FOUND, "Role not found in this organization")
     }
 
-    // Resolve the invitee (by username or email)
     const { inviteeId, inviteeEmail } = await resolveInvitee(username, email)
 
-    // Check the invitee isn't already a project member
     if (inviteeId) {
       const existingMember = await projectMemberModel.findOne({
         user_id: inviteeId,
@@ -182,7 +182,6 @@ export const createProjectInvitation = async (req, res, next) => {
       }
     }
 
-    // Generate a secure invitation token and set expiry
     const token = crypto.randomBytes(32).toString("hex")
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + INVITATION_EXPIRY_DAYS)
@@ -205,7 +204,7 @@ export const createProjectInvitation = async (req, res, next) => {
     return res.status(HTTP_STATUS_CODE.CREATED).json(
       apiResponse({
         message: HTTP_STATUS_MESSAGE.CREATED,
-        data: invitation,
+        data: { ...invitation, token },
       }),
     )
   } catch (error) {
@@ -263,8 +262,9 @@ export const getMyInvitations = async (req, res, next) => {
 /**
  * POST /api/invitations/:invitation_id/accept — Accept a pending invitation.
  *
- * Validates the invitation belongs to the authenticated user, is still pending,
- * and hasn't expired. Uses a transaction to atomically:
+ * Validates the invitation token via timing-safe SHA-256 comparison, verifies
+ * the invitation belongs to the authenticated user, is still pending, and hasn't
+ * expired. Uses a transaction to atomically:
  * - For org invitations: add user as org member with the invited role
  * - For project invitations: add user as project member; also add to org as viewer
  *   if they aren't already an org member
@@ -276,45 +276,63 @@ export const getMyInvitations = async (req, res, next) => {
  */
 export const acceptInvitation = async (req, res, next) => {
   try {
-    // Validate the :invitation_id route parameter
     const invitationId = req.params.invitation_id
     if (!UUID_REGEX.test(invitationId)) {
       throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, "Invalid invitation ID format")
     }
 
-    // Transaction: fetch invitation with row lock, validate, then create membership(s)
+    const { error, value } = acceptSchema.validate(req.body)
+    if (error) {
+      throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, error.details[0].message)
+    }
+
+    const { token: rawToken } = value
+
     await db.transaction(async (trx) => {
-      // Lock the invitation row to prevent concurrent acceptance (TOCTOU)
-      const invitation = await trx("invitations").where({ id: invitationId }).forUpdate().first()
+      const invitation = await trx("invitations")
+        .where({ id: invitationId })
+        .select("*")
+        .forUpdate()
+        .first()
 
       if (!invitation) {
         throw new HttpError(HTTP_STATUS_CODE.NOT_FOUND, "Invitation not found")
       }
 
-      // Verify the invitation belongs to the authenticated user
-      if (invitation.invitee_id !== req.user.id) {
-        throw new HttpError(HTTP_STATUS_CODE.FORBIDDEN, "This invitation does not belong to you")
+      const submittedHash = crypto.createHash("sha256").update(rawToken).digest("hex")
+      const storedHash = invitation.token_hash
+      if (
+        !storedHash ||
+        !crypto.timingSafeEqual(Buffer.from(submittedHash), Buffer.from(storedHash))
+      ) {
+        throw new HttpError(HTTP_STATUS_CODE.FORBIDDEN, "Invalid invitation token")
       }
 
-      // Verify the invitation is still pending
+      if (invitation.invitee_id) {
+        if (invitation.invitee_id !== req.user.id) {
+          throw new HttpError(HTTP_STATUS_CODE.FORBIDDEN, "This invitation does not belong to you")
+        }
+      } else {
+        const currentUser = await trx("users").where({ id: req.user.id }).select("email").first()
+        if (!currentUser.email || currentUser.email !== invitation.invitee_email) {
+          throw new HttpError(HTTP_STATUS_CODE.FORBIDDEN, "This invitation does not belong to you")
+        }
+      }
+
       if (invitation.status !== "pending") {
         throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, "Invitation is no longer pending")
       }
 
-      // Verify the invitation hasn't expired
       if (new Date(invitation.expires_at) < new Date()) {
         throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, "Invitation has expired")
       }
 
       if (invitation.project_id) {
-        // --- Project-level invitation ---
-        // Auto-add to org as viewer if not already a member
         const orgMembership = await trx("org_members")
           .where({ user_id: req.user.id, org_id: invitation.org_id })
           .first()
 
         if (!orgMembership) {
-          // Find the viewer role for this organization
           const viewerRole = await trx("roles")
             .where({ org_id: invitation.org_id, name: "viewer", is_system: true })
             .first()
@@ -328,14 +346,12 @@ export const acceptInvitation = async (req, res, next) => {
           }
         }
 
-        // Add as project member with the invited role
         await trx("project_members").insert({
           user_id: req.user.id,
           project_id: invitation.project_id,
           role_id: invitation.role_id,
         })
       } else {
-        // --- Org-level invitation ---
         await trx("org_members").insert({
           user_id: req.user.id,
           org_id: invitation.org_id,
@@ -343,7 +359,6 @@ export const acceptInvitation = async (req, res, next) => {
         })
       }
 
-      // Mark the invitation as accepted
       await trx("invitations")
         .where({ id: invitationId })
         .update({ status: "accepted", updated_at: new Date() })
@@ -363,8 +378,8 @@ export const acceptInvitation = async (req, res, next) => {
 /**
  * POST /api/invitations/:invitation_id/decline — Decline a pending invitation.
  *
- * Validates the invitation belongs to the authenticated user and is still pending.
- * Marks the invitation status as "declined".
+ * Validates the invitation belongs to the authenticated user (by ID or email)
+ * and is still pending. Marks the invitation status as "declined".
  *
  * @param {Object} req - Express request object (req.user.id set by auth middleware)
  * @param {Object} res - Express response object
@@ -372,7 +387,6 @@ export const acceptInvitation = async (req, res, next) => {
  */
 export const declineInvitation = async (req, res, next) => {
   try {
-    // Validate the :invitation_id route parameter
     const invitationId = req.params.invitation_id
     if (!UUID_REGEX.test(invitationId)) {
       throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, "Invalid invitation ID format")
@@ -383,17 +397,21 @@ export const declineInvitation = async (req, res, next) => {
       throw new HttpError(HTTP_STATUS_CODE.NOT_FOUND, "Invitation not found")
     }
 
-    // Verify the invitation belongs to the authenticated user
-    if (invitation.invitee_id !== req.user.id) {
-      throw new HttpError(HTTP_STATUS_CODE.FORBIDDEN, "This invitation does not belong to you")
+    if (invitation.invitee_id) {
+      if (invitation.invitee_id !== req.user.id) {
+        throw new HttpError(HTTP_STATUS_CODE.FORBIDDEN, "This invitation does not belong to you")
+      }
+    } else {
+      const currentUser = await userModel.findOne({ id: req.user.id })
+      if (!currentUser.email || currentUser.email !== invitation.invitee_email) {
+        throw new HttpError(HTTP_STATUS_CODE.FORBIDDEN, "This invitation does not belong to you")
+      }
     }
 
-    // Verify the invitation is still pending
     if (invitation.status !== "pending") {
       throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, "Invitation is no longer pending")
     }
 
-    // Mark the invitation as declined
     await invitationModel.update(
       { id: invitationId },
       { status: "declined", updated_at: new Date() },
@@ -421,13 +439,11 @@ export const declineInvitation = async (req, res, next) => {
  */
 export const revokeInvitation = async (req, res, next) => {
   try {
-    // Validate the :invitation_id route parameter
     const invitationId = req.params.invitation_id
     if (!UUID_REGEX.test(invitationId)) {
       throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, "Invalid invitation ID format")
     }
 
-    // Verify the invitation exists and belongs to this org
     const invitation = await invitationModel.findOne({
       id: invitationId,
       org_id: req.org.id,
