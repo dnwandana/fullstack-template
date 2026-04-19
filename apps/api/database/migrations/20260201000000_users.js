@@ -31,6 +31,10 @@ export const up = (knex) => {
     // Argon2-hashed password — never stored in plain text
     table.string("password").notNullable()
 
+    // Failed login tracking for per-user account lockout
+    table.integer("failed_login_attempts").notNullable().defaultTo(0)
+    table.timestamp("locked_until").nullable()
+
     // Timezone-aware timestamps managed by Knex
     table.timestamps(true, true)
   })

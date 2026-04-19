@@ -70,6 +70,16 @@ const validateEnv = () => {
     process.exit(1)
   }
 
+  const CHANGEME_PATTERN = /^changeme/i
+  for (const key of ["ACCESS_TOKEN_SECRET", "REFRESH_TOKEN_SECRET"]) {
+    if (CHANGEME_PATTERN.test(value[key])) {
+      console.error(
+        `Environment validation failed:\n  - ${key} contains a placeholder value. Generate a random secret.`,
+      )
+      process.exit(1)
+    }
+  }
+
   // Write validated values (with Joi defaults applied) back to process.env
   // so the rest of the app can use process.env directly without fallbacks.
   for (const [key, val] of Object.entries(value)) {

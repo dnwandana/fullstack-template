@@ -392,30 +392,36 @@ export const declineInvitation = async (req, res, next) => {
       throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, "Invalid invitation ID format")
     }
 
-    const invitation = await invitationModel.findOne({ id: invitationId })
-    if (!invitation) {
-      throw new HttpError(HTTP_STATUS_CODE.NOT_FOUND, "Invitation not found")
-    }
+    await db.transaction(async (trx) => {
+      const invitation = await trx("invitations")
+        .where({ id: invitationId })
+        .select("*")
+        .forUpdate()
+        .first()
 
-    if (invitation.invitee_id) {
-      if (invitation.invitee_id !== req.user.id) {
-        throw new HttpError(HTTP_STATUS_CODE.FORBIDDEN, "This invitation does not belong to you")
+      if (!invitation) {
+        throw new HttpError(HTTP_STATUS_CODE.NOT_FOUND, "Invitation not found")
       }
-    } else {
-      const currentUser = await userModel.findOne({ id: req.user.id })
-      if (!currentUser.email || currentUser.email !== invitation.invitee_email) {
-        throw new HttpError(HTTP_STATUS_CODE.FORBIDDEN, "This invitation does not belong to you")
+
+      if (invitation.invitee_id) {
+        if (invitation.invitee_id !== req.user.id) {
+          throw new HttpError(HTTP_STATUS_CODE.FORBIDDEN, "This invitation does not belong to you")
+        }
+      } else {
+        const currentUser = await trx("users").where({ id: req.user.id }).select("email").first()
+        if (!currentUser.email || currentUser.email !== invitation.invitee_email) {
+          throw new HttpError(HTTP_STATUS_CODE.FORBIDDEN, "This invitation does not belong to you")
+        }
       }
-    }
 
-    if (invitation.status !== "pending") {
-      throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, "Invitation is no longer pending")
-    }
+      if (invitation.status !== "pending") {
+        throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, "Invitation is no longer pending")
+      }
 
-    await invitationModel.update(
-      { id: invitationId },
-      { status: "declined", updated_at: new Date() },
-    )
+      await trx("invitations")
+        .where({ id: invitationId })
+        .update({ status: "declined", updated_at: new Date() })
+    })
 
     return res.json(
       apiResponse({

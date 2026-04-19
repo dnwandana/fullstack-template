@@ -16,7 +16,7 @@ import logger from "../utils/logger.js"
 export const requireAccessToken = (req, res, next) => {
   try {
     // get token from header
-    const accessToken = req.headers["x-access-token"]
+    const accessToken = req.cookies?.access_token
     if (!accessToken) {
       logger.warn("Authentication failed: No token provided", {
         method: req.method,
@@ -85,7 +85,7 @@ export const requireAccessToken = (req, res, next) => {
 export const requireRefreshToken = (req, res, next) => {
   try {
     // get token from header
-    const refreshToken = req.headers["x-refresh-token"]
+    const refreshToken = req.cookies?.refresh_token
     if (!refreshToken) {
       logger.warn("Refresh token authentication failed: No token provided", {
         method: req.method,

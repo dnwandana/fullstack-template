@@ -23,10 +23,10 @@ This is my personal project that can be used together with the following backend
 ## Features
 
 - **Authentication System**
-  - User signup and login with JWT tokens
-  - Automatic token refresh on expiration
+  - User signup and login with httpOnly cookie-based JWT tokens
+  - Automatic token refresh on expiration (server rotates cookies)
   - Protected routes with navigation guards
-  - Persistent sessions with localStorage
+  - Persistent sessions via localStorage (user data only — tokens in httpOnly cookies)
 
 - **Todo Management**
   - Create, read, update, and delete todos
@@ -39,7 +39,7 @@ This is my personal project that can be used together with the following backend
   - Fast HMR with Vite
   - Dual-linting setup (oxlint + eslint)
   - Code formatting with Prettier
-  - Vue DevTools integration
+  - Vue DevTools integration (development only)
   - Clean, layered architecture
 
 ## Tech Stack
@@ -50,7 +50,7 @@ This is my personal project that can be used together with the following backend
 | Vite           | Next-generation frontend tooling                   |
 | Pinia          | State management                                   |
 | Ant Design Vue | UI component library                               |
-| Axios          | HTTP client with interceptors                      |
+| Fetch API      | Native HTTP client with cookie-based auth          |
 | Vue Router     | Client-side routing with guards                    |
 
 ## Backend
@@ -61,7 +61,7 @@ This Vue template is designed to work with compatible backend APIs. You can use 
 
 Both backends provide:
 
-- JWT authentication (signup, signin, refresh)
+- JWT authentication via httpOnly cookies (signup, signin, refresh, logout)
 - RESTful API for todo management
 - Compatible API endpoints
 
@@ -127,7 +127,7 @@ src/
 ├── views/         # Page components - *View.vue naming
 ├── components/    # Reusable components
 ├── router/        # Vue Router configuration with auth guards
-└── utils/         # Utilities (axios instance, localStorage)
+└── utils/         # Utilities (fetch-based HTTP client with cookie auth, localStorage)
 ```
 
 ### Layer Architecture

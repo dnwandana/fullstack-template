@@ -4,7 +4,6 @@
  */
 
 import { request, baseURL } from "@/utils/http"
-import { getRefreshToken } from "@/utils/storage"
 
 /**
  * Register a new user account
@@ -28,23 +27,21 @@ export function signin(username, password) {
 }
 
 /**
- * Refresh access token using refresh token.
+ * Refresh access token using httpOnly cookie.
  * Uses raw fetch (not request()) to avoid infinite recursion
  * if the refresh endpoint itself returns 401.
  * @returns {Promise} API response with new access token
  */
 export function refreshToken() {
-  const token = getRefreshToken()
   return fetch(`${baseURL}/auth/refresh`, {
     method: "POST",
-    headers: { "x-refresh-token": token },
+    credentials: "include",
   }).then(async (res) => {
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}))
       throw new Error(errorData.message || "Token refresh failed")
     }
     const data = await res.json()
-    // Return axios-compatible shape so callers can use .data
     return { data, status: res.status }
   })
 }
@@ -54,10 +51,9 @@ export function refreshToken() {
  * @returns {Promise} API response
  */
 export function logout() {
-  const token = getRefreshToken()
   return fetch(`${baseURL}/auth/logout`, {
     method: "POST",
-    headers: { "x-refresh-token": token },
+    credentials: "include",
   }).then(async (res) => {
     if (!res.ok) {
       return { data: null, status: res.status }

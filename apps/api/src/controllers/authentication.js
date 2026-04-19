@@ -5,8 +5,14 @@ import apiResponse from "../utils/response.js"
 import { HTTP_STATUS_CODE, HTTP_STATUS_MESSAGE } from "../utils/constant.js"
 import * as userModel from "../models/users.js"
 import * as refreshTokenModel from "../models/refresh-tokens.js"
+import db from "../config/database.js"
 import { hashPassword, verifyPassword } from "../utils/argon2.js"
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt.js"
+import {
+  setAccessTokenCookie,
+  setRefreshTokenCookie,
+  clearAuthCookies,
+} from "../utils/cookies.js"
 
 // Pre-computed dummy hash for timing-safe signin.
 // Ensures verifyPassword always runs, even when the user doesn't exist,
@@ -26,7 +32,23 @@ const signupSchema = joi
           "username must contain only letters, numbers, dots, underscores, or hyphens",
       }),
     email: joi.string().email().max(255).optional(),
-    password: joi.string().min(8).max(72).required(),
+    password: joi
+      .string()
+      .min(8)
+      .max(72)
+      .pattern(/[A-Z]/, "uppercase")
+      .pattern(/[a-z]/, "lowercase")
+      .pattern(/[0-9]/, "digit")
+      .pattern(/[^A-Za-z0-9]/, "special")
+      .required()
+      .messages({
+        "string.min": "password must be at least 8 characters",
+        "string.max": "password must be at most 72 characters",
+        "string.pattern.name.uppercase": "password must contain at least one uppercase letter",
+        "string.pattern.name.lowercase": "password must contain at least one lowercase letter",
+        "string.pattern.name.digit": "password must contain at least one digit",
+        "string.pattern.name.special": "password must contain at least one special character",
+      }),
     confirmation_password: joi.string().required().valid(joi.ref("password")).messages({
       "any.only": "confirmation_password must match password",
     }),
@@ -152,9 +174,37 @@ export const signin = async (req, res, next) => {
     const user = await userModel.findOneWithPassword({ username })
     const hashToVerify = user?.password ?? dummyHash
     const isPasswordValid = await verifyPassword(hashToVerify, password)
+
+    // Check account lockout (only for existing users)
+    if (user?.locked_until && new Date(user.locked_until) > new Date()) {
+      throw new HttpError(
+        HTTP_STATUS_CODE.FORBIDDEN,
+        "Account is temporarily locked. Try again later.",
+      )
+    }
+
     if (!user || !isPasswordValid) {
+      // Increment failed login attempts for existing users
+      if (user) {
+        const newAttempts = (user.failed_login_attempts || 0) + 1
+        if (newAttempts >= 5) {
+          await db("users")
+            .where({ id: user.id })
+            .update({
+              failed_login_attempts: 0,
+              locked_until: new Date(Date.now() + 15 * 60 * 1000),
+            })
+        } else {
+          await db("users").where({ id: user.id }).update({ failed_login_attempts: newAttempts })
+        }
+      }
       throw new HttpError(HTTP_STATUS_CODE.UNAUTHORIZED, "invalid credentials")
     }
+
+    // Successful login — reset lockout fields
+    await db("users")
+      .where({ id: user.id })
+      .update({ failed_login_attempts: 0, locked_until: null })
 
     const accessToken = generateAccessToken(user.id)
     const refreshToken = generateRefreshToken(user.id)
@@ -167,14 +217,15 @@ export const signin = async (req, res, next) => {
       expires_at: expiresAt,
     })
 
+    setAccessTokenCookie(res, accessToken)
+    setRefreshTokenCookie(res, refreshToken)
+
     return res.json(
       apiResponse({
         message: HTTP_STATUS_MESSAGE.OK,
         data: {
           id: user.id,
           username: user.username,
-          access_token: accessToken,
-          refresh_token: refreshToken,
         },
       }),
     )
@@ -196,7 +247,7 @@ export const refreshAccessToken = async (req, res, next) => {
   try {
     const userId = req.user.id
 
-    const rawRefreshToken = req.headers["x-refresh-token"]
+    const rawRefreshToken = req.cookies?.refresh_token
     const tokenHash = refreshTokenModel.hashToken(rawRefreshToken)
 
     const storedToken = await refreshTokenModel.findActiveByHash(tokenHash)
@@ -226,13 +277,13 @@ export const refreshAccessToken = async (req, res, next) => {
       expires_at: expiresAt,
     })
 
+    setAccessTokenCookie(res, newAccessToken)
+    setRefreshTokenCookie(res, newRefreshToken)
+
     return res.json(
       apiResponse({
         message: HTTP_STATUS_MESSAGE.OK,
-        data: {
-          access_token: newAccessToken,
-          refresh_token: newRefreshToken,
-        },
+        data: null,
       }),
     )
   } catch (error) {
@@ -251,7 +302,7 @@ export const refreshAccessToken = async (req, res, next) => {
  */
 export const logout = async (req, res, next) => {
   try {
-    const rawRefreshToken = req.headers["x-refresh-token"]
+    const rawRefreshToken = req.cookies?.refresh_token
     if (rawRefreshToken) {
       const tokenHash = refreshTokenModel.hashToken(rawRefreshToken)
       const storedToken = await refreshTokenModel.findActiveByHash(tokenHash)
@@ -259,6 +310,8 @@ export const logout = async (req, res, next) => {
         await refreshTokenModel.revokeById(storedToken.id)
       }
     }
+
+    clearAuthCookies(res)
 
     return res.json(
       apiResponse({

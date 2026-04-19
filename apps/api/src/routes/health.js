@@ -23,8 +23,10 @@ router.get("/", (req, res, next) => {
           data: {
             status: statusLabel,
             timestamp: new Date().toISOString(),
-            uptime: process.uptime(),
-            database: dbStatus,
+            ...(process.env.NODE_ENV !== "production" && {
+              uptime: process.uptime(),
+              database: dbStatus,
+            }),
           },
         }),
       )
