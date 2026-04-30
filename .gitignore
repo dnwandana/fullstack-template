@@ -19,3 +19,6 @@ skills-lock.json
 .env
 .env.*
 !.env.example
+
+# Docker deployment
+certs/
