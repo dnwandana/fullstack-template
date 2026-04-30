@@ -28,6 +28,11 @@ Organization
 - Corepack (bundled with Node 24+)
 - PostgreSQL (for the API)
 
+For production deployment:
+
+- Docker Engine `>=24`
+- Docker Compose `>=2.20`
+
 ## Install
 
 ```bash
@@ -113,12 +118,12 @@ Append `:api` or `:app` to target a single workspace (e.g. `pnpm test:api`).
 
 ### Authentication endpoints (public)
 
-| Method | Path                | Description                                      |
-| ------ | ------------------- | ------------------------------------------------ |
-| POST   | `/api/auth/signup`  | Register — returns `{ id, username, email }`         |
+| Method | Path                | Description                                           |
+| ------ | ------------------- | ----------------------------------------------------- |
+| POST   | `/api/auth/signup`  | Register — returns `{ id, username, email }`          |
 | POST   | `/api/auth/signin`  | Login — sets httpOnly auth cookies, returns user info |
 | POST   | `/api/auth/refresh` | Rotate tokens via httpOnly cookie                     |
-| POST   | `/api/auth/logout`  | Revoke refresh token, clear cookies                  |
+| POST   | `/api/auth/logout`  | Revoke refresh token, clear cookies                   |
 
 ### Protected endpoints (authenticated via httpOnly `access_token` cookie)
 
@@ -180,6 +185,125 @@ cp apps/api/.env.example apps/api/.env.test
 ```
 
 The test suite uses real PostgreSQL (no mocks), runs migrations before each session, and truncates tables between tests. 64 tests across unit (pagination, sanitize, http-error) and integration (auth, health, orgs, todos, permissions) suites.
+
+## Deployment
+
+Production deployment uses Docker Compose with nginx as the sole entry point. Two containers run on the host VM; PostgreSQL remains an external service.
+
+### How it works
+
+```
+nginx (ports 80/443)
+  ├── / → serves Vue static files (built into the image)
+  ├── /api → proxies to Express container
+  └── /health → proxies to Express container
+
+api (internal only)
+  └── connects to external PostgreSQL via DATABASE_URL
+```
+
+### Local Docker
+
+Test the production images locally over HTTP (no SSL required).
+
+**1. Configure environment**
+
+```bash
+cp .env.example .env.local
+# Edit .env.local — fill in DATABASE_URL, JWT secrets, and set these local values:
+#   NODE_ENV=development        ← required: keeps cookies non-Secure so browsers accept them over HTTP
+#   JWT_ISSUER=http://localhost
+#   JWT_AUDIENCE=http://localhost
+#   CORS_ALLOWED_ORIGINS=http://localhost
+```
+
+**2. Build and start**
+
+```bash
+docker compose -f docker-compose.local.yml up --build -d
+```
+
+**3. Run migrations**
+
+```bash
+docker compose -f docker-compose.local.yml run --rm api sh -c "node_modules/.bin/knex migrate:latest"
+```
+
+App available at `http://localhost`.
+
+**Useful commands**
+
+```bash
+docker compose -f docker-compose.local.yml logs -f        # tail all logs
+docker compose -f docker-compose.local.yml logs -f api    # API logs only
+docker compose -f docker-compose.local.yml ps             # container status
+docker compose -f docker-compose.local.yml down           # stop and remove containers
+```
+
+### First deploy
+
+**1. Place Let's Encrypt certificates**
+
+```bash
+mkdir certs
+# Copy or symlink your certs — nginx expects these exact filenames:
+# certs/fullchain.pem
+# certs/privkey.pem
+# Typical symlink approach (if using certbot on the host):
+ln -s /etc/letsencrypt/live/<domain>/fullchain.pem certs/fullchain.pem
+ln -s /etc/letsencrypt/live/<domain>/privkey.pem certs/privkey.pem
+```
+
+**2. Configure environment**
+
+```bash
+cp .env.example .env
+# Edit .env — fill in DATABASE_URL, JWT secrets, and your domain
+```
+
+**3. Build and start**
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+### Re-deploy after code changes
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+### Useful commands
+
+```bash
+docker compose logs -f              # tail logs from both containers
+docker compose logs -f api          # API logs only
+docker compose ps                   # container status
+
+# Manual database migration (run before deploying schema changes)
+docker compose run --rm api sh -c "node_modules/.bin/knex migrate:latest"
+
+# Manual seed
+docker compose run --rm api sh -c "node_modules/.bin/knex seed:run"
+```
+
+### Environment variables
+
+| Variable               | Required | Description                                                                         |
+| ---------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `VITE_API_BASE_URL`    | No       | Build-time API base URL. Defaults to `/api` (same-origin, recommended).             |
+| `DATABASE_URL`         | Yes      | PostgreSQL connection string                                                        |
+| `ACCESS_TOKEN_SECRET`  | Yes      | JWT secret, min 32 chars                                                            |
+| `REFRESH_TOKEN_SECRET` | Yes      | JWT secret, min 32 chars, must differ from access secret                            |
+| `JWT_ISSUER`           | Yes      | e.g. `https://yourdomain.com`                                                       |
+| `JWT_AUDIENCE`         | Yes      | e.g. `https://yourdomain.com`                                                       |
+| `CORS_ALLOWED_ORIGINS` | No       | Defaults to `http://localhost:8080`. Set to `https://yourdomain.com` in production. |
+
+See `.env.example` for the full list.
+
+---
 
 ## Project structure
 

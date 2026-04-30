@@ -33,3 +33,39 @@ corepack pnpm test:api      # Vitest + Supertest against real PostgreSQL
 ## App-specific details
 
 See [`apps/api/CLAUDE.md`](apps/api/CLAUDE.md) and [`apps/app/CLAUDE.md`](apps/app/CLAUDE.md).
+
+## Docker deployment
+
+Two compose files — same two-container architecture, PostgreSQL always external.
+
+### Production (`docker-compose.yml`)
+
+```bash
+docker compose build          # build both images
+docker compose up -d          # start detached
+docker compose logs -f        # tail logs
+docker compose ps             # check status
+```
+
+- nginx on ports 80 + 443, TLS via `certs/` (gitignored, mounted read-only)
+- Uses `nginx/default.conf` (HTTP→HTTPS redirect + TLS block)
+- Env from `.env`
+
+### Local (`docker-compose.local.yml`)
+
+```bash
+docker compose -f docker-compose.local.yml up --build -d
+docker compose -f docker-compose.local.yml logs -f
+docker compose -f docker-compose.local.yml down
+```
+
+- nginx on port 80 only, no TLS
+- Uses `nginx/local.conf` (HTTP-only)
+- Env from `.env.local` (copy from `.env.example`; set `NODE_ENV=development`, `JWT_ISSUER/AUDIENCE=http://localhost`, `CORS_ALLOWED_ORIGINS=http://localhost`)
+- `NODE_ENV=development` is required locally — the API sets `Secure` cookies only in production, which browsers reject over plain HTTP
+
+### Common facts
+
+- `app` container: nginx serves Vue static files + proxies `/api` and `/health` to the `api` container
+- `api` container: Express.js, no host port published, only reachable as `http://api:3000` inside Docker network
+- Migrations do **not** run automatically — run manually: `docker compose [-f docker-compose.local.yml] run --rm api sh -c "node_modules/.bin/knex migrate:latest"`
