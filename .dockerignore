@@ -1,0 +1,43 @@
+# dependencies
+node_modules
+**/node_modules
+
+# build outputs
+apps/app/dist
+apps/api/dist
+
+# test artifacts
+coverage
+**/.turbo
+
+# env / secrets
+.env
+.env.local
+apps/api/.env
+apps/api/.env.test
+apps/app/.env
+
+# git
+.git
+.gitignore
+
+# docs
+docs
+*.md
+
+# editor
+.vscode
+.idea
+
+# local tooling caches
+.pnpm-store/
+.corepack/
+
+# playwright
+.playwright-cli/
+.playwright-mcp/
+
+# coding agents
+.agents/
+.claude/
+skills-lock.json
