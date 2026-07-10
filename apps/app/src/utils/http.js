@@ -5,12 +5,19 @@ import { clearUserData } from "./storage"
 // Config
 // ---------------------------------------------------------------------------
 
-export const baseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api"
+export const baseURL = import.meta.env.VITE_API_BASE_URL
 
 const DEFAULT_TIMEOUT = 10000
 
 // Auth endpoints that must never trigger the refresh-retry logic
 const NO_RETRY_ENDPOINTS = ["/auth/signin", "/auth/signup", "/auth/refresh"]
+
+// Endpoints where a failed refresh must NOT force a hard redirect to /login.
+// /auth/me is a session probe (called by initAuth on every navigation while
+// logged out); its caller already handles the failure gracefully, and the
+// router guard already redirects to /login — a hard reload here is redundant
+// and, since it re-triggers the same probe on load, causes an infinite loop.
+const NO_REDIRECT_ENDPOINTS = ["/auth/me"]
 
 // ---------------------------------------------------------------------------
 // HttpError — axios-compatible error shape
@@ -84,7 +91,9 @@ async function handleRefresh(originalOptions) {
   } catch (error) {
     processQueue(error)
     clearUserData()
-    window.location.href = "/login"
+    if (!NO_REDIRECT_ENDPOINTS.some((ep) => originalOptions.url.includes(ep))) {
+      window.location.href = "/login"
+    }
     throw error
   } finally {
     isRefreshing = false
