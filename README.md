@@ -188,15 +188,18 @@ The test suite uses real PostgreSQL (no mocks), runs migrations before each sess
 
 ## Deployment
 
-Production deployment uses Docker Compose with nginx as the sole entry point. Two containers run on the host VM; PostgreSQL remains an external service.
+Production deployment uses Docker Compose with an edge nginx container as a name-based virtual host router, splitting the SPA and API onto separate subdomains (`app.<DOMAIN>`, `api.<DOMAIN>`). Three containers run on the host VM; PostgreSQL remains an external service.
 
 ### How it works
 
 ```
-nginx (ports 80/443)
-  ├── / → serves Vue static files (built into the image)
-  ├── /api → proxies to Express container
-  └── /health → proxies to Express container
+nginx (edge, ports 80/443, name-based virtual host router)
+  ├── app.<DOMAIN> → proxies to app container
+  └── api.<DOMAIN> → proxies to api container, stripping the /api prefix
+                      from both the request path and Set-Cookie paths
+
+app (internal only)
+  └── nginx serving the built Vue static files
 
 api (internal only)
   └── connects to external PostgreSQL via DATABASE_URL
@@ -244,21 +247,24 @@ docker compose -f docker-compose.local.yml down           # stop and remove cont
 
 **1. Place Let's Encrypt certificates**
 
+A single wildcard cert pair covers both subdomains.
+
 ```bash
 mkdir certs
-# Copy or symlink your certs — nginx expects these exact filenames:
-# certs/fullchain.pem
-# certs/privkey.pem
-# Typical symlink approach (if using certbot on the host):
-ln -s /etc/letsencrypt/live/<domain>/fullchain.pem certs/fullchain.pem
-ln -s /etc/letsencrypt/live/<domain>/privkey.pem certs/privkey.pem
+# Copy or symlink your certs — nginx expects these exact filenames,
+# prefixed with your DOMAIN value from .env:
+# certs/<DOMAIN>.fullchain.pem
+# certs/<DOMAIN>.privkey.pem
+# Typical symlink approach (if using certbot on the host, wildcard cert for *.<domain>):
+ln -s /etc/letsencrypt/live/<domain>/fullchain.pem certs/<domain>.fullchain.pem
+ln -s /etc/letsencrypt/live/<domain>/privkey.pem certs/<domain>.privkey.pem
 ```
 
 **2. Configure environment**
 
 ```bash
 cp .env.example .env
-# Edit .env — fill in DATABASE_URL, JWT secrets, and your domain
+# Edit .env — fill in DATABASE_URL, JWT secrets, and DOMAIN
 ```
 
 **3. Build and start**
@@ -291,15 +297,15 @@ docker compose run --rm api sh -c "node_modules/.bin/knex seed:run"
 
 ### Environment variables
 
-| Variable               | Required | Description                                                                         |
-| ---------------------- | -------- | ----------------------------------------------------------------------------------- |
-| `VITE_API_BASE_URL`    | No       | Build-time API base URL. Defaults to `/api` (same-origin, recommended).             |
-| `DATABASE_URL`         | Yes      | PostgreSQL connection string                                                        |
-| `ACCESS_TOKEN_SECRET`  | Yes      | JWT secret, min 32 chars                                                            |
-| `REFRESH_TOKEN_SECRET` | Yes      | JWT secret, min 32 chars, must differ from access secret                            |
-| `JWT_ISSUER`           | Yes      | e.g. `https://yourdomain.com`                                                       |
-| `JWT_AUDIENCE`         | Yes      | e.g. `https://yourdomain.com`                                                       |
-| `CORS_ALLOWED_ORIGINS` | No       | Defaults to `http://localhost:8080`. Set to `https://yourdomain.com` in production. |
+| Variable               | Required | Description                                                                                    |
+| ---------------------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `DOMAIN`               | Yes      | Registrable domain. Production derives `app.<DOMAIN>` (SPA) and `api.<DOMAIN>` (API) from it.    |
+| `DATABASE_URL`         | Yes      | PostgreSQL connection string                                                                      |
+| `ACCESS_TOKEN_SECRET`  | Yes      | JWT secret, min 32 chars                                                                          |
+| `REFRESH_TOKEN_SECRET` | Yes      | JWT secret, min 32 chars, must differ from access secret                                          |
+| `JWT_ISSUER`           | Yes      | e.g. `https://api.yourdomain.com`                                                                 |
+| `JWT_AUDIENCE`         | Yes      | e.g. `https://app.yourdomain.com`                                                                 |
+| `CORS_ALLOWED_ORIGINS` | No       | Defaults to `http://localhost:8080`. Set to `https://app.yourdomain.com` in production.           |
 
 See `.env.example` for the full list.
 

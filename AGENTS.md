@@ -36,19 +36,21 @@ See [`apps/api/CLAUDE.md`](apps/api/CLAUDE.md) and [`apps/app/CLAUDE.md`](apps/a
 
 ## Docker deployment
 
-Two compose files — same two-container architecture, PostgreSQL always external.
+Two compose files — production is a three-container topology (edge nginx + app + api), local dev stays two-container (app+nginx-in-one + api). PostgreSQL always external.
 
 ### Production (`docker-compose.yml`)
 
 ```bash
-docker compose build          # build both images
+docker compose build          # build all three images
 docker compose up -d          # start detached
 docker compose logs -f        # tail logs
 docker compose ps             # check status
 ```
 
-- nginx on ports 80 + 443, TLS via `certs/` (gitignored, mounted read-only)
-- Uses `nginx/default.conf` (HTTP→HTTPS redirect + TLS block)
+- Three containers: `nginx` (edge, ports 80 + 443), `app` (internal only), `api` (internal only)
+- `nginx` is a name-based virtual host router: `app.<DOMAIN>` → `app` container, `api.<DOMAIN>` → `api` container
+- TLS via a single wildcard cert pair in `certs/` (gitignored, mounted read-only): `<DOMAIN>.fullchain.pem` / `<DOMAIN>.privkey.pem`
+- Vhost config is rendered at container start from `nginx/templates/*.template` via envsubst, driven by `DOMAIN` in `.env`
 - Env from `.env`
 
 ### Local (`docker-compose.local.yml`)
@@ -66,6 +68,7 @@ docker compose -f docker-compose.local.yml down
 
 ### Common facts
 
-- `app` container: nginx serves Vue static files + proxies `/api` and `/health` to the `api` container
+- `app` container: nginx serves Vue static files only in production (no `/api` proxying — the edge nginx routes `api.<DOMAIN>` straight to the `api` container); in local dev it still proxies `/api` and `/health` since `docker-compose.local.yml` stays single-origin
 - `api` container: Express.js, no host port published, only reachable as `http://api:3000` inside Docker network
+- In production, the edge nginx strips the `/api` prefix from both the proxied path and `Set-Cookie` paths (`proxy_cookie_path`), so `api.<DOMAIN>` presents clean URLs while `apps/api/src/app.js` still mounts routes at `/api` unmodified
 - Migrations do **not** run automatically — run manually: `docker compose [-f docker-compose.local.yml] run --rm api sh -c "node_modules/.bin/knex migrate:latest"`

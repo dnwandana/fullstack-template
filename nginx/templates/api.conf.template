@@ -1,0 +1,58 @@
+# Rendered at container start by nginx's envsubst entrypoint.
+# Only ${DOMAIN} is substituted — nginx runtime vars are NOT in the
+# container environment, so envsubst leaves them untouched.
+
+server {
+    listen 80;
+    server_name api.${DOMAIN};
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name api.${DOMAIN};
+
+    ssl_certificate     /etc/nginx/certs/${DOMAIN}.fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/${DOMAIN}.privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location / {
+        proxy_pass         http://api:3000/api/;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   X-Request-Id      $request_id;
+
+        # Express (helmet) sets its own HSTS header on every response; hide it
+        # so the edge's copy above is the only one the client sees.
+        proxy_hide_header  Strict-Transport-Security;
+
+        # Strip the upstream /api prefix from Set-Cookie paths so the clean
+        # URLs the browser uses (/auth/..., /orgs/...) match the cookies.
+        # More specific path first — nginx uses the first matching rule.
+        proxy_cookie_path  /api/auth /auth;
+        proxy_cookie_path  /api /;
+
+        proxy_buffering    off;
+    }
+
+    # /health is served at the API root (not under /api)
+    location = /health {
+        proxy_pass         http://api:3000/health;
+        proxy_http_version 1.1;
+        proxy_set_header   Connection "";
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   X-Request-Id      $request_id;
+
+        proxy_hide_header  Strict-Transport-Security;
+    }
+}

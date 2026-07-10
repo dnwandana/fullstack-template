@@ -17,5 +17,6 @@ RUN pnpm --filter @fullstack/app build
 
 # Stage 2: serve with nginx
 FROM nginx:1.30-alpine
+COPY apps/app/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/apps/app/dist /usr/share/nginx/html
-EXPOSE 80 443
+EXPOSE 80

@@ -1,19 +1,29 @@
 services:
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      app:
+        condition: service_started
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
   app:
     build:
       context: .
       dockerfile: apps/app/Dockerfile
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./certs:/etc/nginx/certs:ro
-    depends_on:
-      api:
-        condition: service_healthy
+        VITE_API_BASE_URL: https://api.${DOMAIN}
     restart: unless-stopped
 
   api:
