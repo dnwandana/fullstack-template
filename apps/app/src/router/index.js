@@ -106,7 +106,7 @@ const router = createRouter({
  * - Initializes the auth store on first navigation if needed.
  * - Enforces `requiresAuth` and `requiresGuest` meta flags.
  */
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
 
   // Initialize auth state by verifying cookie validity on first navigation
@@ -118,17 +118,13 @@ router.beforeEach(async (to, from, next) => {
 
   // Protected routes — redirect unauthenticated users to login
   if (to.meta.requiresAuth && !isAuthenticated) {
-    next({ path: "/login", query: { redirect: to.fullPath } })
-    return
+    return { path: "/login", query: { redirect: to.fullPath } }
   }
 
   // Guest-only routes — redirect authenticated users to orgs list
   if (to.meta.requiresGuest && isAuthenticated) {
-    next({ path: "/orgs" })
-    return
+    return { path: "/orgs" }
   }
-
-  next()
 })
 
 export default router
