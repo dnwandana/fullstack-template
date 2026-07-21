@@ -25,27 +25,27 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "argon2": "^0.43.1",
+    "argon2": "^0.45.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "dotenv": "^16.6.1",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.2.1",
-    "helmet": "^8.1.0",
+    "express-rate-limit": "^8.6.0",
+    "helmet": "^8.3.0",
     "hpp": "^0.2.3",
-    "joi": "^17.13.3",
+    "joi": "^18.2.3",
     "jsonwebtoken": "^9.0.3",
-    "knex": "^3.1.0",
-    "morgan": "^1.10.1",
-    "pg": "^8.16.3",
+    "knex": "^3.3.0",
+    "morgan": "^1.11.0",
+    "pg": "^8.22.0",
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.11",
-    "oxlint": "^1.41.0",
-    "prettier": "^3.8.1",
+    "oxlint": "^1.74.0",
+    "prettier": "^3.9.5",
     "supertest": "^7.2.2",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.10"
   }
 }
