@@ -11,7 +11,7 @@ import {
   logout as apiLogout,
   getMe as apiGetMe,
 } from "@/api/auth"
-import { setUserData, getUserData, clearUserData } from "@/utils/storage"
+import { setUserData, clearUserData } from "@/utils/storage"
 
 export const useAuthStore = defineStore("auth", () => {
   // State
@@ -54,7 +54,7 @@ export const useAuthStore = defineStore("auth", () => {
       return response.data
     } catch (error) {
       const errorMsg = error.response?.data?.message || "Signup failed. Please try again."
-      throw new Error(errorMsg)
+      throw new Error(errorMsg, { cause: error })
     } finally {
       loading.value = false
     }
@@ -79,7 +79,7 @@ export const useAuthStore = defineStore("auth", () => {
       return response.data
     } catch (error) {
       const errorMsg = error.response?.data?.message || "Sign in failed. Please try again."
-      throw new Error(errorMsg)
+      throw new Error(errorMsg, { cause: error })
     } finally {
       loading.value = false
     }
