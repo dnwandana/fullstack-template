@@ -1,5 +1,10 @@
-import "dotenv/config"
+import { config as loadEnv } from "dotenv"
 import validateEnv from "./utils/validate-env.js"
+
+// loadEnv() runs after static imports execute — nothing imported above this
+// line may read process.env at module scope. app.js, logger.js, and
+// database.js are dynamically imported below for this reason.
+loadEnv({ quiet: true })
 
 // validate environment variables before anything else
 validateEnv()

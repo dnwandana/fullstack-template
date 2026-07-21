@@ -15,7 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default async function setup() {
   // Load test environment variables
-  dotenv.config({ path: path.resolve(__dirname, "../.env.test"), override: true })
+  dotenv.config({ path: path.resolve(__dirname, "../.env.test"), override: true, quiet: true })
 
   // Validate env (reuse the app's validator)
   const { default: validateEnv } = await import("../src/utils/validate-env.js")
