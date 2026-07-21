@@ -43,7 +43,9 @@ beforeEach(async () => {
 
 describe("POST /api/orgs/:org_id/projects/:project_id/todos", () => {
   it("should create a todo", async () => {
-    const res = await (await request())
+    const res = await (
+      await request()
+    )
       .post(basePath)
       .set(ownerHeaders)
       .send({ title: "Buy groceries", description: "Milk and eggs" })
@@ -56,7 +58,9 @@ describe("POST /api/orgs/:org_id/projects/:project_id/todos", () => {
   })
 
   it("should reject todo without title", async () => {
-    const res = await (await request())
+    const res = await (
+      await request()
+    )
       .post(basePath)
       .set(ownerHeaders)
       .send({ description: "No title" })
@@ -194,7 +198,9 @@ describe("DELETE /api/orgs/:org_id/projects/:project_id/todos (bulk)", () => {
   })
 
   it("should reject invalid UUIDs in bulk delete", async () => {
-    const res = await (await request())
+    const res = await (
+      await request()
+    )
       .delete(`${basePath}?ids=not-a-uuid,also-bad`)
       .set(ownerHeaders)
 

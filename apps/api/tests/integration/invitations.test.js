@@ -20,12 +20,16 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
       const invitee = await createTestUser({ username: "invitee1" })
       const inviterHeaders = await getAuthHeaders(inviter.id)
 
-      await (await request())
+      await (
+        await request()
+      )
         .post(`/api/orgs/${org.id}/invitations`)
         .set(inviterHeaders)
         .send({ username: invitee.username, role_id: org.roles.member })
 
-      const listRes = await (await request())
+      const listRes = await (
+        await request()
+      )
         .get(`/api/orgs/${org.id}/invitations`)
         .set(inviterHeaders)
 
@@ -41,7 +45,9 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
       const inviterHeaders = await getAuthHeaders(inviter.id)
       const inviteeHeaders = await getAuthHeaders(invitee.id)
 
-      await (await request())
+      await (
+        await request()
+      )
         .post(`/api/orgs/${org.id}/invitations`)
         .set(inviterHeaders)
         .send({ username: invitee.username, role_id: org.roles.member })
@@ -59,7 +65,9 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
       const invitee = await createTestUser({ username: "invitee3" })
       const inviterHeaders = await getAuthHeaders(inviter.id)
 
-      const createRes = await (await request())
+      const createRes = await (
+        await request()
+      )
         .post(`/api/orgs/${org.id}/invitations`)
         .set(inviterHeaders)
         .send({ username: invitee.username, role_id: org.roles.member })
@@ -78,7 +86,9 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
       const inviterHeaders = await getAuthHeaders(inviter.id)
       const inviteeHeaders = await getAuthHeaders(invitee.id)
 
-      const createRes = await (await request())
+      const createRes = await (
+        await request()
+      )
         .post(`/api/orgs/${org.id}/invitations`)
         .set(inviterHeaders)
         .send({ username: invitee.username, role_id: org.roles.member })
@@ -86,7 +96,9 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
       const invitationId = createRes.body.data.id
       const rawToken = createRes.body.data.token
 
-      const acceptRes = await (await request())
+      const acceptRes = await (
+        await request()
+      )
         .post(`/api/invitations/${invitationId}/accept`)
         .set(inviteeHeaders)
         .send({ token: rawToken })
@@ -101,7 +113,9 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
       const inviterHeaders = await getAuthHeaders(inviter.id)
       const inviteeHeaders = await getAuthHeaders(invitee.id)
 
-      const createRes = await (await request())
+      const createRes = await (
+        await request()
+      )
         .post(`/api/orgs/${org.id}/invitations`)
         .set(inviterHeaders)
         .send({ username: invitee.username, role_id: org.roles.member })
@@ -126,14 +140,18 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
       const inviterHeaders = await getAuthHeaders(inviter.id)
       const inviteeHeaders = await getAuthHeaders(invitee.id)
 
-      const createRes = await (await request())
+      const createRes = await (
+        await request()
+      )
         .post(`/api/orgs/${org.id}/invitations`)
         .set(inviterHeaders)
         .send({ username: invitee.username, role_id: org.roles.member })
 
       const invitationId = createRes.body.data.id
 
-      const acceptRes = await (await request())
+      const acceptRes = await (
+        await request()
+      )
         .post(`/api/invitations/${invitationId}/accept`)
         .set(inviteeHeaders)
         .send({})
@@ -148,7 +166,9 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
       const org = await createTestOrg(inviter.id)
       const inviterHeaders = await getAuthHeaders(inviter.id)
 
-      const createRes = await (await request())
+      const createRes = await (
+        await request()
+      )
         .post(`/api/orgs/${org.id}/invitations`)
         .set(inviterHeaders)
         .send({ email: "newuser@test.com", role_id: org.roles.member })
@@ -171,7 +191,9 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
 
       const newUserCookie = extractCookies(signinRes)
 
-      const acceptRes = await (await request())
+      const acceptRes = await (
+        await request()
+      )
         .post(`/api/invitations/${invitationId}/accept`)
         .set("Cookie", newUserCookie)
         .send({ token: rawToken })
@@ -184,7 +206,9 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
       const org = await createTestOrg(inviter.id)
       const inviterHeaders = await getAuthHeaders(inviter.id)
 
-      const createRes = await (await request())
+      const createRes = await (
+        await request()
+      )
         .post(`/api/orgs/${org.id}/invitations`)
         .set(inviterHeaders)
         .send({ email: "target@test.com", role_id: org.roles.member })
@@ -206,7 +230,9 @@ describe("Invitation Security (C2, C3, C4, H7)", () => {
 
       const wrongUserCookie = extractCookies(signinRes)
 
-      const acceptRes = await (await request())
+      const acceptRes = await (
+        await request()
+      )
         .post(`/api/invitations/${invitationId}/accept`)
         .set("Cookie", wrongUserCookie)
         .send({ token: rawToken })

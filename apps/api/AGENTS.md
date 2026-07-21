@@ -129,12 +129,13 @@ Validation: username 3â€“30 chars, alphanumeric + `.` `_` `-` only. Password 8â€
 **RBAC**: Permission-per-Role table pattern. System roles (owner/admin/member/viewer) created per org. Org owners can create custom roles with granular permissions. 16 system permissions across org, project, todos, and invitations resources.
 
 **System Roles**:
-| Role | Permissions |
+
+| Role   | Permissions                             |
 | ------ | --------------------------------------- |
-| owner | All 16 permissions |
-| admin | All except org:delete, org:manage_roles |
-| member | org:read, project:read, todos CRUD |
-| viewer | org:read, project:read, todos:read |
+| owner  | All 16 permissions                      |
+| admin  | All except org:delete, org:manage_roles |
+| member | org:read, project:read, todos CRUD      |
+| viewer | org:read, project:read, todos:read      |
 
 **Nested REST URLs**: `/api/orgs/:org_id/projects/:project_id/todos`
 

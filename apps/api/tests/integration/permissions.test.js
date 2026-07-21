@@ -47,7 +47,9 @@ beforeEach(async () => {
 
 describe("Permission Enforcement", () => {
   it("viewer cannot create todos", async () => {
-    const res = await (await request())
+    const res = await (
+      await request()
+    )
       .post(`/api/orgs/${org.id}/projects/${project.id}/todos`)
       .set(viewerHeaders)
       .send({ title: "Viewer todo" })
@@ -56,7 +58,9 @@ describe("Permission Enforcement", () => {
   })
 
   it("member can create todos", async () => {
-    const res = await (await request())
+    const res = await (
+      await request()
+    )
       .post(`/api/orgs/${org.id}/projects/${project.id}/todos`)
       .set(memberHeaders)
       .send({ title: "Member todo" })

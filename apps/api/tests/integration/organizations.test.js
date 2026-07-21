@@ -15,7 +15,9 @@ beforeEach(async () => {
 
 describe("POST /api/orgs", () => {
   it("should create an organization", async () => {
-    const res = await (await request())
+    const res = await (
+      await request()
+    )
       .post("/api/orgs")
       .set(headers)
       .send({ name: "Test Org", description: "A test organization" })
@@ -26,7 +28,9 @@ describe("POST /api/orgs", () => {
   })
 
   it("should reject org without name", async () => {
-    const res = await (await request())
+    const res = await (
+      await request()
+    )
       .post("/api/orgs")
       .set(headers)
       .send({ description: "No name" })

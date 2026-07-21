@@ -24,7 +24,9 @@ describe("GET /api/orgs/:org_id/projects", () => {
     await addOrgMember(org.id, member.id, org.roles.admin)
     const memberHeaders = await getAuthHeaders(member.id)
 
-    const projectRes = await (await request())
+    const projectRes = await (
+      await request()
+    )
       .post(`/api/orgs/${org.id}/projects`)
       .set(memberHeaders)
       .send({ name: "Member Project" })
