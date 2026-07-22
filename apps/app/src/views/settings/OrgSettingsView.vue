@@ -24,6 +24,8 @@ import {
   Table,
   Tag,
   Typography,
+  Modal,
+  message,
 } from "ant-design-vue"
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons-vue"
 
@@ -70,6 +72,7 @@ const {
   closeInviteModal,
   handleInvite,
   handleRevoke,
+  handleResend,
 } = invitationsComposable
 
 // ---------------------------------------------------------------------------
@@ -213,6 +216,32 @@ function onInviteSubmit(data) {
  */
 function onRevoke(invitationId) {
   handleRevoke(orgId, invitationId)
+}
+
+/**
+ * Reissue a pending invitation and put the fresh link on the clipboard.
+ * The template ships no mail provider, so the admin delivers the link by hand —
+ * and the raw token is only ever returned once, at the moment it is minted.
+ * @param {string} invitationId - The invitation being reissued
+ */
+async function onResend(invitationId) {
+  const result = await handleResend(orgId, invitationId)
+  if (!result?.accept_url) {
+    return
+  }
+
+  try {
+    await navigator.clipboard.writeText(result.accept_url)
+    message.success("Invitation link copied to clipboard")
+  } catch {
+    // navigator.clipboard requires a secure context — it works over https and
+    // on http://localhost, but not on a plain-HTTP LAN address. Show the link
+    // instead of losing it: this token is never retrievable again.
+    Modal.info({
+      title: "New invitation link",
+      content: result.accept_url,
+    })
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -407,12 +436,14 @@ onMounted(async () => {
           </Button>
         </div>
 
-        <!-- Invitations table with revoke support -->
+        <!-- Invitations table with revoke and reissue support -->
         <InvitationsTable
           :invitations="orgInvitations"
           :loading="invitationsLoading"
           :can-revoke="can('invitations:manage')"
+          :can-resend="can('invitations:manage')"
           @revoke="onRevoke"
+          @resend="onResend"
         />
 
         <!-- Invite member modal -->
