@@ -15,6 +15,7 @@
     "lint:app": "turbo run lint --filter=@fullstack/app",
     "test": "turbo run test",
     "test:api": "turbo run test --filter=@fullstack/api",
+    "test:app": "turbo run test --filter=@fullstack/app",
     "format": "turbo run format",
     "format:api": "turbo run format --filter=@fullstack/api",
     "format:app": "turbo run format --filter=@fullstack/app"
