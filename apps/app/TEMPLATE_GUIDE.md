@@ -533,7 +533,7 @@ message.info('Here is some information')
 import { setUserData, getUserData, clearUserData } from '@/utils/storage'
 
 // Save user data
-setUserData({ id: 1, username: 'john' })
+setUserData({ id: 1, name: 'John Doe', email: 'john@example.com' })
 
 // Retrieve user data
 const user = getUserData()
@@ -544,13 +544,35 @@ clearUserData()
 
 Auth tokens are stored as httpOnly cookies (managed by the server) — no token management needed in localStorage.
 
+## Testing
+
+```bash
+npm test              # single run
+npm run test:watch    # watch mode
+```
+
+Vitest runs in a jsdom environment with `@vue/test-utils` for mounting components. Configuration lives in `vitest.config.js`, which merges `vite.config.js` so the `@` alias has a single definition.
+
+Tests live beside the code they cover and are picked up by the `src/**/*.test.js` glob — for example `src/stores/auth.test.js`, `src/composables/useAuth.test.js`, and `src/views/auth/SignupView.test.js`.
+
+**Mocking convention**: mock exactly one application boundary — `@/utils/http`. Composables, stores, and API service modules run for real, so a wrong argument order anywhere in the view → composable → store → api chain fails the test. Mocking `@/api/*` or `@/stores/*` defeats this. `vue-router` and Ant Design Vue's `message` are stubbed only as environment shims; `@/utils/storage` is left real because jsdom provides `localStorage`.
+
+```javascript
+vi.mock('@/utils/http', () => ({
+  baseURL: 'http://test/api',
+  request: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn(), send: vi.fn() },
+}))
+```
+
+Store and composable tests call `setActivePinia(createPinia())` in `beforeEach`; component tests pass a fresh pinia via `mount(Component, { global: { plugins: [createPinia()] } })`.
+
 ## Next Steps
 
 1. Remove todo features if not needed
 2. Set up your backend API or use a mock service
 3. Add your first feature following the layered architecture
 4. Customize the UI theme to match your brand
-5. Add tests for critical functionality
+5. Extend the test suite to cover your own stores and views
 
 ## Need Help?
 

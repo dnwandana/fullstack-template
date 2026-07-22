@@ -20,6 +20,12 @@ npm run preview
 # Lint code (runs oxlint then eslint sequentially via npm-run-all2)
 npm run lint
 
+# Run tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
 # Format code with Prettier
 npm run format
 ```
@@ -85,7 +91,7 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 
 ## Authentication Flow
 
-1. **Signin**: `LoginView.vue` → `useAuth().handleSignin()` → `useAuthStore().signin()` → `api/auth.js signin()` → `POST /auth/signin` → server sets httpOnly cookies (`access_token` + `refresh_token`) + returns user data → stores user data in localStorage → redirects to `/orgs`
+1. **Signin**: `LoginView.vue` (email + password) → `useAuth().handleSignin()` → `useAuthStore().signin(email, password)` → `api/auth.js signin()` → `POST /auth/signin` → server sets httpOnly cookies (`access_token` + `refresh_token`) + returns `{ id, name, email }` → stores user data in localStorage → redirects to `/orgs`. Signup posts `{ name, email, password, confirmation_password }`; `name` is a display name only, `email` is the login identifier.
 2. **Token attachment**: Every API call includes `credentials: 'include'` so cookies are sent automatically by the browser
 3. **Token refresh**: Automatic on 401 responses. Server rotates both tokens via httpOnly cookies.
 4. **Logout**: `AppLayout.vue` → `authStore.logout()` → `POST /auth/logout` (best-effort, cookies sent automatically) → clears all localStorage → redirects to `/login`
@@ -127,8 +133,8 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 | `ProjectFormModal` | `components/ProjectFormModal.vue` | Create/edit project modal form (name + description)                                                                                |
 | `TodoFormModal`    | `components/TodoFormModal.vue`    | Create/edit todo modal form (title + description + completed checkbox)                                                             |
 | `RoleFormModal`    | `components/RoleFormModal.vue`    | Create/edit role modal with permissions grouped by resource as checkboxes                                                          |
-| `InviteFormModal`  | `components/InviteFormModal.vue`  | Invite member modal — toggle between username/email input, with role selection dropdown                                            |
-| `MembersTable`     | `components/MembersTable.vue`     | Members table with inline role-change dropdown and remove button with confirmation                                                 |
+| `InviteFormModal`  | `components/InviteFormModal.vue`  | Invite member modal — email input with role selection dropdown                                                                     |
+| `MembersTable`     | `components/MembersTable.vue`     | Members table (Name, Email) with inline role-change dropdown and remove button with confirmation                                   |
 | `InvitationsTable` | `components/InvitationsTable.vue` | Invitations table with color-coded status tags and revoke button for pending invitations                                           |
 
 ## API Service Catalog
@@ -157,12 +163,23 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 - `VITE_API_BASE_URL` - Backend API base URL (default: `http://localhost:3000/api`)
 - Copy `.env.example` to `.env` to configure
 
+## Testing
+
+- **Runner**: Vitest with `globals: true` and `environment: "jsdom"`
+- **Config**: `vitest.config.js` merges `vite.config.js` so the `@` alias has one definition. `vite.config.js` exports a function, so it is invoked as `viteConfig(configEnv)` before merging.
+- **Component mounting**: `@vue/test-utils`
+- **Include glob**: `src/**/*.test.js` — tests live beside the code they cover
+- **Lint**: the `app/test-files` block in `eslint.config.js` registers the Vitest globals (`describe`, `it`, `expect`, `vi`, the `before*`/`after*` hooks) for `**/*.test.js`
+- **Mocking convention**: mock exactly one boundary, `@/utils/http`. Composables, stores, and API service modules run for real, so a wrong argument order anywhere in the view → composable → store → api chain fails the test. Mocking `@/api/*` or `@/stores/*` defeats this and should not be done.
+- **Also mocked**: `vue-router` (composables call `useRouter()` at setup) and `ant-design-vue`'s `message` (stores call `message.success`). `@/utils/storage` is left real — jsdom provides `localStorage`. Component tests that mount an Ant Design Vue grid must stub `window.matchMedia`, which jsdom does not implement.
+- **Pinia**: store and composable tests call `setActivePinia(createPinia())` in `beforeEach`; component tests pass a fresh pinia via `mount(..., { global: { plugins: [createPinia()] } })`
+- **Coverage**: auth store response mapping, the signup/signin argument chain, and the SignupView `v-model` bindings
+
 ## Code Style
 
 - **Linting**: Dual-linter setup with oxlint (fast) then eslint (comprehensive) via npm-run-all2
 - **Formatting**: Prettier with semicolons disabled, double quotes, 100 char width
 - **Import alias**: `@` maps to `src/` directory
-- **No tests** currently exist for the frontend app
 
 ## File Naming
 

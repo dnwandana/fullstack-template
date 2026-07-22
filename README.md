@@ -20,7 +20,7 @@ Organization
 - **Multi-tenancy**: Shared PostgreSQL database, tenant-scoped via `org_id`/`project_id` columns
 - **RBAC**: 4 system roles (owner / admin / member / viewer) + custom roles, 16 granular permissions
 - **Auth**: Dual-token JWT via httpOnly cookies, Argon2 password hashing, password complexity, account lockout
-- **Invitations**: Invite by username or email, 7-day expiry, accept/decline flow
+- **Invitations**: Invite by email, 7-day expiry, accept/decline flow. Inviting an address with no account creates a pending-account invitation.
 
 ## Prerequisites
 
@@ -109,7 +109,7 @@ corepack pnpm dev:app   # http://localhost:8080
 | `pnpm dev`    | Start both apps in watch mode      |
 | `pnpm build`  | Build both apps                    |
 | `pnpm lint`   | Lint both apps                     |
-| `pnpm test`   | Run all tests (API only currently) |
+| `pnpm test`   | Run all tests (API + app)          |
 | `pnpm format` | Format both apps with Prettier     |
 
 Append `:api` or `:app` to target a single workspace (e.g. `pnpm test:api`).
@@ -120,7 +120,7 @@ Append `:api` or `:app` to target a single workspace (e.g. `pnpm test:api`).
 
 | Method | Path                | Description                                           |
 | ------ | ------------------- | ----------------------------------------------------- |
-| POST   | `/api/auth/signup`  | Register — returns `{ id, username, email }`          |
+| POST   | `/api/auth/signup`  | Register — returns `{ id, name, email }`              |
 | POST   | `/api/auth/signin`  | Login — sets httpOnly auth cookies, returns user info |
 | POST   | `/api/auth/refresh` | Rotate tokens via httpOnly cookie                     |
 | POST   | `/api/auth/logout`  | Revoke refresh token, clear cookies                   |
@@ -173,6 +173,8 @@ Tokens are set by the server on signin/refresh and never exposed to JavaScript. 
 
 ## Testing
 
+### API (`apps/api`)
+
 ```bash
 corepack pnpm test:api
 ```
@@ -184,7 +186,15 @@ cp apps/api/.env.example apps/api/.env.test
 # Set DATABASE_URL to a separate test database
 ```
 
-The test suite uses real PostgreSQL (no mocks), runs migrations before each session, and truncates tables between tests. 64 tests across unit (pagination, sanitize, http-error) and integration (auth, health, orgs, todos, permissions) suites.
+The test suite uses real PostgreSQL (no mocks), runs migrations before each session, and truncates tables between tests. Unit suites cover pagination, sanitize, http-error, and request-id; integration suites cover auth, health, orgs, projects, todos, permissions, and invitations.
+
+### App (`apps/app`)
+
+```bash
+corepack pnpm test:app
+```
+
+Vitest with jsdom and `@vue/test-utils`. Tests mock exactly one application boundary — `@/utils/http` — and exercise the real composables, stores, and API service layer, so a wrong argument order anywhere in the chain fails the test. (`vue-router` and Ant Design Vue's `message` are stubbed only as environment shims.)
 
 ## Deployment
 

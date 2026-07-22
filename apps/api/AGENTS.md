@@ -98,14 +98,18 @@ req.permissions // ["todos:create", ...] merged org + project permissions
 
 ### Authentication Flow
 
-- POST `/api/auth/signup` → creates user, returns `{ id, username, email }` (no tokens). Email is optional.
-- POST `/api/auth/signin` → stores refresh token hash in DB, sets `access_token` and `refresh_token` as httpOnly cookies, returns `{ id, username }`
+- POST `/api/auth/signup` → creates user, returns `{ id, name, email }` (no tokens). Email is required and unique; name is a non-unique display name.
+- POST `/api/auth/signin` → authenticates by email + password, stores refresh token hash in DB, sets `access_token` and `refresh_token` as httpOnly cookies, returns `{ id, name, email }`
 - POST `/api/auth/refresh` → **token rotation**: revokes old refresh token, stores new hash, sets new `access_token` and `refresh_token` cookies
 - POST `/api/auth/logout` → revokes the refresh token in DB, clears cookies. Idempotent (succeeds even if token already revoked). Reads refresh token from cookie.
 
 Token cookies: `access_token` and `refresh_token` (httpOnly cookies set by server). JWT algorithm pinned to HS256 with explicit verification.
 
-Validation: username 3–30 chars, alphanumeric + `.` `_` `-` only. Password 8–72 chars (72 is Argon2's input limit). Email optional, max 255 chars, unique if provided. Auth routes are rate-limited via `authLimiter` (default 10 req/15min, cap at 50).
+Validation: name 1–100 chars, trimmed, and rejected if it contains control characters or bidirectional overrides (`\p{Cc}`, `\p{Zl}`, `\p{Zp}`, and the LRM/RLM, embedding, and isolate ranges). ZWJ and ZWNJ are deliberately permitted — they are required to spell Persian, Hindi, and Bengali names. Email is required, max 255 chars, unique, and is the login identifier; it is trimmed and lowercased by Joi (`.trim().lowercase().email().max(255)`) at signup, signin, and invitation creation, so casing is never preserved. Password 8–72 chars (72 is Argon2's input limit). Auth routes are rate-limited via `authLimiter` (default 10 req/15min, cap at 50).
+
+**Signin hardening**: a pre-computed dummy Argon2 hash is verified when no user matches, so response timing doesn't reveal whether an email is registered ("invalid credentials" is returned either way). Accounts lock for 15 minutes after 5 consecutive failed attempts (`failed_login_attempts` / `locked_until` on `users`).
+
+**Signup uniqueness**: the controller pre-checks `findOne({ email })` to avoid a wasted Argon2 hash, then relies on the `users.email` unique index as the real gate. A Postgres `23505` unique violation from the insert is translated into the same 400 as the pre-check, so a lost race between concurrent signups never surfaces as a 500.
 
 ### Refresh Token Architecture
 
@@ -141,13 +145,15 @@ Validation: username 3–30 chars, alphanumeric + `.` `_` `-` only. Password 8�
 
 ### Invitation System
 
-Invite by username or email, 7-day expiry, accept/decline/revoke flow.
+Invite by email, 7-day expiry, accept/decline/revoke flow. One shared Joi schema (`{ email, role_id }`, `stripUnknown`) validates both org and project invitations.
 
 **Token security**: On creation, the invitation token is hashed with SHA-256 (`invitations.hashToken`) and only the hash is stored in `token_hash`. The raw token is returned in the creation response only. All list/get queries use a `SAFE_COLUMNS` array that excludes `token` and `token_hash` to prevent leakage.
 
 **Accept validation**: `POST /api/invitations/:id/accept` requires `{ token: "<64-char-hex>" }` in the request body. The controller hashes the provided token and compares against `token_hash` using `crypto.timingSafeEqual` to prevent timing attacks. Uses `SELECT ... FOR UPDATE` within a transaction to prevent race conditions on acceptance.
 
-**Email invitations**: When inviting by email for a user without an account, `invitee_id` is null. On accept, the controller matches the authenticated user's email against `invitee_email`.
+**Pending-account invitations**: `resolveInvitee(email)` looks the address up in `users` and returns `invitee_id` (or `null` when nobody has signed up with it yet) plus `invitee_email`. Inviting an unregistered address is valid — it does not 404. On accept, the controller matches the authenticated user's email against `invitee_email`.
+
+**Duplicate prevention**: before creating an invitation, both handlers call `invitations.findPendingForScope({ invitee_email, org_id, project_id })` and reject with 400 `"A pending invitation already exists for this email"` if one is found. Scope is exact — a pending org invitation does not block a project invitation for the same address. Revoking an invitation frees the scope for a fresh invite.
 
 **Project invitations**: Auto-add the user to the parent org as a viewer if not already a member.
 
@@ -288,18 +294,18 @@ DELETE `/api/orgs/:org_id/projects/:project_id/todos?ids=id1,id2,id3` — comma-
 
 ## Model Catalog
 
-| File                 | Exports                                                                                                              |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `users.js`           | `create`, `findOne`, `findOneWithPassword`, `incrementFailedAttempts`                                                |
-| `refresh-tokens.js`  | `hashToken`, `create`, `findActiveByHash`, `revokeById`, `revokeAllForUser`, `purgeOld`                              |
-| `organizations.js`   | `create`, `findOne`, `findManyByUserId`, `update`, `remove`                                                          |
-| `org-members.js`     | `create`, `findOne`, `findManyByOrgId`, `findMemberWithPermissions`, `getPermissions`, `updateRole`, `remove`        |
-| `projects.js`        | `create`, `findOne`, `findManyByOrgId`, `findManyByUserId`, `update`, `remove`                                       |
-| `project-members.js` | `create`, `findOne`, `findManyByProjectId`, `getPermissions`, `updateRole`, `remove`                                 |
-| `roles.js`           | `create`, `findOne`, `findMany`, `update`, `remove`, `findPermissionsByRoleId`, `setPermissions`                     |
-| `permissions.js`     | `findAll`, `findOne`, `findByIds`                                                                                    |
-| `invitations.js`     | `hashToken`, `create`, `findOne`, `findManyByOrgId`, `findPendingByUserId`, `findPendingByEmail`, `update`, `remove` |
-| `todos.js`           | `create`, `findOne`, `findMany`, `findManyPaginated`, `count`, `update`, `remove`, `removeMany`                      |
+| File                 | Exports                                                                                                               |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `users.js`           | `create`, `findOne`, `findOneWithPassword`, `incrementFailedAttempts`                                                 |
+| `refresh-tokens.js`  | `hashToken`, `create`, `findActiveByHash`, `revokeById`, `revokeAllForUser`, `purgeOld`                               |
+| `organizations.js`   | `create`, `findOne`, `findManyByUserId`, `update`, `remove`                                                           |
+| `org-members.js`     | `create`, `findOne`, `findManyByOrgId`, `findMemberWithPermissions`, `getPermissions`, `updateRole`, `remove`         |
+| `projects.js`        | `create`, `findOne`, `findManyByOrgId`, `findManyByUserId`, `update`, `remove`                                        |
+| `project-members.js` | `create`, `findOne`, `findManyByProjectId`, `getPermissions`, `updateRole`, `remove`                                  |
+| `roles.js`           | `create`, `findOne`, `findMany`, `update`, `remove`, `findPermissionsByRoleId`, `setPermissions`                      |
+| `permissions.js`     | `findAll`, `findOne`, `findByIds`                                                                                     |
+| `invitations.js`     | `hashToken`, `create`, `findOne`, `findManyByOrgId`, `findPendingByUserId`, `findPendingForScope`, `update`, `remove` |
+| `todos.js`           | `create`, `findOne`, `findMany`, `findManyPaginated`, `count`, `update`, `remove`, `removeMany`                       |
 
 ## Controller Catalog
 
@@ -365,7 +371,7 @@ Optional with defaults: `NODE_ENV` (development), `PORT` (3000), `ACCESS_TOKEN_E
   - 11 migration files: users, organizations, permissions, roles, role_permissions, org_members, projects, project_members, invitations, todos, refresh_tokens
 - **Seeds**: `database/seeds/` — 9 seed files:
   - 01: 16 system permissions
-  - 02: 5 test users (password: "secretpassword", with emails)
+  - 02: 5 test users (password: "secretpassword", unique emails used as login)
   - 03: 2 organizations (Acme Corp, Globex Corporation)
   - 04: 8 system roles (4 per org: owner/admin/member/viewer)
   - 05: Role-permission mappings
@@ -392,7 +398,7 @@ Optional with defaults: `NODE_ENV` (development), `PORT` (3000), `ACCESS_TOKEN_E
 - **Runner**: Vitest with `globals: true` (no explicit `describe`/`it` imports needed)
 - **HTTP**: Supertest for integration tests against the Express app
 - **Database**: Real PostgreSQL test database (configured in `.env.test`)
-- **Config**: `vitest.config.js` — `fileParallelism: false` (integration tests share DB state)
+- **Config**: `vitest.config.js` — `fileParallelism: false` (integration tests share DB state), `testTimeout`/`hookTimeout` 30s (these tests do real Argon2 hashing against real PostgreSQL; the previous 10s ceiling caused non-deterministic cold-start timeouts)
 - **Setup**: `tests/global-setup.js` — loads `.env.test`, validates env, runs migrations, truncates all tables, seeds permissions; returns teardown function
 - **Helpers**: `tests/helpers.js`:
   - `getApp()`, `request()` — app bootstrapping
@@ -404,7 +410,7 @@ Optional with defaults: `NODE_ENV` (development), `PORT` (3000), `ACCESS_TOKEN_E
   - `seedPermissions()` — seeds 16 system permissions (called once in global setup)
 - **Structure**: `tests/unit/` for pure logic, `tests/integration/` for HTTP endpoints
 - **Coverage**:
-  - Unit: `http-error.test.js`, `pagination.test.js`, `sanitize.test.js`
-  - Integration: `health.test.js`, `auth.test.js`, `todos.test.js`, `organizations.test.js`, `permissions.test.js`, `invitations.test.js`
-  - Not tested: projects CRUD, roles CRUD, member management, rate limiting, middleware unit tests
+  - Unit: `http-error.test.js`, `pagination.test.js`, `request-id.test.js`, `sanitize.test.js`
+  - Integration: `health.test.js`, `auth.test.js`, `todos.test.js`, `organizations.test.js`, `projects.test.js`, `permissions.test.js`, `invitations.test.js`
+  - Not tested: projects CRUD (`projects.test.js` only covers list visibility), roles CRUD, member management, rate limiting, and every middleware except `request-id`
 - **Convention**: Each integration test file calls `cleanAllTables()` in `beforeEach` or `afterEach`. Permissions persist across tests (seeded once in global setup).

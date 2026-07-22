@@ -753,7 +753,7 @@ npm run dev
 curl -X POST http://localhost:3000/api/auth/signin \
   -H "Content-Type: application/json" \
   -c cookies.txt \
-  -d '{"username":"yourusername","password":"yourpassword"}'
+  -d '{"email":"you@example.com","password":"yourpassword"}'
 
 # 2. Create a category (cookies sent automatically)
 curl -X POST http://localhost:3000/api/categories \
@@ -840,15 +840,16 @@ npm run seed
 ### Authentication Flow
 
 1. **Signup** (`POST /api/auth/signup`)
-   - User provides username and password (must meet complexity requirements)
+   - User provides `name`, `email`, `password`, and `confirmation_password` (password must meet complexity requirements)
+   - Email is trimmed and lowercased, and must be unique — it is the login identifier; `name` is a non-unique display name
    - Password is hashed with Argon2
-   - User record is created
+   - User record is created; a duplicate email returns 400
 
 2. **Signin** (`POST /api/auth/signin`)
-   - User provides credentials
+   - User provides email and password
    - Password is verified
    - Access token (15min) and refresh token (7d) are set as httpOnly cookies
-   - Response body returns `{ id, username }` only (no tokens in body)
+   - Response body returns `{ id, name, email }` only (no tokens in body)
    - After 5 failed attempts, the account is locked for 15 minutes
 
 3. **Access Protected Routes**
@@ -1103,7 +1104,7 @@ table.foreign("user_id").references("id").inTable("users").onDelete("CASCADE") /
 
 ```javascript
 // Join with users table
-db.select("todos.*", "users.username")
+db.select("todos.*", "users.name")
   .from("todos")
   .join("users", "todos.user_id", "users.id")
   .where("todos.user_id", userId)

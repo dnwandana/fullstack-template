@@ -41,7 +41,7 @@ You can still run package-local commands from `apps/api` with `pnpm`.
 - **Flexible membership**: Users can belong to multiple organizations and multiple projects (GitHub-style model)
 - **Custom RBAC**: 4 built-in system roles (owner, admin, member, viewer) plus custom roles with granular permission assignment
 - **16 system permissions**: covering org management, project management, invitation management, and todo operations
-- **Invitation system**: Invite by username or email, 7-day token expiry, accept/decline flow; project invitations auto-add the user to the org as viewer if not already a member
+- **Invitation system**: Invite by email, 7-day token expiry, accept/decline flow; project invitations auto-add the invitee to the parent org as a viewer. A second pending invitation for the same email in the same scope is rejected with 400.
 
 ### Database & Architecture
 
@@ -60,7 +60,7 @@ You can still run package-local commands from `apps/api` with `pnpm`.
 
 - **Standardized Responses**: Consistent API response format
 - **Error Handling**: Centralized error handling middleware
-- **Testing**: Vitest + Supertest with real PostgreSQL test database, 64 tests across 8 test files
+- **Testing**: Vitest + Supertest with real PostgreSQL test database (no mocks), unit and integration suites
 - **OpenAPI Spec**: API documentation included (`openapi.json`)
 - **Environment Config**: dotenv for environment-specific settings
 - **Code Quality**: Oxlint for fast linting, Prettier for consistent formatting
@@ -386,7 +386,7 @@ This template includes an OpenAPI 3.0 specification (`openapi.json`) that docume
 
 Authentication uses **httpOnly cookies** set by the server. Tokens are never exposed to client-side JavaScript.
 
-- **Signin**: Server sets `access_token` (httpOnly, path `/api`, 15min) and `refresh_token` (httpOnly, path `/api/auth`, 7d) cookies. The response body returns `{ id, username }` only — no tokens.
+- **Signin**: Server sets `access_token` (httpOnly, path `/api`, 15min) and `refresh_token` (httpOnly, path `/api/auth`, 7d) cookies. The response body returns `{ id, name, email }` only — no tokens.
 - **Token refresh**: The browser automatically sends the `refresh_token` cookie. Server rotates both tokens and sets new cookies. Response body is `{ data: null }`.
 - **Authenticated requests**: The browser automatically sends the `access_token` cookie with every request under `/api`.
 - **Logout**: Server revokes the refresh token and clears both cookies.

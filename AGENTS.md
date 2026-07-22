@@ -17,8 +17,9 @@ corepack pnpm dev:app       # App only  (port 8080)
 corepack pnpm build         # Build both
 corepack pnpm lint          # Lint both
 corepack pnpm format        # Format both (Prettier)
-corepack pnpm test          # Test both (API only has tests currently)
+corepack pnpm test          # Test both apps
 corepack pnpm test:api      # Vitest + Supertest against real PostgreSQL
+corepack pnpm test:app      # Vitest + jsdom + @vue/test-utils
 ```
 
 ## Key architectural facts
