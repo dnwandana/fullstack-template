@@ -139,6 +139,62 @@ export const findPendingForScope = ({ invitee_email, org_id, project_id = null }
 }
 
 /**
+ * Find one invitation by ID including its token_hash and joined display context.
+ *
+ * This is the ONLY query permitted to select token_hash — it exists so the
+ * public preview endpoint can verify a raw token before returning anything.
+ * The hash must never reach an HTTP response; callers strip it.
+ *
+ * @param {string} id - UUID of the invitation
+ * @returns {Promise<Object|undefined>} Invitation with token_hash + context, or undefined
+ */
+export const findOneWithTokenHash = (id) => {
+  return db
+    .select(
+      `${TABLE_NAME}.id`,
+      `${TABLE_NAME}.org_id`,
+      `${TABLE_NAME}.project_id`,
+      `${TABLE_NAME}.invitee_email`,
+      `${TABLE_NAME}.invitee_id`,
+      `${TABLE_NAME}.status`,
+      `${TABLE_NAME}.expires_at`,
+      `${TABLE_NAME}.token_hash`,
+      "organizations.name as org_name",
+      "projects.name as project_name",
+      "inviter.name as inviter_name",
+      "roles.name as role_name",
+    )
+    .from(TABLE_NAME)
+    .join("organizations", `${TABLE_NAME}.org_id`, "organizations.id")
+    .leftJoin("projects", `${TABLE_NAME}.project_id`, "projects.id")
+    .join("users as inviter", `${TABLE_NAME}.inviter_id`, "inviter.id")
+    .join("roles", `${TABLE_NAME}.role_id`, "roles.id")
+    .where(`${TABLE_NAME}.id`, id)
+    .first()
+}
+
+/**
+ * Link every unclaimed pending invitation for an email to a newly created user.
+ * Called at signup so invitations sent before registration become discoverable
+ * via findPendingByUserId, which filters on invitee_id.
+ *
+ * Only touches rows that are still pending, unexpired, and not yet linked —
+ * accepted/declined history is never rewritten.
+ *
+ * @param {string} email - Normalized (lowercase) email of the new user
+ * @param {string} userId - UUID of the newly created user
+ * @returns {Promise<number>} Number of invitations linked
+ */
+export const linkInviteeByEmail = (email, userId) => {
+  return db(TABLE_NAME)
+    .where({ invitee_email: email })
+    .whereNull("invitee_id")
+    .andWhere("status", "pending")
+    .andWhere("expires_at", ">", db.fn.now())
+    .update({ invitee_id: userId, updated_at: new Date() })
+}
+
+/**
  * Update an invitation matching the given conditions.
  *
  * @param {Object} conditions - Key-value pairs to identify the invitation

@@ -6,6 +6,7 @@
  *
  * Route hierarchy:
  * - /api/auth — authentication (public, rate-limited)
+ * - /api/invitations/:id/preview — public, token-gated invitation preview
  * - /api/invitations — user-level invitation management
  * - /api/permissions — system permission reference
  * - /api/orgs — organizations and all nested sub-resources
@@ -17,12 +18,19 @@ import { requireAccessToken } from "../middlewares/authorization.js"
 import authRoutes from "./authentication.js"
 import orgRoutes from "./organizations.js"
 import permissionRoutes from "./permissions.js"
+import publicInvitationRoutes from "./public-invitations.js"
 import userInvitationRoutes from "./user-invitations.js"
 
 const router = Router()
 
 // Public routes (auth has its own rate limiting)
 router.use("/auth", authRoutes)
+
+// Public invitation preview — token-gated, must sit ABOVE requireAccessToken.
+// Express matches in registration order, and public-invitations.js only
+// declares GET /:invitation_id/preview, so every other /api/invitations/*
+// request falls through to the authenticated router below untouched.
+router.use("/invitations", publicInvitationRoutes)
 
 // All routes below require a valid access token
 router.use(requireAccessToken)

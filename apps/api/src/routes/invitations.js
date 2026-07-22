@@ -24,4 +24,11 @@ router.delete(
   invitationController.revokeInvitation,
 )
 
+// Resending mints a fresh token and resets the expiry window
+router.post(
+  "/:invitation_id/resend",
+  requirePermission("invitations:manage"),
+  invitationController.resendInvitation,
+)
+
 export default router
