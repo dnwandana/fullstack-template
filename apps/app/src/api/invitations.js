@@ -11,8 +11,7 @@ import { request } from "@/utils/http"
  * @param {string} orgId - Organization UUID
  * @param {Object} data - Invitation data
  * @param {string} data.role_id - Role UUID to assign to the invited user
- * @param {string} [data.username] - Username of the user to invite
- * @param {string} [data.email] - Email of the user to invite
+ * @param {string} data.email - Email address of the user to invite
  * @returns {Promise} API response with created invitation data
  */
 export function inviteToOrg(orgId, data) {
@@ -25,8 +24,7 @@ export function inviteToOrg(orgId, data) {
  * @param {string} projectId - Project UUID
  * @param {Object} data - Invitation data
  * @param {string} data.role_id - Role UUID to assign to the invited user
- * @param {string} [data.username] - Username of the user to invite
- * @param {string} [data.email] - Email of the user to invite
+ * @param {string} data.email - Email address of the user to invite
  * @returns {Promise} API response with created invitation data
  */
 export function inviteToProject(orgId, projectId, data) {

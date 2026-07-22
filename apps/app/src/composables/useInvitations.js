@@ -32,7 +32,7 @@ export function useInvitations() {
    * Handle sending an invitation at either the org or project scope
    * Delegates to the appropriate store action based on scope, then closes the modal
    * @param {string} orgId - Organization UUID
-   * @param {Object} data - Invitation data (e.g., { role_id, username, email })
+   * @param {Object} data - Invitation data (e.g., { role_id, email })
    * @param {string} scope - Either "org" or "project"
    * @param {string} [projectId] - Project UUID (required when scope is "project")
    * @returns {Promise<void>}

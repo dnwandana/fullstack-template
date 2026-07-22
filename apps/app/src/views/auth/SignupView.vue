@@ -1,7 +1,7 @@
 <script setup>
 import { useRouter } from "vue-router"
 import { Card, Form, Input, Button, Typography, Alert, Space } from "ant-design-vue"
-import { UserOutlined, LockOutlined } from "@ant-design/icons-vue"
+import { UserOutlined, MailOutlined, LockOutlined } from "@ant-design/icons-vue"
 import { useAuth } from "@/composables/useAuth"
 
 const router = useRouter()
@@ -9,7 +9,8 @@ const {
   formState,
   error,
   loading,
-  usernameRules,
+  nameRules,
+  emailRules,
   passwordRules,
   confirmation_passwordRules,
   handleSignup,
@@ -38,14 +39,18 @@ function goToLogin() {
       <Alert v-if="error" :message="error" type="error" show-icon style="margin-bottom: 16px" />
 
       <Form :model="formState" layout="vertical" @finish="onFinish">
-        <Form.Item name="username" :rules="usernameRules">
-          <Input
-            v-model:value="formState.username"
-            placeholder="Username (min 5 characters)"
-            size="large"
-          >
+        <Form.Item name="name" :rules="nameRules">
+          <Input v-model:value="formState.name" placeholder="Full name" size="large">
             <template #prefix>
               <UserOutlined />
+            </template>
+          </Input>
+        </Form.Item>
+
+        <Form.Item name="email" :rules="emailRules">
+          <Input v-model:value="formState.email" placeholder="Email" size="large">
+            <template #prefix>
+              <MailOutlined />
             </template>
           </Input>
         </Form.Item>

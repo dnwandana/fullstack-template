@@ -1,11 +1,11 @@
 <script setup>
 import { useRouter } from "vue-router"
 import { Card, Form, Input, Button, Typography, Alert, Space } from "ant-design-vue"
-import { UserOutlined, LockOutlined } from "@ant-design/icons-vue"
+import { MailOutlined, LockOutlined } from "@ant-design/icons-vue"
 import { useAuth } from "@/composables/useAuth"
 
 const router = useRouter()
-const { formState, error, loading, usernameRules, passwordRules, handleSignin } = useAuth()
+const { formState, error, loading, emailRules, passwordRules, handleSignin } = useAuth()
 
 // Handle form submit
 async function onFinish() {
@@ -30,10 +30,10 @@ function goToSignup() {
       <Alert v-if="error" :message="error" type="error" show-icon style="margin-bottom: 16px" />
 
       <Form :model="formState" layout="vertical" @finish="onFinish">
-        <Form.Item name="username" :rules="usernameRules">
-          <Input v-model:value="formState.username" placeholder="Username" size="large">
+        <Form.Item name="email" :rules="emailRules">
+          <Input v-model:value="formState.email" placeholder="Email" size="large">
             <template #prefix>
-              <UserOutlined />
+              <MailOutlined />
             </template>
           </Input>
         </Form.Item>

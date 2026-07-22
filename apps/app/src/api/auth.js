@@ -7,23 +7,24 @@ import { request, baseURL } from "@/utils/http"
 
 /**
  * Register a new user account
- * @param {string} username - Username (min 5 characters)
+ * @param {string} name - Display name (1-100 characters)
+ * @param {string} email - Email address (login identifier)
  * @param {string} password - Password (min 8 characters)
  * @param {string} confirmation_password - Password confirmation (must match password)
  * @returns {Promise} API response with user data
  */
-export function signup(username, password, confirmation_password) {
-  return request.post("/auth/signup", { username, password, confirmation_password })
+export function signup(name, email, password, confirmation_password) {
+  return request.post("/auth/signup", { name, email, password, confirmation_password })
 }
 
 /**
  * Sign in with credentials
- * @param {string} username - Username
+ * @param {string} email - Email address
  * @param {string} password - Password
  * @returns {Promise} API response with user data and tokens
  */
-export function signin(username, password) {
-  return request.post("/auth/signin", { username, password })
+export function signin(email, password) {
+  return request.post("/auth/signin", { email, password })
 }
 
 /**
@@ -65,7 +66,7 @@ export function logout() {
 
 /**
  * Get current authenticated user (verifies cookie validity)
- * @returns {Promise} API response with user data { id, username }
+ * @returns {Promise} API response with user data { id, name, email }
  */
 export function getMe() {
   return request.get("/auth/me")

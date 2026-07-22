@@ -42,14 +42,15 @@ export const useAuthStore = defineStore("auth", () => {
 
   /**
    * Register a new user
-   * @param {string} username
+   * @param {string} name
+   * @param {string} email
    * @param {string} password
    * @param {string} confirmation_password
    */
-  async function signup(username, password, confirmation_password) {
+  async function signup(name, email, password, confirmation_password) {
     loading.value = true
     try {
-      const response = await apiSignup(username, password, confirmation_password)
+      const response = await apiSignup(name, email, password, confirmation_password)
       message.success("Account created successfully! Please sign in.")
       return response.data
     } catch (error) {
@@ -62,16 +63,16 @@ export const useAuthStore = defineStore("auth", () => {
 
   /**
    * Sign in user with credentials
-   * @param {string} username
+   * @param {string} email
    * @param {string} password
    */
-  async function signin(username, password) {
+  async function signin(email, password) {
     loading.value = true
     try {
-      const response = await apiSignin(username, password)
-      const { id, username: name } = response.data.data
+      const response = await apiSignin(email, password)
+      const { id, name, email: userEmail } = response.data.data
 
-      const userData = { id, username: name }
+      const userData = { id, name, email: userEmail }
       setUserData(userData)
       user.value = userData
 

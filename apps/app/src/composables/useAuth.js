@@ -12,7 +12,8 @@ export function useAuth() {
 
   // Form state
   const formState = reactive({
-    username: "",
+    name: "",
+    email: "",
     password: "",
     confirmation_password: "",
   })
@@ -21,9 +22,15 @@ export function useAuth() {
   const error = ref("")
 
   // Validation rules for Ant Design forms
-  const usernameRules = [
-    { required: true, message: "Please enter your username" },
-    { min: 5, message: "Username must be at least 5 characters" },
+  const nameRules = [
+    { required: true, whitespace: true, message: "Please enter your name" },
+    { max: 100, message: "Name must be at most 100 characters" },
+  ]
+
+  const emailRules = [
+    { required: true, message: "Please enter your email" },
+    { type: "email", message: "Please enter a valid email address" },
+    { max: 255, message: "Email must be at most 255 characters" },
   ]
 
   const passwordRules = [
@@ -48,7 +55,7 @@ export function useAuth() {
   async function handleSignin() {
     error.value = ""
     try {
-      await authStore.signin(formState.username, formState.password)
+      await authStore.signin(formState.email, formState.password)
       router.push("/orgs")
     } catch (err) {
       error.value = err.message
@@ -62,7 +69,8 @@ export function useAuth() {
     error.value = ""
     try {
       await authStore.signup(
-        formState.username,
+        formState.name,
+        formState.email,
         formState.password,
         formState.confirmation_password,
       )
@@ -84,7 +92,8 @@ export function useAuth() {
    * Reset form state
    */
   function resetForm() {
-    formState.username = ""
+    formState.name = ""
+    formState.email = ""
     formState.password = ""
     formState.confirmation_password = ""
     error.value = ""
@@ -98,7 +107,8 @@ export function useAuth() {
     isAuthenticated: authStore.isAuthenticated,
     currentUser: authStore.currentUser,
     // Validation rules
-    usernameRules,
+    nameRules,
+    emailRules,
     passwordRules,
     confirmation_passwordRules,
     // Actions

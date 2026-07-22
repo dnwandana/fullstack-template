@@ -68,7 +68,7 @@ const columns = computed(() => {
       key: "invitee",
       /**
        * Show the invitee email if available, otherwise fall back to the
-       * invitee_id (UUID). We do not have a username lookup in this context.
+       * invitee_id (UUID) for legacy rows without an email.
        */
       customRender: ({ record }) => {
         if (record.invitee_email) {

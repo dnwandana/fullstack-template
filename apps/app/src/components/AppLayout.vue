@@ -166,7 +166,7 @@ function navigateTo(path) {
         <Space>
           <UserOutlined style="color: white" />
           <Typography.Text style="color: white">
-            {{ currentUser?.username }}
+            {{ currentUser?.name }}
           </Typography.Text>
         </Space>
 

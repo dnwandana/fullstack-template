@@ -75,8 +75,7 @@ export const useInvitationsStore = defineStore("invitations", () => {
    * @param {string} orgId - Organization UUID
    * @param {Object} data - Invitation data
    * @param {string} data.role_id - Role UUID to assign to the invited user
-   * @param {string} [data.username] - Username of the user to invite
-   * @param {string} [data.email] - Email of the user to invite
+   * @param {string} data.email - Email address of the user to invite
    * @returns {Promise<Object>} API response data
    */
   async function inviteToOrg(orgId, data) {
@@ -101,8 +100,7 @@ export const useInvitationsStore = defineStore("invitations", () => {
    * @param {string} projectId - Project UUID
    * @param {Object} data - Invitation data
    * @param {string} data.role_id - Role UUID to assign to the invited user
-   * @param {string} [data.username] - Username of the user to invite
-   * @param {string} [data.email] - Email of the user to invite
+   * @param {string} data.email - Email address of the user to invite
    * @returns {Promise<Object>} API response data
    */
   async function inviteToProject(orgId, projectId, data) {
