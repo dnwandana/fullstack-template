@@ -48,11 +48,13 @@ export function useInvitations() {
 
   /**
    * Handle accepting a pending invitation
+   * The token comes from the invite link — it is the credential the API checks
    * @param {string} invitationId - Invitation UUID to accept
-   * @returns {Promise<void>}
+   * @param {string} token - Raw invitation token from the invite link
+   * @returns {Promise<Object|null>} API response data, or null if acceptance failed
    */
-  async function handleAccept(invitationId) {
-    await invitationsStore.acceptInvitation(invitationId)
+  async function handleAccept(invitationId, token) {
+    return invitationsStore.acceptInvitation(invitationId, token)
   }
 
   /**
@@ -74,17 +76,31 @@ export function useInvitations() {
     await invitationsStore.revokeInvitation(orgId, invitationId)
   }
 
+  /**
+   * Handle reissuing an invitation (admin action)
+   * Returns the fresh invitation so the caller can surface the new accept link,
+   * which is the only place the raw token is ever exposed
+   * @param {string} orgId - Organization UUID
+   * @param {string} invitationId - Invitation UUID to resend
+   * @returns {Promise<Object|null>} Reissued invitation, or null on failure
+   */
+  async function handleResend(orgId, invitationId) {
+    return invitationsStore.resendInvitation(orgId, invitationId)
+  }
+
   return {
     // Store state as computed
     orgInvitations: computed(() => invitationsStore.orgInvitations),
     myInvitations: computed(() => invitationsStore.myInvitations),
     loading: computed(() => invitationsStore.loading),
     pendingCount: computed(() => invitationsStore.pendingCount),
+    lastAcceptUrl: computed(() => invitationsStore.lastAcceptUrl),
     // Local modal state
     isInviteModalVisible,
     // Delegated store actions
     fetchOrgInvitations: invitationsStore.fetchOrgInvitations,
     fetchMyInvitations: invitationsStore.fetchMyInvitations,
+    previewInvitation: invitationsStore.previewInvitation,
     clearOrgInvitations: invitationsStore.clearOrgInvitations,
     clearMyInvitations: invitationsStore.clearMyInvitations,
     // Composable actions
@@ -94,5 +110,6 @@ export function useInvitations() {
     handleAccept,
     handleDecline,
     handleRevoke,
+    handleResend,
   }
 }

@@ -9,10 +9,12 @@
  *   /orgs/:orgId/projects/:projectId/todos/:id — single todo detail
  *   /orgs/:orgId/projects/:projectId/settings — project settings
  *   /invitations                             — current user's pending invitations
+ *   /invite/:invitationId                    — public invite landing page (?token=)
  *
  * Auth behavior:
  *   - Routes with `requiresAuth` redirect unauthenticated users to /login.
  *   - Routes with `requiresGuest` redirect authenticated users to /orgs.
+ *   - Routes with neither flag are public and reachable in any session state.
  */
 
 import { createRouter, createWebHistory } from "vue-router"
@@ -86,6 +88,17 @@ const routes = [
     name: "MyInvitations",
     component: () => import("@/views/invitations/MyInvitationsView.vue"),
     meta: { requiresAuth: true },
+  },
+
+  // ── Public invite landing page ──────────────────────────────────────
+  {
+    path: "/invite/:invitationId",
+    name: "InviteAccept",
+    component: () => import("@/views/invitations/InviteAcceptView.vue"),
+    // Deliberately public: neither requiresAuth nor requiresGuest.
+    // requiresAuth would bounce brand-new invitees to /login before they can
+    // see what they were invited to; requiresGuest would bounce signed-in
+    // users to /orgs before they can accept.
   },
 
   // ── Catch-all — redirect unknown paths to organizations list ────────

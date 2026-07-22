@@ -7,15 +7,33 @@
  *   - Skeleton loading state while data is being fetched
  *   - Empty state when there are no invitations
  *   - Table with columns: Organization, Project, Status (color-coded Tag), Expires, Actions
- *   - Accept and Decline actions for pending invitations
+ *   - Open-invitation and Decline actions for pending invitations
  *   - Popconfirm on Decline to prevent accidental rejection
  */
 
 import { h, onMounted } from "vue"
+import { useRouter } from "vue-router"
 import { Table, Button, Tag, Typography, Space, Empty, Skeleton, Popconfirm } from "ant-design-vue"
 import { useInvitations } from "@/composables/useInvitations"
 
-const { myInvitations, loading, fetchMyInvitations, handleAccept, handleDecline } = useInvitations()
+const router = useRouter()
+const { myInvitations, loading, fetchMyInvitations, handleDecline } = useInvitations()
+
+/**
+ * Navigate to the public invite landing page for an invitation.
+ *
+ * This list cannot accept directly: acceptance requires the raw token, which
+ * only ever exists in the emailed link — hence "Open invitation" rather than
+ * "Accept". Arriving there without a token renders the `no-token` state, which
+ * explains that the link is the credential. It deliberately does NOT render
+ * `invalid`: the invitation is fine, the browser just isn't carrying its code.
+ *
+ * @param {Object} invitation - Invitation row from the table
+ * @returns {void}
+ */
+function goToInvite(invitation) {
+  router.push({ name: "InviteAccept", params: { invitationId: invitation.id } })
+}
 
 /**
  * Map invitation status strings to Ant Design Tag color names.
@@ -93,7 +111,8 @@ const columns = [
   {
     title: "Actions",
     key: "actions",
-    width: 200,
+    // Wider than the other action columns: "Open invitation" + "Decline" wrap at 200
+    width: 240,
   },
 ]
 
@@ -127,14 +146,16 @@ onMounted(() => {
       :pagination="false"
     >
       <!--
-        Actions column: Accept and Decline buttons are only shown for
+        Actions column: Open-invitation and Decline buttons are only shown for
         invitations with a "pending" status. Decline uses a Popconfirm
         to guard against accidental rejection.
       -->
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'actions'">
           <Space v-if="record.status === 'pending'">
-            <Button type="primary" size="small" @click="handleAccept(record.id)"> Accept </Button>
+            <Button type="primary" size="small" @click="goToInvite(record)">
+              Open invitation
+            </Button>
             <Popconfirm
               title="Are you sure you want to decline this invitation?"
               ok-text="Yes"

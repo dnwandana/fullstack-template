@@ -1,6 +1,7 @@
 /**
  * Invitations API service
- * Handles creating, listing, accepting, declining, and revoking invitations
+ * Handles creating, listing, previewing, accepting, declining, revoking, and
+ * resending invitations
  * Supports both organization-level and project-level invitations
  */
 
@@ -51,10 +52,22 @@ export function listMyInvitations() {
 /**
  * Accept a pending invitation
  * @param {string} invitationId - Invitation UUID to accept
+ * @param {string} token - Raw 64-char hex invitation token from the invite link
  * @returns {Promise} API response confirming acceptance
  */
-export function acceptInvitation(invitationId) {
-  return request.post(`/invitations/${invitationId}/accept`)
+export function acceptInvitation(invitationId, token) {
+  return request.post(`/invitations/${invitationId}/accept`, { token })
+}
+
+/**
+ * Preview an invitation without being authenticated.
+ * Gated by possession of the raw token; returns org/project/inviter context.
+ * @param {string} invitationId - Invitation UUID
+ * @param {string} token - Raw 64-char hex invitation token
+ * @returns {Promise} API response with invitation context
+ */
+export function previewInvitation(invitationId, token) {
+  return request.get(`/invitations/${invitationId}/preview`, { token })
 }
 
 /**
@@ -75,4 +88,15 @@ export function declineInvitation(invitationId) {
  */
 export function revokeInvitation(orgId, invitationId) {
   return request.del(`/orgs/${orgId}/invitations/${invitationId}`)
+}
+
+/**
+ * Reissue an invitation with a fresh token and expiry
+ * Invalidates the previously issued link
+ * @param {string} orgId - Organization UUID
+ * @param {string} invitationId - Invitation UUID
+ * @returns {Promise} API response with the new token and accept_url
+ */
+export function resendInvitation(orgId, invitationId) {
+  return request.post(`/orgs/${orgId}/invitations/${invitationId}/resend`)
 }
