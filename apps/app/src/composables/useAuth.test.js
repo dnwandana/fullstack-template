@@ -7,8 +7,16 @@ vi.mock("@/utils/http", () => ({
   request: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn(), send: vi.fn() },
 }))
 
+// A single stable router/route pair so post-auth navigation can be asserted.
+// `currentRoute.query` is mutated per test to simulate arriving with ?redirect=.
+const { push, currentRoute } = vi.hoisted(() => ({
+  push: vi.fn(),
+  currentRoute: { query: {} },
+}))
+
 vi.mock("vue-router", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push }),
+  useRoute: () => currentRoute,
 }))
 
 vi.mock("ant-design-vue", () => ({
@@ -20,6 +28,7 @@ describe("useAuth argument chain", () => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     localStorage.clear()
+    currentRoute.query = {}
   })
 
   it("posts every signup field in the correct position", async () => {
@@ -56,6 +65,52 @@ describe("useAuth argument chain", () => {
       email: "ada@example.com",
       password: "Testpass123!",
     })
+  })
+
+  it("returns to the invite link after signin when ?redirect= is a relative path", async () => {
+    request.post.mockResolvedValue({
+      data: { data: { id: "u-1", name: "Ada Lovelace", email: "ada@example.com" } },
+    })
+    currentRoute.query = { redirect: "/invite/inv-1?token=abc" }
+
+    const { handleSignin } = useAuth()
+    await handleSignin()
+
+    expect(push).toHaveBeenCalledWith("/invite/inv-1?token=abc")
+  })
+
+  it("refuses an off-site redirect after signin", async () => {
+    request.post.mockResolvedValue({
+      data: { data: { id: "u-1", name: "Ada Lovelace", email: "ada@example.com" } },
+    })
+    currentRoute.query = { redirect: "//evil.example.com/steal" }
+
+    const { handleSignin } = useAuth()
+    await handleSignin()
+
+    expect(push).toHaveBeenCalledWith("/orgs")
+  })
+
+  it("carries the redirect from signup through to login", async () => {
+    request.post.mockResolvedValue({ data: { data: { id: "u-1" } } })
+    currentRoute.query = { redirect: "/invite/inv-1?token=abc" }
+
+    const { handleSignup } = useAuth()
+    await handleSignup()
+
+    expect(push).toHaveBeenCalledWith({
+      path: "/login",
+      query: { redirect: "/invite/inv-1?token=abc" },
+    })
+  })
+
+  it("sends signup to a bare login page when there is no redirect", async () => {
+    request.post.mockResolvedValue({ data: { data: { id: "u-1" } } })
+
+    const { handleSignup } = useAuth()
+    await handleSignup()
+
+    expect(push).toHaveBeenCalledWith({ path: "/login", query: {} })
   })
 
   it("clears both name and email on resetForm", () => {
