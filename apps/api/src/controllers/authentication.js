@@ -5,7 +5,9 @@ import apiResponse from "../utils/response.js"
 import { HTTP_STATUS_CODE, HTTP_STATUS_MESSAGE } from "../utils/constant.js"
 import * as userModel from "../models/users.js"
 import * as refreshTokenModel from "../models/refresh-tokens.js"
+import * as invitationModel from "../models/invitations.js"
 import db from "../config/database.js"
+import logger from "../utils/logger.js"
 import { hashPassword, verifyPassword } from "../utils/argon2.js"
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt.js"
 import { setAccessTokenCookie, setRefreshTokenCookie, clearAuthCookies } from "../utils/cookies.js"
@@ -124,6 +126,26 @@ export const signup = async (req, res, next) => {
         )
       }
       throw err
+    }
+
+    // Link any invitations that were addressed to this email before the account
+    // existed. Best-effort: the user row is already committed, so a failure here
+    // must not turn a successful signup into a 500. The invitation stays
+    // acceptable via its link either way — only in-app discovery degrades.
+    try {
+      await invitationModel.linkInviteeByEmail(email, user.id)
+    } catch (backfillError) {
+      // Swallowed by design, but not silently: the "controllers do not log"
+      // convention exists to stop double-logging errors that errorHandler will
+      // see. This one is deliberately not propagated, so this is its only
+      // record — without it a broken backfill degrades invitation discovery
+      // for every new user with no signal at all.
+      logger.error("Invitation backfill failed at signup", {
+        requestId: req.id,
+        userId: user.id,
+        email,
+        error: backfillError.message,
+      })
     }
 
     return res.status(HTTP_STATUS_CODE.CREATED).json(
