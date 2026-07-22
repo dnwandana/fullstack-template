@@ -13,7 +13,7 @@
  *   - id            UUID primary key
  *   - org_id        FK to organizations.id (CASCADE delete)
  *   - project_id    FK to projects.id (CASCADE delete) — nullable for org-level invites
- *   - inviter_id    FK to users.id (SET NULL on delete) — who sent the invitation
+ *   - inviter_id    FK to users.id (RESTRICT delete) — who sent the invitation
  *   - invitee_email email of the person being invited (nullable if invitee_id is set)
  *   - invitee_id    FK to users.id (SET NULL on delete) — existing user being invited (nullable if email is set)
  *   - role_id       FK to roles.id (RESTRICT delete) — the role granted upon acceptance
@@ -41,9 +41,11 @@ export const up = (knex) => {
     table.uuid("project_id").nullable()
     table.foreign("project_id").references("id").inTable("projects").onDelete("CASCADE")
 
-    // The user who created and sent this invitation
+    // The user who created and sent this invitation.
+    // RESTRICT, not SET NULL — the column is NOT NULL, so nulling it on inviter
+    // deletion would raise a not-null violation instead of clearing the link.
     table.uuid("inviter_id").notNullable()
-    table.foreign("inviter_id").references("id").inTable("users").onDelete("SET NULL")
+    table.foreign("inviter_id").references("id").inTable("users").onDelete("RESTRICT")
 
     // Target: either an email (for new users) or a user ID (for existing users)
     table.string("invitee_email", 255).nullable()
@@ -71,6 +73,14 @@ export const up = (knex) => {
 
     // Index for finding pending invitations for a specific user
     table.index("invitee_id")
+
+    // Index for finding invitations by address, before an account exists to
+    // link them to. Carries `linkInviteeByEmail` (every signup) and
+    // `findPendingForScope` (every invite). Without it the planner falls back
+    // to the (status, expires_at) index below, which is near-useless for this
+    // shape — "status = 'pending'" matches every outstanding invitation in the
+    // system, so signup cost would grow with total tenant count.
+    table.index("invitee_email")
 
     // Composite index for filtering pending + not-expired invitations
     table.index(["status", "expires_at"])
