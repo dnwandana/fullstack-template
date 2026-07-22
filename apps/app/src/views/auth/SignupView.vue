@@ -1,10 +1,12 @@
 <script setup>
-import { useRouter } from "vue-router"
+import { onMounted } from "vue"
+import { useRoute, useRouter } from "vue-router"
 import { Card, Form, Input, Button, Typography, Alert, Space } from "ant-design-vue"
 import { UserOutlined, MailOutlined, LockOutlined } from "@ant-design/icons-vue"
 import { useAuth } from "@/composables/useAuth"
 
 const router = useRouter()
+const route = useRoute()
 const {
   formState,
   error,
@@ -15,6 +17,18 @@ const {
   confirmation_passwordRules,
   handleSignup,
 } = useAuth()
+
+// When arriving from an invite link the address is fixed — the invitation is
+// bound to it, and editing it here would silently produce an account that can
+// never redeem the invitation. A repeated ?email= yields an array, so only a
+// plain string is trusted.
+const lockedEmail = typeof route.query.email === "string" ? route.query.email : ""
+
+onMounted(() => {
+  if (lockedEmail) {
+    formState.email = lockedEmail
+  }
+})
 
 // Handle form submit
 async function onFinish() {
@@ -48,7 +62,12 @@ function goToLogin() {
         </Form.Item>
 
         <Form.Item name="email" :rules="emailRules">
-          <Input v-model:value="formState.email" placeholder="Email" size="large">
+          <Input
+            v-model:value="formState.email"
+            placeholder="Email"
+            size="large"
+            :disabled="!!lockedEmail"
+          >
             <template #prefix>
               <MailOutlined />
             </template>
