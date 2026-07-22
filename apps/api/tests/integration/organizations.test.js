@@ -70,7 +70,7 @@ describe("GET /api/orgs", () => {
 
   it("should not return orgs the user is not a member of", async () => {
     const agent = await request()
-    const otherUser = await createTestUser({ username: "otheruser" })
+    const otherUser = await createTestUser({ name: "otheruser" })
     const otherHeaders = await getAuthHeaders(otherUser.id)
 
     await agent.post("/api/orgs").set(otherHeaders).send({ name: "Other Org" })
@@ -102,7 +102,7 @@ describe("GET /api/orgs/:org_id", () => {
     const createRes = await agent.post("/api/orgs").set(headers).send({ name: "Private Org" })
     const orgId = createRes.body.data.id
 
-    const otherUser = await createTestUser({ username: "outsider" })
+    const otherUser = await createTestUser({ name: "outsider" })
     const otherHeaders = await getAuthHeaders(otherUser.id)
 
     const res = await agent.get(`/api/orgs/${orgId}`).set(otherHeaders)

@@ -62,7 +62,7 @@ export const findOne = (conditions) => {
 }
 
 /**
- * Find all invitations for an organization with inviter/invitee usernames and role names.
+ * Find all invitations for an organization with inviter/invitee display names and role names.
  * Left-joins users as invitee because the invitee may not have an account yet.
  * Ordered by most recent first.
  *
@@ -74,8 +74,8 @@ export const findManyByOrgId = (orgId) => {
   return db
     .select(
       ...qualifiedSafeCols,
-      "inviter.username as inviter_username",
-      "invitee.username as invitee_username",
+      "inviter.name as inviter_name",
+      "invitee.name as invitee_name",
       "roles.name as role_name",
     )
     .from(TABLE_NAME)
@@ -88,7 +88,8 @@ export const findManyByOrgId = (orgId) => {
 
 /**
  * Find all pending invitations for a specific user (by invitee_id).
- * Joins organizations, projects, inviter user, and roles to provide full context.
+ * Joins organizations, projects, inviter user, and roles to provide full context,
+ * including the inviter display name and role name.
  * Only returns invitations that are still pending and have not expired.
  *
  * @param {string} userId - UUID of the invitee user
@@ -101,7 +102,7 @@ export const findPendingByUserId = (userId) => {
       ...qualifiedSafeCols,
       "organizations.name as org_name",
       "projects.name as project_name",
-      "inviter.username as inviter_username",
+      "inviter.name as inviter_name",
       "roles.name as role_name",
     )
     .from(TABLE_NAME)
@@ -116,19 +117,25 @@ export const findPendingByUserId = (userId) => {
 }
 
 /**
- * Find all pending, non-expired invitations for a given email address.
- * Used to look up invitations for users who may not have an account yet.
+ * Find a pending, non-expired invitation for an email within one scope.
+ * Scope is (org_id, project_id) — project_id is null for org-level invitations.
+ * Used to prevent stacking duplicate invitations for the same address.
  *
- * @param {string} email - Email address of the invitee
- * @returns {Promise<Object[]>} Array of matching invitation records
+ * @param {Object} scope - Lookup scope
+ * @param {string} scope.invitee_email - Normalized (lowercase) invitee email
+ * @param {string} scope.org_id - UUID of the organization
+ * @param {string|null} [scope.project_id] - UUID of the project, or null for org-level
+ * @returns {Promise<Object|undefined>} The matching invitation, or undefined
  */
-export const findPendingByEmail = (email) => {
-  return db
+export const findPendingForScope = ({ invitee_email, org_id, project_id = null }) => {
+  const query = db
     .select(SAFE_COLUMNS)
     .from(TABLE_NAME)
-    .where("invitee_email", email)
+    .where({ invitee_email, org_id })
     .andWhere("status", "pending")
     .andWhere("expires_at", ">", db.fn.now())
+
+  return (project_id === null ? query.whereNull("project_id") : query.where({ project_id })).first()
 }
 
 /**

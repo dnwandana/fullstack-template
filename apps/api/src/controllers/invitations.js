@@ -17,29 +17,14 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const INVITATION_EXPIRY_DAYS = 7
 
 /**
- * Joi schema for validating org-level invitation request bodies.
- * Exactly one of username or email must be provided (xor).
+ * Joi schema for validating invitation request bodies (org and project level).
+ * Invitations are email-only — email is the canonical user identifier.
  */
-const orgInviteSchema = joi
+const inviteSchema = joi
   .object({
-    username: joi.string().min(3).max(30).optional(),
-    email: joi.string().email().max(255).optional(),
+    email: joi.string().trim().lowercase().email().max(255).required(),
     role_id: joi.string().uuid().required(),
   })
-  .xor("username", "email")
-  .options({ stripUnknown: true })
-
-/**
- * Joi schema for validating project-level invitation request bodies.
- * Same structure as org invitations — exactly one of username or email required.
- */
-const projectInviteSchema = joi
-  .object({
-    username: joi.string().min(3).max(30).optional(),
-    email: joi.string().email().max(255).optional(),
-    role_id: joi.string().uuid().required(),
-  })
-  .xor("username", "email")
   .options({ stripUnknown: true })
 
 /**
@@ -53,22 +38,14 @@ const acceptSchema = joi
   .options({ stripUnknown: true })
 
 /**
- * Resolves the invitee user from either a username or email lookup.
- * Returns { inviteeId, inviteeEmail } — inviteeId may be null if the user
- * doesn't have an account yet (email-only invitation).
+ * Resolves the invitee user from an email lookup.
+ * Returns { inviteeId, inviteeEmail } — inviteeId is null when the user
+ * doesn't have an account yet (pending-account invitation).
  *
- * @param {string} [username] - Invitee's username (mutually exclusive with email)
- * @param {string} [email] - Invitee's email address (mutually exclusive with username)
- * @returns {Promise<{ inviteeId: string|null, inviteeEmail: string|null }>}
+ * @param {string} email - Invitee's email address
+ * @returns {Promise<{ inviteeId: string|null, inviteeEmail: string }>}
  */
-const resolveInvitee = async (username, email) => {
-  if (username) {
-    const user = await userModel.findOne({ username })
-    if (!user) {
-      throw new HttpError(HTTP_STATUS_CODE.NOT_FOUND, "User not found")
-    }
-    return { inviteeId: user.id, inviteeEmail: user.email }
-  }
+const resolveInvitee = async (email) => {
   const user = await userModel.findOne({ email })
   return { inviteeId: user?.id ?? null, inviteeEmail: email }
 }
@@ -86,19 +63,19 @@ const resolveInvitee = async (username, email) => {
  */
 export const createOrgInvitation = async (req, res, next) => {
   try {
-    const { error, value } = orgInviteSchema.validate(req.body)
+    const { error, value } = inviteSchema.validate(req.body)
     if (error) {
       throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, error.details[0].message)
     }
 
-    const { username, email, role_id: roleId } = value
+    const { email, role_id: roleId } = value
 
     const role = await roleModel.findOne({ id: roleId, org_id: req.org.id })
     if (!role) {
       throw new HttpError(HTTP_STATUS_CODE.NOT_FOUND, "Role not found in this organization")
     }
 
-    const { inviteeId, inviteeEmail } = await resolveInvitee(username, email)
+    const { inviteeId, inviteeEmail } = await resolveInvitee(email)
 
     if (inviteeId) {
       const existingMember = await orgMemberModel.findOne({
@@ -111,6 +88,18 @@ export const createOrgInvitation = async (req, res, next) => {
           "User is already a member of this organization",
         )
       }
+    }
+
+    const pending = await invitationModel.findPendingForScope({
+      invitee_email: inviteeEmail,
+      org_id: req.org.id,
+      project_id: null,
+    })
+    if (pending) {
+      throw new HttpError(
+        HTTP_STATUS_CODE.BAD_REQUEST,
+        "A pending invitation already exists for this email",
+      )
     }
 
     const token = crypto.randomBytes(32).toString("hex")
@@ -155,19 +144,19 @@ export const createOrgInvitation = async (req, res, next) => {
  */
 export const createProjectInvitation = async (req, res, next) => {
   try {
-    const { error, value } = projectInviteSchema.validate(req.body)
+    const { error, value } = inviteSchema.validate(req.body)
     if (error) {
       throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, error.details[0].message)
     }
 
-    const { username, email, role_id: roleId } = value
+    const { email, role_id: roleId } = value
 
     const role = await roleModel.findOne({ id: roleId, org_id: req.org.id })
     if (!role) {
       throw new HttpError(HTTP_STATUS_CODE.NOT_FOUND, "Role not found in this organization")
     }
 
-    const { inviteeId, inviteeEmail } = await resolveInvitee(username, email)
+    const { inviteeId, inviteeEmail } = await resolveInvitee(email)
 
     if (inviteeId) {
       const existingMember = await projectMemberModel.findOne({
@@ -180,6 +169,18 @@ export const createProjectInvitation = async (req, res, next) => {
           "User is already a member of this project",
         )
       }
+    }
+
+    const pending = await invitationModel.findPendingForScope({
+      invitee_email: inviteeEmail,
+      org_id: req.org.id,
+      project_id: req.project.id,
+    })
+    if (pending) {
+      throw new HttpError(
+        HTTP_STATUS_CODE.BAD_REQUEST,
+        "A pending invitation already exists for this email",
+      )
     }
 
     const token = crypto.randomBytes(32).toString("hex")
@@ -214,7 +215,7 @@ export const createProjectInvitation = async (req, res, next) => {
 
 /**
  * GET /api/orgs/:org_id/invitations — List all invitations for an organization.
- * Returns invitations enriched with inviter/invitee usernames and role names.
+ * Returns invitations enriched with inviter/invitee names and role names.
  *
  * @param {Object} req - Express request object (req.org.id set by middleware)
  * @param {Object} res - Express response object

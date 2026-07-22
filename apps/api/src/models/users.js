@@ -1,14 +1,14 @@
 import db from "../config/database.js"
 
 const TABLE_NAME = "users"
-const SAFE_COLUMNS = ["id", "username", "email", "created_at", "updated_at"]
+const SAFE_COLUMNS = ["id", "name", "email", "created_at", "updated_at"]
 
 /**
  * Insert a new user into the database.
  *
  * @param {Object} user - User data to insert
- * @param {string} user.username - Unique username
- * @param {string} user.email - User email address
+ * @param {string} user.name - Display name
+ * @param {string} user.email - Unique email (login identifier)
  * @param {string} user.password - Hashed password
  * @returns {Promise<Object[]>} Array containing the newly created user (safe columns only)
  */
@@ -19,7 +19,7 @@ export const create = (user) => {
 /**
  * Find a single user by conditions, returning only safe (non-sensitive) columns.
  *
- * @param {Object} conditions - Key-value pairs to match against (e.g., { id }, { username })
+ * @param {Object} conditions - Key-value pairs to match against (e.g., { id }, { email })
  * @returns {Promise<Object|undefined>} The matched user or undefined
  */
 export const findOne = (conditions) => {

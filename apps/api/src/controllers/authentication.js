@@ -12,7 +12,7 @@ import { setAccessTokenCookie, setRefreshTokenCookie, clearAuthCookies } from ".
 
 // Pre-computed dummy hash for timing-safe signin.
 // Ensures verifyPassword always runs, even when the user doesn't exist,
-// so response times don't reveal whether a username is valid.
+// so response times don't reveal whether an email is registered.
 const dummyHash = await hashPassword("dummy-timing-safe-password")
 
 const MAX_FAILED_ATTEMPTS = 5
@@ -20,17 +20,17 @@ const LOCKOUT_DURATION_MS = 15 * 60 * 1000
 
 const signupSchema = joi
   .object({
-    username: joi
+    name: joi
       .string()
-      .min(3)
-      .max(30)
-      .pattern(/^[a-zA-Z0-9._-]+$/)
+      .trim()
+      .min(1)
+      .max(100)
+      .pattern(/^[^\p{Cc}\p{Zl}\p{Zp}\u200E\u200F\u202A-\u202E\u2066-\u2069]+$/u)
       .required()
       .messages({
-        "string.pattern.base":
-          "username must contain only letters, numbers, dots, underscores, or hyphens",
+        "string.pattern.base": "name must not contain control characters",
       }),
-    email: joi.string().email().max(255).optional(),
+    email: joi.string().trim().lowercase().email().max(255).required(),
     password: joi
       .string()
       .min(8)
@@ -56,16 +56,7 @@ const signupSchema = joi
 
 const signinSchema = joi
   .object({
-    username: joi
-      .string()
-      .min(3)
-      .max(30)
-      .pattern(/^[a-zA-Z0-9._-]+$/)
-      .required()
-      .messages({
-        "string.pattern.base":
-          "username must contain only letters, numbers, dots, underscores, or hyphens",
-      }),
+    email: joi.string().trim().lowercase().email().max(255).required(),
     password: joi.string().min(8).max(72).required(),
   })
   .options({ stripUnknown: true })
@@ -89,7 +80,7 @@ const parseExpiresIn = (duration) => {
 
 /**
  * POST /api/auth/signup — Register a new user.
- * Username must be unique; email is optional but must also be unique if provided.
+ * Email must be unique; name is a display name and need not be unique.
  * Password is hashed with Argon2 before storage.
  *
  * @param {Object} req - Express request object
@@ -103,46 +94,45 @@ export const signup = async (req, res, next) => {
       throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, error.details[0].message)
     }
 
-    const { username, email, password } = value
+    const { name, email, password } = value
 
-    const existingUser = await userModel.findOne({ username })
-    if (existingUser) {
-      throw new HttpError(
-        HTTP_STATUS_CODE.BAD_REQUEST,
-        "user with the given username already exists",
-      )
-    }
-
-    if (email) {
-      const existingEmail = await userModel.findOne({ email })
-      if (existingEmail) {
-        throw new HttpError(
-          HTTP_STATUS_CODE.BAD_REQUEST,
-          "user with the given email already exists",
-        )
-      }
+    const existingEmail = await userModel.findOne({ email })
+    if (existingEmail) {
+      throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, "user with the given email already exists")
     }
 
     const hashedPassword = await hashPassword(password)
 
     const userData = {
       id: crypto.randomUUID(),
-      username,
+      name,
+      email,
       password: hashedPassword,
       created_at: new Date(),
       updated_at: new Date(),
     }
-    if (email) userData.email = email
 
-    const [user] = await userModel.create(userData)
+    let user
+    try {
+      ;[user] = await userModel.create(userData)
+    } catch (err) {
+      // 23505 = unique_violation — lost the race against a concurrent signup
+      if (err.code === "23505") {
+        throw new HttpError(
+          HTTP_STATUS_CODE.BAD_REQUEST,
+          "user with the given email already exists",
+        )
+      }
+      throw err
+    }
 
     return res.status(HTTP_STATUS_CODE.CREATED).json(
       apiResponse({
         message: HTTP_STATUS_MESSAGE.CREATED,
         data: {
           id: user.id,
-          username: user.username,
-          email: user.email ?? null,
+          name: user.name,
+          email: user.email,
         },
       }),
     )
@@ -153,7 +143,7 @@ export const signup = async (req, res, next) => {
 
 /**
  * POST /api/auth/signin — Authenticate and obtain tokens.
- * Uses timing-safe credential checking to prevent username enumeration.
+ * Uses timing-safe credential checking to prevent email enumeration.
  * Issues both an access token and a refresh token; stores the refresh token
  * hash in the database for later rotation/revocation.
  *
@@ -168,9 +158,9 @@ export const signin = async (req, res, next) => {
       throw new HttpError(HTTP_STATUS_CODE.BAD_REQUEST, error.details[0].message)
     }
 
-    const { username, password } = value
+    const { email, password } = value
 
-    const user = await userModel.findOneWithPassword({ username })
+    const user = await userModel.findOneWithPassword({ email })
     const hashToVerify = user?.password ?? dummyHash
     const isPasswordValid = await verifyPassword(hashToVerify, password)
 
@@ -219,7 +209,8 @@ export const signin = async (req, res, next) => {
         message: HTTP_STATUS_MESSAGE.OK,
         data: {
           id: user.id,
-          username: user.username,
+          name: user.name,
+          email: user.email,
         },
       }),
     )
@@ -335,7 +326,7 @@ export const getMe = async (req, res, next) => {
     return res.json(
       apiResponse({
         message: HTTP_STATUS_MESSAGE.OK,
-        data: { id: user.id, username: user.username },
+        data: { id: user.id, name: user.name, email: user.email },
       }),
     )
   } catch (error) {

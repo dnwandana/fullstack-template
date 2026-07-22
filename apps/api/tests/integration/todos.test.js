@@ -24,8 +24,8 @@ beforeEach(async () => {
   await cleanAllTables()
 
   // Create users
-  owner = await createTestUser({ username: "owner" })
-  member = await createTestUser({ username: "member" })
+  owner = await createTestUser({ name: "owner" })
+  member = await createTestUser({ name: "member" })
 
   ownerHeaders = await getAuthHeaders(owner.id)
   memberHeaders = await getAuthHeaders(member.id)

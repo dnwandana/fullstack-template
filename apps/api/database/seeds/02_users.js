@@ -3,7 +3,7 @@
  *
  * Creates 5 test users with deterministic UUIDs matching the original
  * seed data. All users share the password "secretpassword" (hashed
- * with Argon2). The email field is now populated for invitation flows.
+ * with Argon2). Users sign in with their email address.
  *
  * User IDs are preserved from the pre-multi-tenancy seeds so that
  * downstream seeds (org_members, project_members, todos) can reference
@@ -44,7 +44,7 @@ export const seed = async (knex) => {
   const users = [
     {
       id: USER_IDS.john_doe,
-      username: "john.doe",
+      name: "John Doe",
       email: "john.doe@acme.test",
       password: hashedPassword,
       created_at: "2025-01-15T09:00:00.000Z",
@@ -52,7 +52,7 @@ export const seed = async (knex) => {
     },
     {
       id: USER_IDS.jane_doe,
-      username: "jane.doe",
+      name: "Jane Doe",
       email: "jane.doe@acme.test",
       password: hashedPassword,
       created_at: "2025-01-18T14:30:00.000Z",
@@ -60,7 +60,7 @@ export const seed = async (knex) => {
     },
     {
       id: USER_IDS.alex,
-      username: "AlexTheBuilder",
+      name: "Alex Builder",
       email: "alex@builder.test",
       password: hashedPassword,
       created_at: "2025-01-20T10:15:00.000Z",
@@ -68,7 +68,7 @@ export const seed = async (knex) => {
     },
     {
       id: USER_IDS.cloud,
-      username: "CloudArchitect",
+      name: "Cloud Architect",
       email: "cloud@globex.test",
       password: hashedPassword,
       created_at: "2025-01-22T16:45:00.000Z",
@@ -76,7 +76,7 @@ export const seed = async (knex) => {
     },
     {
       id: USER_IDS.sudo_sam,
-      username: "sudo_sam",
+      name: "Sam Sudoers",
       email: "sam@sudoers.test",
       password: hashedPassword,
       created_at: "2025-01-25T11:20:00.000Z",

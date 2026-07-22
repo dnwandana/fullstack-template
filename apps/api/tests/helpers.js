@@ -40,25 +40,25 @@ export async function request() {
  * Creates a test user directly in the database.
  *
  * @param {Object} [overrides={}] - Override default values
- * @param {string} [overrides.username] - Custom username
+ * @param {string} [overrides.name] - Custom display name
  * @param {string} [overrides.email] - Custom email
  * @param {string} [overrides.password] - Custom plaintext password
- * @returns {Promise<Object>} User object with id, username, email, and plainPassword
+ * @returns {Promise<Object>} User object with id, name, email, and plainPassword
  */
 export async function createTestUser(overrides = {}) {
   const { hashPassword } = await import("../src/utils/argon2.js")
   const { default: db } = await import("../src/config/database.js")
 
   const id = crypto.randomUUID()
-  const username = overrides.username || `testuser_${id.slice(0, 8)}`
-  const email = overrides.email || `${username}@test.com`
+  const name = overrides.name || `Test User ${id.slice(0, 8)}`
+  const email = overrides.email || `user_${id.slice(0, 8)}@test.com`
   const password = overrides.password || "Testpass123!"
   const hashedPassword = await hashPassword(password)
 
   const [user] = await db("users")
     .insert({
       id,
-      username,
+      name,
       email,
       password: hashedPassword,
       failed_login_attempts: 0,
@@ -66,7 +66,7 @@ export async function createTestUser(overrides = {}) {
       created_at: new Date(),
       updated_at: new Date(),
     })
-    .returning(["id", "username", "email", "created_at", "updated_at"])
+    .returning(["id", "name", "email", "created_at", "updated_at"])
 
   return { ...user, plainPassword: password }
 }

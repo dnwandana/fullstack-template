@@ -20,7 +20,7 @@ describe("GET /api/orgs/:org_id/projects", () => {
     const ownerHeaders = await getAuthHeaders(owner.id)
 
     // Another user creates a project in the same org
-    const member = await createTestUser({ username: "member1" })
+    const member = await createTestUser({ name: "Member One" })
     await addOrgMember(org.id, member.id, org.roles.admin)
     const memberHeaders = await getAuthHeaders(member.id)
 
@@ -59,7 +59,7 @@ describe("GET /api/orgs/:org_id/projects", () => {
     })
 
     // Add member only to project1
-    const member = await createTestUser({ username: "member2" })
+    const member = await createTestUser({ name: "Member Two" })
     await addOrgMember(org.id, member.id, org.roles.member)
     await addProjectMember(project1.id, member.id, org.roles.member)
     const memberHeaders = await getAuthHeaders(member.id)

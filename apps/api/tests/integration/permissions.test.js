@@ -27,9 +27,9 @@ let org, project
 beforeEach(async () => {
   await cleanAllTables()
 
-  owner = await createTestUser({ username: "owner" })
-  member = await createTestUser({ username: "member" })
-  viewer = await createTestUser({ username: "viewer" })
+  owner = await createTestUser({ name: "owner" })
+  member = await createTestUser({ name: "member" })
+  viewer = await createTestUser({ name: "viewer" })
 
   ownerHeaders = await getAuthHeaders(owner.id)
   memberHeaders = await getAuthHeaders(member.id)
@@ -92,7 +92,7 @@ describe("Permission Enforcement", () => {
 
 describe("Cross-Tenant Isolation", () => {
   it("user in org A cannot access org B's projects", async () => {
-    const otherUser = await createTestUser({ username: "otherorguser" })
+    const otherUser = await createTestUser({ name: "otherorguser" })
     const otherOrg = await createTestOrg(otherUser.id)
 
     const res = await (await request()).get(`/api/orgs/${otherOrg.id}/projects`).set(ownerHeaders)

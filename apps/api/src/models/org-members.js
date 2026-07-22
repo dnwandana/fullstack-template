@@ -31,7 +31,7 @@ export const findOne = (conditions) => {
  *
  * @param {string} orgId - UUID of the organization
  * @returns {Promise<Object[]>} Array of members with user_id, org_id, role_id,
- *   joined_at, username, email, and role_name
+ *   joined_at, name, email, and role_name
  */
 export const findManyByOrgId = (orgId) => {
   return db
@@ -40,7 +40,7 @@ export const findManyByOrgId = (orgId) => {
       `${TABLE_NAME}.org_id`,
       `${TABLE_NAME}.role_id`,
       `${TABLE_NAME}.joined_at`,
-      "users.username",
+      "users.name",
       "users.email",
       "roles.name as role_name",
     )
