@@ -2067,6 +2067,105 @@
         }
       }
     },
+    "/api/invitations/{invitation_id}/preview": {
+      "get": {
+        "tags": ["Invitations"],
+        "summary": "Preview an invitation (public)",
+        "description": "Public, token-gated preview of an invitation so a logged-out invitee can see what they were invited to before creating an account. Mounted above the authentication barrier — possession of the raw token is the only credential. Never returns the token or its hash. Returns 404 for both an unknown invitation and a wrong token, so the endpoint cannot be used to confirm that an invitation ID exists.",
+        "operationId": "previewInvitation",
+        "security": [],
+        "parameters": [
+          { "$ref": "#/components/parameters/InvitationIdParam" },
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "description": "Raw invitation token — 64 lowercase hex characters",
+            "schema": {
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "example": "3f2b1c8d4e5a6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invitation preview retrieved successfully",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/InvitationPreview"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed invitation ID or malformed token",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "invalidId": {
+                    "summary": "Invitation ID is not a UUID",
+                    "value": {
+                      "message": "Invalid invitation ID format"
+                    }
+                  },
+                  "invalidToken": {
+                    "summary": "Token is not 64 hex characters",
+                    "value": {
+                      "message": "\"token\" length must be 64 characters long"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such invitation, or the token does not match. The two cases are deliberately indistinguishable.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "message": "Invitation not found"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/orgs/{org_id}/invitations/{invitation_id}": {
       "delete": {
         "tags": ["Invitations"],
@@ -2106,6 +2205,99 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/orgs/{org_id}/invitations/{invitation_id}/resend": {
+      "post": {
+        "tags": ["Invitations"],
+        "summary": "Resend invitation",
+        "description": "Reissue a pending invitation: mints a fresh token, which invalidates the previous link, and resets the 7-day expiry. Only pending invitations can be resent — accepted and declined invitations are terminal. Requires the invitations:manage permission. Exists because the raw token is only ever returned at the moment it is minted, so a lost link would otherwise be unrecoverable while the duplicate guard blocks re-inviting the same address.",
+        "operationId": "resendInvitation",
+        "security": [{ "AccessToken": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/OrgIdParam" },
+          { "$ref": "#/components/parameters/InvitationIdParam" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invitation reissued successfully — the response carries the new raw token and accept URL",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    { "$ref": "#/components/schemas/ApiResponse" },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Invitation"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed invitation ID, or the invitation is no longer pending",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "notPending": {
+                    "summary": "Invitation was already accepted or declined",
+                    "value": {
+                      "message": "Invitation is no longer pending"
+                    }
+                  },
+                  "invalidId": {
+                    "summary": "Invitation ID is not a UUID",
+                    "value": {
+                      "message": "Invalid invitation ID format"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "No such invitation in this organization",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/X-Request-Id"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "message": "Invitation not found"
+                }
+              }
+            }
           }
         }
       }
@@ -2563,12 +2755,17 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "accepted", "declined", "revoked", "expired"],
-            "description": "Current invitation status"
+            "enum": ["pending", "accepted", "declined", "expired"],
+            "description": "Stored invitation status. Only pending, accepted, and declined are ever written — expiry is derived from expires_at on read, and revoking hard-deletes the row rather than setting a status."
           },
           "token": {
             "type": "string",
-            "description": "Raw invitation token. Returned only in the creation response — list responses omit it, since only its SHA-256 hash is stored."
+            "description": "Raw invitation token. Returned only by the creation and resend responses — list responses omit it, since only its SHA-256 hash is stored."
+          },
+          "accept_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Absolute URL the invitee opens to accept. Built from APP_BASE_URL. Returned alongside the raw token only because the template ships no mail provider — remove both once delivery is wired."
           },
           "expires_at": {
             "type": "string",
@@ -2603,6 +2800,67 @@
           "expires_at",
           "created_at",
           "updated_at"
+        ]
+      },
+      "InvitationPreview": {
+        "type": "object",
+        "description": "Public, display-only projection of an invitation returned by the token-gated preview endpoint. Deliberately excludes token, token_hash, and every internal identifier other than the invitation's own ID.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "org_name": {
+            "type": "string",
+            "description": "Display name of the organization the invitation grants access to"
+          },
+          "project_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Display name of the project, or null for an org-level invitation"
+          },
+          "inviter_name": {
+            "type": "string",
+            "description": "Display name of the user who sent the invitation"
+          },
+          "role_name": {
+            "type": "string",
+            "description": "Role granted on acceptance"
+          },
+          "invitee_email": {
+            "type": "string",
+            "format": "email",
+            "description": "Email address the invitation was sent to"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "accepted", "declined"],
+            "description": "Stored invitation status"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "is_expired": {
+            "type": "boolean",
+            "description": "Whether expires_at has already elapsed. Derived at read time — expiry is never written back to the status column."
+          },
+          "requires_signup": {
+            "type": "boolean",
+            "description": "True when no account exists for invitee_email yet, so the invitee must register before they can accept"
+          }
+        },
+        "required": [
+          "id",
+          "org_name",
+          "project_name",
+          "inviter_name",
+          "role_name",
+          "invitee_email",
+          "status",
+          "expires_at",
+          "is_expired",
+          "requires_signup"
         ]
       },
       "Pagination": {

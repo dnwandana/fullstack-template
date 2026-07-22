@@ -20,7 +20,7 @@ Organization
 - **Multi-tenancy**: Shared PostgreSQL database, tenant-scoped via `org_id`/`project_id` columns
 - **RBAC**: 4 system roles (owner / admin / member / viewer) + custom roles, 16 granular permissions
 - **Auth**: Dual-token JWT via httpOnly cookies, Argon2 password hashing, password complexity, account lockout
-- **Invitations**: Invite by email, 7-day expiry, accept/decline flow. Inviting an address with no account creates a pending-account invitation.
+- **Invitations**: Invite by email, 7-day expiry, accept/decline/revoke/resend flow with a public `/invite/:id?token=…` landing page that works logged out. Inviting an address with no account creates a pending-account invitation; signing up claims it. Email delivery is a single documented seam — no mail provider is shipped. See [`docs/invitation-flow.md`](docs/invitation-flow.md).
 
 ## Prerequisites
 
@@ -65,6 +65,7 @@ PORT=3000
 ACCESS_TOKEN_EXPIRES_IN=15m
 REFRESH_TOKEN_EXPIRES_IN=7d
 CORS_ALLOWED_ORIGINS=http://localhost:8080
+APP_BASE_URL=http://localhost:8080
 RATE_LIMIT_AUTH_MAX=10
 RATE_LIMIT_GENERAL_MAX=100
 LOG_LEVEL=info
@@ -124,6 +125,7 @@ Append `:api` or `:app` to target a single workspace (e.g. `pnpm test:api`).
 | POST   | `/api/auth/signin`  | Login — sets httpOnly auth cookies, returns user info |
 | POST   | `/api/auth/refresh` | Rotate tokens via httpOnly cookie                     |
 | POST   | `/api/auth/logout`  | Revoke refresh token, clear cookies                   |
+| GET    | `/api/invitations/:invitation_id/preview?token=…` | Preview an invitation while logged out — the raw token is the only credential |
 
 ### Protected endpoints (authenticated via httpOnly `access_token` cookie)
 
@@ -135,6 +137,7 @@ POST /api/orgs                                     # Create org
 GET  /api/orgs/:org_id                             # Get org
 GET  /api/orgs/:org_id/members                     # List members
 POST /api/orgs/:org_id/invitations                 # Invite to org
+POST /api/orgs/:org_id/invitations/:id/resend      # Reissue link (new token, resets expiry)
 
 GET  /api/orgs/:org_id/projects                    # List projects
 POST /api/orgs/:org_id/projects                    # Create project
@@ -228,6 +231,7 @@ cp .env.example .env.local
 #   JWT_ISSUER=http://localhost
 #   JWT_AUDIENCE=http://localhost
 #   CORS_ALLOWED_ORIGINS=http://localhost
+#   APP_BASE_URL=http://localhost   ← base of invitation accept links
 ```
 
 **2. Build and start**
@@ -316,6 +320,9 @@ docker compose run --rm api sh -c "node_modules/.bin/knex seed:run"
 | `JWT_ISSUER`           | Yes      | e.g. `https://api.yourdomain.com`                                                                 |
 | `JWT_AUDIENCE`         | Yes      | e.g. `https://app.yourdomain.com`                                                                 |
 | `CORS_ALLOWED_ORIGINS` | No       | Defaults to `http://localhost:8080`. Set to `https://app.yourdomain.com` in production.           |
+| `APP_BASE_URL`         | No\*     | Public SPA origin used to build invitation accept links. Defaults to `http://localhost:8080` — set `https://app.<DOMAIN>` in production, `http://localhost` for the local Docker stack. |
+
+\* Optional to the validator, effectively required in production: the default produces invitation links pointing at `localhost`. See [`docs/invitation-flow.md`](docs/invitation-flow.md).
 
 See `.env.example` for the full list.
 

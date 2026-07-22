@@ -69,9 +69,12 @@ Vue 3 SPA built with Vite, using a Pinia store + composables pattern for state m
 | `/orgs/:orgId/projects/:projectId/todos/:id` | TodoDetail      | `views/todos/TodoDetailView.vue`          | `requiresAuth`  |
 | `/orgs/:orgId/projects/:projectId/settings`  | ProjectSettings | `views/settings/ProjectSettingsView.vue`  | `requiresAuth`  |
 | `/invitations`                               | MyInvitations   | `views/invitations/MyInvitationsView.vue` | `requiresAuth`  |
+| `/invite/:invitationId`                      | InviteAccept    | `views/invitations/InviteAcceptView.vue`  | — (public)      |
 | `/:pathMatch(.*)*`                           | —               | redirect to `/orgs`                       | —               |
 
-**Navigation guard**: Unauthenticated users on `requiresAuth` routes are redirected to `/login` with `?redirect=`. Authenticated users on `requiresGuest` routes are redirected to `/orgs`. Auth store is initialized from localStorage on first navigation.
+**Navigation guard**: Unauthenticated users on `requiresAuth` routes are redirected to `/login` with `?redirect=`. Authenticated users on `requiresGuest` routes are redirected to `/orgs`. Routes carrying **neither** flag are public in any session state — the guard only acts on those two meta flags. `/invite/:invitationId` relies on that deliberately: `requiresAuth` would bounce a brand-new invitee to `/login` before they could see what they were invited to, and `requiresGuest` would bounce a signed-in user to `/orgs` before they could accept. Auth store is initialized on first navigation via `GET /auth/me`.
+
+**Invite landing page**: `/invite/:invitationId?token=<64hex>` reads the token from the query string, calls the public preview endpoint, and renders one of `loading | invalid | expired | handled | guest | wrong-account | ready`. Arriving without `?token=` short-circuits to `invalid` — the token is the credential and no in-app list holds it. That is why `MyInvitationsView`'s primary action is **"Open invitation"** (navigation to `/invite/:id`) rather than "Accept": that view has no token and cannot redeem directly. Decline still works there, since declining requires no token.
 
 ## HTTP Client (`src/utils/http.js`)
 
@@ -91,7 +94,9 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 
 ## Authentication Flow
 
-1. **Signin**: `LoginView.vue` (email + password) → `useAuth().handleSignin()` → `useAuthStore().signin(email, password)` → `api/auth.js signin()` → `POST /auth/signin` → server sets httpOnly cookies (`access_token` + `refresh_token`) + returns `{ id, name, email }` → stores user data in localStorage → redirects to `/orgs`. Signup posts `{ name, email, password, confirmation_password }`; `name` is a display name only, `email` is the login identifier.
+1. **Signin**: `LoginView.vue` (email + password) → `useAuth().handleSignin()` → `useAuthStore().signin(email, password)` → `api/auth.js signin()` → `POST /auth/signin` → server sets httpOnly cookies (`access_token` + `refresh_token`) + returns `{ id, name, email }` → stores user data in localStorage → redirects to a validated `?redirect=` target, falling back to `/orgs`. Signup posts `{ name, email, password, confirmation_password }`; `name` is a display name only, `email` is the login identifier. Signup establishes no session, so `handleSignup` forwards to `/login` and carries any `?redirect=` along, keeping an invitation redeemable across the signup → signin detour. `SignupView` also honours `?email=`, prefilling **and disabling** the field — an invitation is bound to its address, so editing it would silently create an unacceptable account.
+
+   **Open-redirect guard**: `?redirect=` is attacker-controllable, so `safeRedirect()` in `composables/useAuth.js` accepts only same-origin relative paths — a single leading `/`, rejecting the protocol-relative `//host` form and the `/\host` variant browsers normalize into it, plus any non-string value (a repeated query key arrives as an array). Anything else falls back.
 2. **Token attachment**: Every API call includes `credentials: 'include'` so cookies are sent automatically by the browser
 3. **Token refresh**: Automatic on 401 responses. Server rotates both tokens via httpOnly cookies.
 4. **Logout**: `AppLayout.vue` → `authStore.logout()` → `POST /auth/logout` (best-effort, cookies sent automatically) → clears all localStorage → redirects to `/login`

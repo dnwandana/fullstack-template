@@ -48,6 +48,7 @@ No pre-commit hooks. Run `npm run lint:fix && npm run format:fix` before committ
 8. Logging (Morgan httpLogger + custom requestLogger)
 9. Routes (`/api`):
    - `/api/auth/*` — auth routes (authLimiter)
+   - `/api/invitations/:invitation_id/preview` — public, token-gated invitation preview (`routes/public-invitations.js`). **Must stay above the auth barrier.** That router declares only this one route, so all other `/api/invitations/*` requests fall through to the authenticated router below.
    - `requireAccessToken` — all routes below are authenticated
    - `/api/invitations` — user's pending invitations
    - `/api/permissions` — permission reference
@@ -58,7 +59,7 @@ No pre-commit hooks. Run `npm run lint:fix && npm run format:fix` before committ
        - `/:project_id/invitations` — project invitations
      - `/:org_id/roles` — org roles
      - `/:org_id/members` — org members
-     - `/:org_id/invitations` — org invitations
+     - `/:org_id/invitations` — org invitations (create, list, revoke, resend)
 10. 404 handler (notFoundHandler)
 11. Error handler (errorHandler) — **must be last**
 
@@ -147,15 +148,23 @@ Validation: name 1–100 chars, trimmed, and rejected if it contains control cha
 
 Invite by email, 7-day expiry, accept/decline/revoke flow. One shared Joi schema (`{ email, role_id }`, `stripUnknown`) validates both org and project invitations.
 
-**Token security**: On creation, the invitation token is hashed with SHA-256 (`invitations.hashToken`) and only the hash is stored in `token_hash`. The raw token is returned in the creation response only. All list/get queries use a `SAFE_COLUMNS` array that excludes `token` and `token_hash` to prevent leakage.
+**Token security**: On creation, the invitation token is hashed with SHA-256 (`invitations.hashToken`) and only the hash is stored in `token_hash`. The raw token is returned in the creation and resend responses only. All list/get queries use a `SAFE_COLUMNS` array that excludes `token` and `token_hash` to prevent leakage. There is exactly one deliberate exception: `invitations.findOneWithTokenHash(id)` selects `token_hash` so the public preview endpoint can verify a submitted token — the hash is stripped by the controller and never reaches a response body.
 
 **Accept validation**: `POST /api/invitations/:id/accept` requires `{ token: "<64-char-hex>" }` in the request body. The controller hashes the provided token and compares against `token_hash` using `crypto.timingSafeEqual` to prevent timing attacks. Uses `SELECT ... FOR UPDATE` within a transaction to prevent race conditions on acceptance.
 
-**Pending-account invitations**: `resolveInvitee(email)` looks the address up in `users` and returns `invitee_id` (or `null` when nobody has signed up with it yet) plus `invitee_email`. Inviting an unregistered address is valid — it does not 404. On accept, the controller matches the authenticated user's email against `invitee_email`.
+**Public preview**: `GET /api/invitations/:invitation_id/preview?token=<64hex>` is mounted in `routes/public-invitations.js` **above** the `requireAccessToken` barrier in `routes/index.js`, so a logged-out invitee can see what they were invited to before creating an account. Possession of the raw token is the only credential. Returns `{ id, org_name, project_name, inviter_name, role_name, invitee_email, status, expires_at, is_expired, requires_signup }` — never the token or its hash. `400` for a non-UUID invitation ID or a token that is not 64 lowercase hex characters (the shape is validated _before_ `timingSafeEqual`, which throws on length mismatch); `404` for both an unknown invitation and a wrong token, so the endpoint cannot be used to enumerate invitation IDs. Express matches in registration order and the public router only declares this one route, so every other `/api/invitations/*` request still falls through to the authenticated router.
+
+**Pending-account invitations**: `resolveInvitee(email)` looks the address up in `users` and returns `invitee_id` (or `null` when nobody has signed up with it yet) plus `invitee_email`. Inviting an unregistered address is valid — it does not 404. At signup, `invitations.linkInviteeByEmail(email, userId)` backfills `invitee_id` on every pending, unexpired, unlinked invitation for the new user's email, so the invitation becomes visible in `GET /api/invitations` (which keys on `invitee_id`). The backfill is best-effort: it runs after the user row is committed and its failure is swallowed, so a broken backfill can never turn a successful signup into a 500 — only in-app discovery degrades, and the invite link keeps working. On accept, the controller still matches the authenticated user's email against `invitee_email` for invitations that were never linked.
+
+**Delivery**: the template ships **no mail provider**. `src/utils/invitation-notifier.js` is the seam — `sendInvitationEmail({ to, acceptUrl, orgName, projectName, inviterName, roleName, expiresAt })`, whose default implementation logs the accept URL via Winston. Wire SendGrid, Brevo, Mailgun, SES, or SMTP by replacing that one function body; no controller changes are required. Delivery is best-effort — every call site wraps it in `try/catch` after the row is already committed. The link itself is built by `src/utils/invitation-url.js` (`buildInvitationAcceptUrl`), the single source of truth for the shape `${APP_BASE_URL}/invite/:invitation_id?token=<raw>`; the SPA route in `apps/app/src/router/index.js` must stay in sync with it. Until a provider is wired, the create and resend responses return `token` and `accept_url` so an admin can deliver the link by hand.
+
+**Resend**: `POST /api/orgs/:org_id/invitations/:invitation_id/resend` (requires `invitations:manage`) mints a new token — invalidating the previous link — and resets the 7-day expiry, returning `{ ...safe columns, token, accept_url }`. `400` if the invitation is no longer pending, `404` if it belongs to a different org. Required because the raw token is only returned at the moment it is minted: without resend, a lost link is unrecoverable and the duplicate guard blocks re-inviting the same address.
 
 **Duplicate prevention**: before creating an invitation, both handlers call `invitations.findPendingForScope({ invitee_email, org_id, project_id })` and reject with 400 `"A pending invitation already exists for this email"` if one is found. Scope is exact — a pending org invitation does not block a project invitation for the same address. Revoking an invitation frees the scope for a fresh invite.
 
 **Project invitations**: Auto-add the user to the parent org as a viewer if not already a member.
+
+**Expiry is derived, never written**: `"expired"` is a legal value of the `status` column but nothing in the codebase writes it. Expiry is evaluated live against `expires_at` on every read and on accept. Clients that want to display it (see `apps/app/src/components/InvitationsTable.vue`) derive it themselves.
 
 ### Error Handling
 
@@ -201,14 +210,15 @@ DELETE `/api/orgs/:org_id/projects/:project_id/todos?ids=id1,id2,id3` — comma-
 
 ### Public (no authentication)
 
-| Method | Path                | Controller                          | Auth                | Rate Limit          |
-| ------ | ------------------- | ----------------------------------- | ------------------- | ------------------- |
-| GET    | `/health`           | Inline handler                      | No                  | No (before limiter) |
-| POST   | `/api/auth/signup`  | `authentication.signup`             | No                  | authLimiter         |
-| POST   | `/api/auth/signin`  | `authentication.signin`             | No                  | authLimiter         |
-| GET    | `/api/auth/me`      | `authentication.getMe`              | requireAccessToken  | authLimiter         |
-| POST   | `/api/auth/refresh` | `authentication.refreshAccessToken` | requireRefreshToken | authLimiter         |
-| POST   | `/api/auth/logout`  | `authentication.logout`             | requireRefreshToken | authLimiter         |
+| Method | Path                                      | Controller                          | Auth                | Rate Limit          |
+| ------ | ----------------------------------------- | ----------------------------------- | ------------------- | ------------------- |
+| GET    | `/health`                                 | Inline handler                      | No                  | No (before limiter) |
+| POST   | `/api/auth/signup`                        | `authentication.signup`             | No                  | authLimiter         |
+| POST   | `/api/auth/signin`                        | `authentication.signin`             | No                  | authLimiter         |
+| GET    | `/api/auth/me`                            | `authentication.getMe`              | requireAccessToken  | authLimiter         |
+| POST   | `/api/auth/refresh`                       | `authentication.refreshAccessToken` | requireRefreshToken | authLimiter         |
+| POST   | `/api/auth/logout`                        | `authentication.logout`             | requireRefreshToken | authLimiter         |
+| GET    | `/api/invitations/:invitation_id/preview` | `invitations.previewInvitation`     | No — token in query | generalLimiter      |
 
 ### Authenticated (requireAccessToken)
 
@@ -251,11 +261,12 @@ DELETE `/api/orgs/:org_id/projects/:project_id/todos?ids=id1,id2,id3` — comma-
 
 **Org Invitations:**
 
-| Method | Path                                           | Controller                        | Permission           |
-| ------ | ---------------------------------------------- | --------------------------------- | -------------------- |
-| POST   | `/api/orgs/:org_id/invitations`                | `invitations.createOrgInvitation` | `invitations:create` |
-| GET    | `/api/orgs/:org_id/invitations`                | `invitations.getOrgInvitations`   | `invitations:manage` |
-| DELETE | `/api/orgs/:org_id/invitations/:invitation_id` | `invitations.revokeInvitation`    | `invitations:manage` |
+| Method | Path                                                  | Controller                        | Permission           |
+| ------ | ----------------------------------------------------- | --------------------------------- | -------------------- |
+| POST   | `/api/orgs/:org_id/invitations`                       | `invitations.createOrgInvitation` | `invitations:create` |
+| GET    | `/api/orgs/:org_id/invitations`                       | `invitations.getOrgInvitations`   | `invitations:manage` |
+| DELETE | `/api/orgs/:org_id/invitations/:invitation_id`        | `invitations.revokeInvitation`    | `invitations:manage` |
+| POST   | `/api/orgs/:org_id/invitations/:invitation_id/resend` | `invitations.resendInvitation`    | `invitations:manage` |
 
 **Projects:**
 
@@ -294,31 +305,31 @@ DELETE `/api/orgs/:org_id/projects/:project_id/todos?ids=id1,id2,id3` — comma-
 
 ## Model Catalog
 
-| File                 | Exports                                                                                                               |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `users.js`           | `create`, `findOne`, `findOneWithPassword`, `incrementFailedAttempts`                                                 |
-| `refresh-tokens.js`  | `hashToken`, `create`, `findActiveByHash`, `revokeById`, `revokeAllForUser`, `purgeOld`                               |
-| `organizations.js`   | `create`, `findOne`, `findManyByUserId`, `update`, `remove`                                                           |
-| `org-members.js`     | `create`, `findOne`, `findManyByOrgId`, `findMemberWithPermissions`, `getPermissions`, `updateRole`, `remove`         |
-| `projects.js`        | `create`, `findOne`, `findManyByOrgId`, `findManyByUserId`, `update`, `remove`                                        |
-| `project-members.js` | `create`, `findOne`, `findManyByProjectId`, `getPermissions`, `updateRole`, `remove`                                  |
-| `roles.js`           | `create`, `findOne`, `findMany`, `update`, `remove`, `findPermissionsByRoleId`, `setPermissions`                      |
-| `permissions.js`     | `findAll`, `findOne`, `findByIds`                                                                                     |
-| `invitations.js`     | `hashToken`, `create`, `findOne`, `findManyByOrgId`, `findPendingByUserId`, `findPendingForScope`, `update`, `remove` |
-| `todos.js`           | `create`, `findOne`, `findMany`, `findManyPaginated`, `count`, `update`, `remove`, `removeMany`                       |
+| File                 | Exports                                                                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users.js`           | `create`, `findOne`, `findOneWithPassword`, `incrementFailedAttempts`                                                                                               |
+| `refresh-tokens.js`  | `hashToken`, `create`, `findActiveByHash`, `revokeById`, `revokeAllForUser`, `purgeOld`                                                                             |
+| `organizations.js`   | `create`, `findOne`, `findManyByUserId`, `update`, `remove`                                                                                                         |
+| `org-members.js`     | `create`, `findOne`, `findManyByOrgId`, `findMemberWithPermissions`, `getPermissions`, `updateRole`, `remove`                                                       |
+| `projects.js`        | `create`, `findOne`, `findManyByOrgId`, `findManyByUserId`, `update`, `remove`                                                                                      |
+| `project-members.js` | `create`, `findOne`, `findManyByProjectId`, `getPermissions`, `updateRole`, `remove`                                                                                |
+| `roles.js`           | `create`, `findOne`, `findMany`, `update`, `remove`, `findPermissionsByRoleId`, `setPermissions`                                                                    |
+| `permissions.js`     | `findAll`, `findOne`, `findByIds`                                                                                                                                   |
+| `invitations.js`     | `hashToken`, `create`, `findOne`, `findManyByOrgId`, `findPendingByUserId`, `findPendingForScope`, `findOneWithTokenHash`, `linkInviteeByEmail`, `update`, `remove` |
+| `todos.js`           | `create`, `findOne`, `findMany`, `findManyPaginated`, `count`, `update`, `remove`, `removeMany`                                                                     |
 
 ## Controller Catalog
 
-| File                | Exports                                                                                                                                                |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `authentication.js` | `signup`, `signin`, `getMe`, `refreshAccessToken`, `logout`                                                                                            |
-| `organizations.js`  | `createOrg`, `getOrgs`, `getOrg`, `updateOrg`, `deleteOrg`                                                                                             |
-| `projects.js`       | `createProject`, `getProjects`, `getProject`, `updateProject`, `deleteProject`                                                                         |
-| `todos.js`          | `requireTodoIdParam` (middleware), `getTodos`, `getTodo`, `createTodo`, `updateTodo`, `deleteTodo`, `deleteTodos`                                      |
-| `members.js`        | `getMembers`, `updateMemberRole`, `removeMember`                                                                                                       |
-| `roles.js`          | `createRole`, `getRoles`, `getRole`, `updateRole`, `deleteRole`                                                                                        |
-| `permissions.js`    | `getPermissions`                                                                                                                                       |
-| `invitations.js`    | `createOrgInvitation`, `createProjectInvitation`, `getOrgInvitations`, `getMyInvitations`, `acceptInvitation`, `declineInvitation`, `revokeInvitation` |
+| File                | Exports                                                                                                                                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authentication.js` | `signup`, `signin`, `getMe`, `refreshAccessToken`, `logout`                                                                                                                                     |
+| `organizations.js`  | `createOrg`, `getOrgs`, `getOrg`, `updateOrg`, `deleteOrg`                                                                                                                                      |
+| `projects.js`       | `createProject`, `getProjects`, `getProject`, `updateProject`, `deleteProject`                                                                                                                  |
+| `todos.js`          | `requireTodoIdParam` (middleware), `getTodos`, `getTodo`, `createTodo`, `updateTodo`, `deleteTodo`, `deleteTodos`                                                                               |
+| `members.js`        | `getMembers`, `updateMemberRole`, `removeMember`                                                                                                                                                |
+| `roles.js`          | `createRole`, `getRoles`, `getRole`, `updateRole`, `deleteRole`                                                                                                                                 |
+| `permissions.js`    | `getPermissions`                                                                                                                                                                                |
+| `invitations.js`    | `createOrgInvitation`, `createProjectInvitation`, `getOrgInvitations`, `getMyInvitations`, `previewInvitation`, `acceptInvitation`, `declineInvitation`, `revokeInvitation`, `resendInvitation` |
 
 ## Middleware Catalog
 
@@ -337,17 +348,19 @@ DELETE `/api/orgs/:org_id/projects/:project_id/todos?ids=id1,id2,id3` — comma-
 
 ## Utility Catalog
 
-| File              | Exports                                                                                  |
-| ----------------- | ---------------------------------------------------------------------------------------- |
-| `argon2.js`       | `hashPassword`, `verifyPassword`                                                         |
-| `jwt.js`          | `generateAccessToken`, `generateRefreshToken`, `verifyAccessToken`, `verifyRefreshToken` |
-| `http-error.js`   | `HttpError` (default)                                                                    |
-| `response.js`     | `apiResponse` (default)                                                                  |
-| `pagination.js`   | `validatePaginationQuery`, `buildPaginationMeta`, `executePaginatedQuery`                |
-| `sanitize.js`     | `escapeIlike`                                                                            |
-| `constant.js`     | `HTTP_STATUS_CODE`, `HTTP_STATUS_MESSAGE`                                                |
-| `logger.js`       | `logger` (default, Winston instance)                                                     |
-| `validate-env.js` | `validateEnv` (default)                                                                  |
+| File                     | Exports                                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------------------- |
+| `argon2.js`              | `hashPassword`, `verifyPassword`                                                         |
+| `jwt.js`                 | `generateAccessToken`, `generateRefreshToken`, `verifyAccessToken`, `verifyRefreshToken` |
+| `http-error.js`          | `HttpError` (default)                                                                    |
+| `response.js`            | `apiResponse` (default)                                                                  |
+| `pagination.js`          | `validatePaginationQuery`, `buildPaginationMeta`, `executePaginatedQuery`                |
+| `sanitize.js`            | `escapeIlike`                                                                            |
+| `constant.js`            | `HTTP_STATUS_CODE`, `HTTP_STATUS_MESSAGE`                                                |
+| `logger.js`              | `logger` (default, Winston instance)                                                     |
+| `validate-env.js`        | `validateEnv` (default)                                                                  |
+| `invitation-url.js`      | `buildInvitationAcceptUrl`                                                               |
+| `invitation-notifier.js` | `sendInvitationEmail` (the email seam — default implementation logs)                     |
 
 ## Code Style
 
@@ -362,13 +375,16 @@ DELETE `/api/orgs/:org_id/projects/:project_id/todos?ids=id1,id2,id3` — comma-
 
 Required: `DATABASE_URL`, `ACCESS_TOKEN_SECRET` (≥32 chars), `REFRESH_TOKEN_SECRET` (≥32 chars, must differ from ACCESS_TOKEN_SECRET), `JWT_ISSUER`, `JWT_AUDIENCE`
 
-Optional with defaults: `NODE_ENV` (development), `PORT` (3000), `ACCESS_TOKEN_EXPIRES_IN` (15m), `REFRESH_TOKEN_EXPIRES_IN` (7d), `LOG_LEVEL` (info), `LOG_TO_FILE` (true), `CORS_ALLOWED_ORIGINS` (http://localhost:8080), `RATE_LIMIT_AUTH_MAX` (10, capped at 50), `RATE_LIMIT_GENERAL_MAX` (100)
+Optional with defaults: `NODE_ENV` (development), `PORT` (3000), `ACCESS_TOKEN_EXPIRES_IN` (15m), `REFRESH_TOKEN_EXPIRES_IN` (7d), `LOG_LEVEL` (info), `LOG_TO_FILE` (true), `CORS_ALLOWED_ORIGINS` (http://localhost:8080), `APP_BASE_URL` (http://localhost:8080), `RATE_LIMIT_AUTH_MAX` (10, capped at 50), `RATE_LIMIT_GENERAL_MAX` (100)
+
+`APP_BASE_URL` is the public origin of the SPA and is the base of every invitation accept link. The default is only correct for `corepack pnpm dev`; it **must** be set explicitly in production (`https://app.<DOMAIN>`) or invitation links point at localhost. See [`docs/invitation-flow.md`](../../docs/invitation-flow.md) for per-environment values.
 
 ## Database
 
 - **Config**: `knexfile.js` — connection pool min 2, max 10
 - **Migrations**: `database/migrations/` — format `YYYYMMDDHHMMSS_name.js`
   - 11 migration files: users, organizations, permissions, roles, role_permissions, org_members, projects, project_members, invitations, todos, refresh_tokens
+  - `invitations.inviter_id` is `NOT NULL` with an `ON DELETE RESTRICT` FK — `SET NULL` would contradict the not-null constraint. Migrations never run automatically — apply them explicitly on every environment.
 - **Seeds**: `database/seeds/` — 9 seed files:
   - 01: 16 system permissions
   - 02: 5 test users (password: "secretpassword", unique emails used as login)

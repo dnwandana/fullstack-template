@@ -41,7 +41,7 @@ You can still run package-local commands from `apps/api` with `pnpm`.
 - **Flexible membership**: Users can belong to multiple organizations and multiple projects (GitHub-style model)
 - **Custom RBAC**: 4 built-in system roles (owner, admin, member, viewer) plus custom roles with granular permission assignment
 - **16 system permissions**: covering org management, project management, invitation management, and todo operations
-- **Invitation system**: Invite by email, 7-day token expiry, accept/decline flow; project invitations auto-add the invitee to the parent org as a viewer. A second pending invitation for the same email in the same scope is rejected with 400.
+- **Invitation system**: Invite by email, 7-day token expiry, accept/decline/revoke/resend flow; project invitations auto-add the invitee to the parent org as a viewer. A second pending invitation for the same email in the same scope is rejected with 400. Unregistered addresses can be invited — a public, token-gated preview endpoint lets a logged-out invitee see the invitation, and signup backfills the link between the new account and any invitations already waiting for its email. Email delivery is a single documented seam (`src/utils/invitation-notifier.js`); the template ships no mail provider.
 
 ### Database & Architecture
 
@@ -126,8 +126,11 @@ Create a `.env` file in the project root with the following variables:
 | `LOG_LEVEL`                | Logging level                        | `info`                  | No       |
 | `LOG_TO_FILE`              | Enable file logging                  | `true`                  | No       |
 | `CORS_ALLOWED_ORIGINS`     | Comma-separated allowed origins      | `http://localhost:8080` | No       |
+| `APP_BASE_URL`             | Public SPA origin for invite links   | `http://localhost:8080` | No\*     |
 | `RATE_LIMIT_AUTH_MAX`      | Auth endpoint rate limit (per 15min) | `10`                    | No       |
 | `RATE_LIMIT_GENERAL_MAX`   | Global rate limit (per 15min)        | `100`                   | No       |
+
+\* `APP_BASE_URL` has a default, but the default is only correct for local development. It is the base of every invitation accept link (`<APP_BASE_URL>/invite/:invitation_id?token=…`), so leaving it unset in production produces links pointing at `localhost`. Set it to `https://app.<DOMAIN>` in production and `http://localhost` for the local Docker stack. See [`docs/invitation-flow.md`](../../docs/invitation-flow.md).
 
 **Example DATABASE_URL:**
 
@@ -366,15 +369,17 @@ This template includes an OpenAPI 3.0 specification (`openapi.json`) that docume
 
 ### Invitation Endpoints
 
-| Method | Endpoint                                             | Description                 | Auth Required |
-| ------ | ---------------------------------------------------- | --------------------------- | ------------- |
-| POST   | `/api/orgs/:org_id/invitations`                      | Create org invitation       | Access Token  |
-| GET    | `/api/orgs/:org_id/invitations`                      | List org invitations        | Access Token  |
-| DELETE | `/api/orgs/:org_id/invitations/:invitation_id`       | Revoke invitation           | Access Token  |
-| POST   | `/api/orgs/:org_id/projects/:project_id/invitations` | Create project invitation   | Access Token  |
-| GET    | `/api/invitations`                                   | List my pending invitations | Access Token  |
-| POST   | `/api/invitations/:invitation_id/accept`             | Accept invitation           | Access Token  |
-| POST   | `/api/invitations/:invitation_id/decline`            | Decline invitation          | Access Token  |
+| Method | Endpoint                                              | Description                         | Auth Required       |
+| ------ | ----------------------------------------------------- | ----------------------------------- | ------------------- |
+| POST   | `/api/orgs/:org_id/invitations`                       | Create org invitation               | Access Token        |
+| GET    | `/api/orgs/:org_id/invitations`                       | List org invitations                | Access Token        |
+| DELETE | `/api/orgs/:org_id/invitations/:invitation_id`        | Revoke invitation                   | Access Token        |
+| POST   | `/api/orgs/:org_id/invitations/:invitation_id/resend` | Reissue invitation (new token/link) | Access Token        |
+| POST   | `/api/orgs/:org_id/projects/:project_id/invitations`  | Create project invitation           | Access Token        |
+| GET    | `/api/invitations`                                    | List my pending invitations         | Access Token        |
+| GET    | `/api/invitations/:invitation_id/preview?token=…`     | Preview an invitation (public)      | No — token in query |
+| POST   | `/api/invitations/:invitation_id/accept`              | Accept invitation                   | Access Token        |
+| POST   | `/api/invitations/:invitation_id/decline`             | Decline invitation                  | Access Token        |
 
 ### Permissions Endpoint
 
