@@ -337,3 +337,272 @@ describe("Duplicate pending invitations", () => {
     expect(projectRes.status).toBe(201)
   })
 })
+
+describe("Invitee backfill on signup", () => {
+  it("should surface a pre-signup invitation in GET /api/invitations after registering", async () => {
+    const inviter = await createTestUser()
+    const org = await createTestOrg(inviter.id)
+    const inviterHeaders = await getAuthHeaders(inviter.id)
+
+    await (
+      await request()
+    )
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set(inviterHeaders)
+      .send({ email: "backfill@test.com", role_id: org.roles.member })
+
+    await (await request()).post("/api/auth/signup").send({
+      name: "Backfill User",
+      email: "backfill@test.com",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
+    })
+
+    const signinRes = await (
+      await request()
+    )
+      .post("/api/auth/signin")
+      .send({ email: "backfill@test.com", password: "Testpass123!" })
+
+    const listRes = await (
+      await request()
+    )
+      .get("/api/invitations")
+      .set("Cookie", extractCookies(signinRes))
+
+    expect(listRes.status).toBe(200)
+    expect(listRes.body.data).toHaveLength(1)
+    expect(listRes.body.data[0].invitee_email).toBe("backfill@test.com")
+    expect(listRes.body.data[0].org_name).toBe(org.name)
+  })
+
+  it("should not link invitations belonging to a different email", async () => {
+    const inviter = await createTestUser()
+    const org = await createTestOrg(inviter.id)
+    const inviterHeaders = await getAuthHeaders(inviter.id)
+
+    await (
+      await request()
+    )
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set(inviterHeaders)
+      .send({ email: "someone-else@test.com", role_id: org.roles.member })
+
+    await (await request()).post("/api/auth/signup").send({
+      name: "Unrelated User",
+      email: "unrelated@test.com",
+      password: "Testpass123!",
+      confirmation_password: "Testpass123!",
+    })
+
+    const signinRes = await (
+      await request()
+    )
+      .post("/api/auth/signin")
+      .send({ email: "unrelated@test.com", password: "Testpass123!" })
+
+    const listRes = await (
+      await request()
+    )
+      .get("/api/invitations")
+      .set("Cookie", extractCookies(signinRes))
+
+    expect(listRes.body.data).toHaveLength(0)
+  })
+})
+
+describe("Public invitation preview", () => {
+  const createInvite = async (email) => {
+    const inviter = await createTestUser({ name: "Ada Lovelace" })
+    const org = await createTestOrg(inviter.id)
+    const headers = await getAuthHeaders(inviter.id)
+    const res = await (
+      await request()
+    )
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set(headers)
+      .send({ email, role_id: org.roles.member })
+    return { org, invitation: res.body.data }
+  }
+
+  it("should return invitation context without authentication", async () => {
+    const { org, invitation } = await createInvite("preview@test.com")
+
+    const res = await (
+      await request()
+    ).get(`/api/invitations/${invitation.id}/preview?token=${invitation.token}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.data.org_name).toBe(org.name)
+    expect(res.body.data.inviter_name).toBe("Ada Lovelace")
+    expect(res.body.data.role_name).toBe("member")
+    expect(res.body.data.invitee_email).toBe("preview@test.com")
+    expect(res.body.data.is_expired).toBe(false)
+    expect(res.body.data.requires_signup).toBe(true)
+  })
+
+  it("should never expose the token or its hash", async () => {
+    const { invitation } = await createInvite("preview2@test.com")
+
+    const res = await (
+      await request()
+    ).get(`/api/invitations/${invitation.id}/preview?token=${invitation.token}`)
+
+    expect(res.body.data.token).toBeUndefined()
+    expect(res.body.data.token_hash).toBeUndefined()
+  })
+
+  it("should 404 on a wrong token rather than confirming the invitation exists", async () => {
+    const { invitation } = await createInvite("preview3@test.com")
+
+    const res = await (
+      await request()
+    ).get(`/api/invitations/${invitation.id}/preview?token=${"a".repeat(64)}`)
+
+    expect(res.status).toBe(404)
+  })
+
+  it("should 400 on a malformed token", async () => {
+    const { invitation } = await createInvite("preview4@test.com")
+
+    const res = await (await request()).get(`/api/invitations/${invitation.id}/preview?token=nope`)
+
+    expect(res.status).toBe(400)
+  })
+
+  it("should keep the auth barrier intact for every other /api/invitations route", async () => {
+    const { invitation } = await createInvite("barrier@test.com")
+
+    const listRes = await (await request()).get("/api/invitations")
+    expect(listRes.status).toBe(401)
+
+    const acceptRes = await (
+      await request()
+    )
+      .post(`/api/invitations/${invitation.id}/accept`)
+      .send({ token: invitation.token })
+    expect(acceptRes.status).toBe(401)
+
+    const declineRes = await (await request()).post(`/api/invitations/${invitation.id}/decline`)
+    expect(declineRes.status).toBe(401)
+  })
+
+  it("should report requires_signup false when the invitee already has an account", async () => {
+    const existing = await createTestUser({ email: "existing@test.com" })
+    const { invitation } = await createInvite(existing.email)
+
+    const res = await (
+      await request()
+    ).get(`/api/invitations/${invitation.id}/preview?token=${invitation.token}`)
+
+    expect(res.body.data.requires_signup).toBe(false)
+  })
+})
+
+describe("Invitation accept URL", () => {
+  it("should return an accept_url containing the id and raw token", async () => {
+    const inviter = await createTestUser()
+    const org = await createTestOrg(inviter.id)
+    const headers = await getAuthHeaders(inviter.id)
+
+    const res = await (
+      await request()
+    )
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set(headers)
+      .send({ email: "url@test.com", role_id: org.roles.member })
+
+    const { id, token, accept_url: acceptUrl } = res.body.data
+    expect(acceptUrl).toContain(`/invite/${id}`)
+    expect(acceptUrl).toContain(`token=${token}`)
+  })
+})
+
+describe("Resend invitation", () => {
+  it("should issue a new token and invalidate the old one", async () => {
+    const inviter = await createTestUser()
+    const org = await createTestOrg(inviter.id)
+    const headers = await getAuthHeaders(inviter.id)
+
+    const createRes = await (
+      await request()
+    )
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set(headers)
+      .send({ email: "resend@test.com", role_id: org.roles.member })
+
+    const { id, token: oldToken } = createRes.body.data
+
+    const resendRes = await (
+      await request()
+    )
+      .post(`/api/orgs/${org.id}/invitations/${id}/resend`)
+      .set(headers)
+
+    expect(resendRes.status).toBe(200)
+    const newToken = resendRes.body.data.token
+    expect(newToken).toHaveLength(64)
+    expect(newToken).not.toBe(oldToken)
+    expect(resendRes.body.data.accept_url).toContain(`token=${newToken}`)
+
+    const oldPreview = await (
+      await request()
+    ).get(`/api/invitations/${id}/preview?token=${oldToken}`)
+    expect(oldPreview.status).toBe(404)
+
+    const newPreview = await (
+      await request()
+    ).get(`/api/invitations/${id}/preview?token=${newToken}`)
+    expect(newPreview.status).toBe(200)
+  })
+
+  it("should refuse to resend an invitation that is no longer pending", async () => {
+    const inviter = await createTestUser()
+    const invitee = await createTestUser({ email: "declines@test.com" })
+    const org = await createTestOrg(inviter.id)
+    const headers = await getAuthHeaders(inviter.id)
+    const inviteeHeaders = await getAuthHeaders(invitee.id)
+
+    const createRes = await (
+      await request()
+    )
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set(headers)
+      .send({ email: invitee.email, role_id: org.roles.member })
+
+    const { id } = createRes.body.data
+    await (await request()).post(`/api/invitations/${id}/decline`).set(inviteeHeaders)
+
+    const resendRes = await (
+      await request()
+    )
+      .post(`/api/orgs/${org.id}/invitations/${id}/resend`)
+      .set(headers)
+
+    expect(resendRes.status).toBe(400)
+  })
+
+  it("should not resend an invitation belonging to another org", async () => {
+    const inviterA = await createTestUser()
+    const inviterB = await createTestUser()
+    const orgA = await createTestOrg(inviterA.id)
+    const orgB = await createTestOrg(inviterB.id)
+    const headersA = await getAuthHeaders(inviterA.id)
+    const headersB = await getAuthHeaders(inviterB.id)
+
+    const createRes = await (
+      await request()
+    )
+      .post(`/api/orgs/${orgA.id}/invitations`)
+      .set(headersA)
+      .send({ email: "cross@test.com", role_id: orgA.roles.member })
+
+    const resendRes = await (
+      await request()
+    )
+      .post(`/api/orgs/${orgB.id}/invitations/${createRes.body.data.id}/resend`)
+      .set(headersB)
+
+    expect(resendRes.status).toBe(404)
+  })
+})
