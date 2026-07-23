@@ -1,0 +1,47 @@
+/**
+ * Application base styles and utility vocabulary.
+ *
+ * Loaded AFTER ant-design-vue/dist/reset.css and the design-system tokens.
+ * See main.js — that order is load-bearing.
+ */
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background: var(--surface-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--link);
+}
+
+a:hover {
+  color: var(--link-hover);
+}
+
+/* Identifiers: todo ids, project ids, permission keys, endpoint names. */
+.ds-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+/* Uppercase micro-label above a grouped section. */
+.ds-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-accent);
+}
+
+/* Tenant-scope mark. Teal is colorPrimary AND the tenant signal; scoped
+   elements carry this extra tint-and-border so they stay distinguishable
+   from ordinary primary chrome. See colors.css header. */
+.ds-tenant {
+  background: var(--teal-50);
+  border: 1px solid var(--tenant-border);
+}

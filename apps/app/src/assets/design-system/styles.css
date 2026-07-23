@@ -1,0 +1,12 @@
+/* ============================================================
+   Fullstack Template Design System — global entry point.
+   Consumers link THIS file. It only @imports the token layer
+   and the webfont declarations; every value below is a CSS
+   custom property or an @font-face rule.
+   ============================================================ */
+
+@import "./tokens/fonts.css";
+@import "./tokens/colors.css";
+@import "./tokens/typography.css";
+@import "./tokens/spacing.css";
+@import "./tokens/effects.css";

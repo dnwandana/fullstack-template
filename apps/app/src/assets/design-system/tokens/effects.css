@@ -1,0 +1,32 @@
+/* ============================================================
+   EFFECTS — radii, border widths, and a restrained shadow set.
+   This system is line-led: structure comes from hairline borders,
+   not heavy shadows. Shadows only lift floating elements (legends,
+   popovers, the sticky doc header).
+   ============================================================ */
+
+:root {
+  /* Radii — crisp corners for a technical read */
+  --radius-xs: 3px;
+  --radius-sm: 4px;   /* nodes, chips-square, fields */
+  --radius-md: 6px;   /* cards, entity tables */
+  --radius-lg: 8px;   /* artboards */
+  --radius-xl: 12px;  /* large panels */
+  --radius-pill: 999px;
+
+  /* Border widths */
+  --border-width-hairline: 1px;
+  --border-width: 1px;
+  --border-width-strong: 1.5px;
+  --border-width-heavy: 2px;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 1px rgba(14, 17, 20, 0.04);
+  --shadow-sm: 0 1px 2px rgba(14, 17, 20, 0.06), 0 1px 1px rgba(14, 17, 20, 0.04);
+  --shadow-md: 0 2px 6px rgba(14, 17, 20, 0.07), 0 1px 2px rgba(14, 17, 20, 0.05);
+  --shadow-lg: 0 8px 24px rgba(14, 17, 20, 0.10), 0 2px 6px rgba(14, 17, 20, 0.06);
+  --shadow-focus: 0 0 0 3px rgba(14, 124, 114, 0.18);
+
+  /* Dashed tenant boundary (used to fence tenant-scoped regions) */
+  --tenant-fence: 1.5px dashed var(--tenant-border);
+}

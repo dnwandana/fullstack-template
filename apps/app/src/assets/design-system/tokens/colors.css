@@ -1,0 +1,96 @@
+/* ============================================================
+   COLORS — muted graphite neutrals + a single teal accent.
+   The teal accent has ONE job in this system: it means
+   "tenant-scoped data" (org_id / project_id and everything
+   keyed by them). Never spend it on decoration.
+   Method / status colors are a subordinate semantic family.
+   ============================================================ */
+
+:root {
+  /* ---- Neutral graphite ramp ---- */
+  --gray-0:   #ffffff;
+  --gray-25:  #fafbfc; /* paper / artboard */
+  --gray-50:  #f4f6f8; /* canvas, subtle fill */
+  --gray-100: #eceff2; /* fill, layer bands */
+  --gray-150: #e3e7eb; /* hairline border */
+  --gray-200: #d6dbe0; /* default border */
+  --gray-300: #c0c7ce; /* strong border */
+  --gray-400: #98a1ab; /* faint text, disabled */
+  --gray-500: #6d7680; /* tertiary text */
+  --gray-600: #565f69; /* secondary text */
+  --gray-700: #3d454e; /* strong text */
+  --gray-800: #272d34; /* ink-soft, dark blocks */
+  --gray-900: #171b20; /* ink */
+  --gray-950: #0e1114; /* ink-strong */
+
+  /* ---- Teal accent = tenant-scoped ---- */
+  --teal-50:  #eef7f5;
+  --teal-100: #d7ece9;
+  --teal-200: #aed9d3;
+  --teal-300: #74bcb3;
+  --teal-400: #2a978c;
+  --teal-500: #0e7c72; /* accent */
+  --teal-600: #0a655d; /* accent-strong */
+  --teal-700: #084f49;
+  --teal-800: #063a36;
+
+  /* ---- Semantic hues (muted, subordinate) ---- */
+  --blue-100:  #e6edf6;  --blue-500:  #2f6bb0;  --blue-700:  #244f83; /* GET / read / info */
+  --green-100: #e4f0ea;  --green-500: #2f855a;  --green-700: #216344; /* POST / create / done */
+  --amber-100: #f6edda;  --amber-500: #b5791d;  --amber-700: #8a5c15; /* PUT / update / pending */
+  --red-100:   #f5e5e5;  --red-500:   #c14444;  --red-700:   #973232; /* DELETE / danger / expired */
+
+  /* ============================================================
+     SEMANTIC ALIASES
+     ============================================================ */
+
+  /* Surfaces */
+  --surface-desk:   #e8ebee; /* backdrop behind artboards */
+  --surface-page:   var(--gray-25);
+  --surface-card:   var(--gray-0);
+  --surface-subtle: var(--gray-50);
+  --surface-sunken: var(--gray-100);
+  --surface-ink:    var(--gray-900);
+
+  /* Borders */
+  --border-hairline: var(--gray-150);
+  --border-default:  var(--gray-200);
+  --border-strong:   var(--gray-300);
+  --border-ink:      var(--gray-800);
+
+  /* Text */
+  --text-primary:   var(--gray-900);
+  --text-secondary: var(--gray-600);
+  --text-muted:     var(--gray-500);
+  --text-faint:     var(--gray-400);
+  --text-inverse:   var(--gray-25);
+  --text-accent:    var(--teal-600);
+
+  /* Accent + the tenant-scoped meaning */
+  --accent:            var(--teal-500);
+  --accent-strong:     var(--teal-600);
+  --accent-tint:       var(--teal-100);
+  --accent-tint-soft:  var(--teal-50);
+  --tenant:            var(--teal-500);
+  --tenant-strong:     var(--teal-600);
+  --tenant-tint:       var(--teal-100);
+  --tenant-tint-soft:  var(--teal-50);
+  --tenant-border:     var(--teal-300);
+
+  /* HTTP method colors */
+  --method-get:         var(--blue-500);   --method-get-tint:    var(--blue-100);
+  --method-post:        var(--green-500);  --method-post-tint:   var(--green-100);
+  --method-put:         var(--amber-500);  --method-put-tint:    var(--amber-100);
+  --method-delete:      var(--red-500);    --method-delete-tint: var(--red-100);
+
+  /* Status */
+  --status-success: var(--green-500); --status-success-tint: var(--green-100);
+  --status-warning: var(--amber-500); --status-warning-tint: var(--amber-100);
+  --status-danger:  var(--red-500);   --status-danger-tint:  var(--red-100);
+  --status-info:    var(--blue-500);  --status-info-tint:    var(--blue-100);
+  --status-neutral: var(--gray-400);  --status-neutral-tint: var(--gray-100);
+
+  /* Links */
+  --link:       var(--teal-600);
+  --link-hover: var(--teal-700);
+}

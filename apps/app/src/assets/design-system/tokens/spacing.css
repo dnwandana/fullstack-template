@@ -1,0 +1,28 @@
+/* ============================================================
+   SPACING — 4px base grid. Diagrams breathe on multiples of 8.
+   ============================================================ */
+
+:root {
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+  --space-11: 80px;
+  --space-12: 96px;
+
+  /* Semantic spacing */
+  --gap-chip: var(--space-1);        /* between micro chips */
+  --gap-tight: var(--space-2);       /* inside nodes */
+  --gap-node: var(--space-4);        /* between nodes in a row */
+  --gap-group: var(--space-6);       /* between diagram groups */
+  --gap-section: var(--space-10);    /* between artboards */
+  --pad-node: var(--space-4);        /* node interior padding */
+  --pad-artboard: var(--space-9);    /* artboard interior padding */
+}
