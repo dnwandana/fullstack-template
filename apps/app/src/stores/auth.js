@@ -95,8 +95,27 @@ export const useAuthStore = defineStore("auth", () => {
     } catch {
       // Best-effort — always clear local state even if API call fails
     }
+
+    // Clear local session state before attempting the tenant cache clear
+    // below. If the dynamic import rejects (e.g. a chunk fetch failure after
+    // a redeploy) or the store's own clear() throws, local teardown — and the
+    // caller's post-logout navigation, since this function must not reject —
+    // must still happen. Otherwise the user stays "logged in" client-side
+    // against cookies the server just invalidated.
     clearUserData()
     user.value = null
+
+    try {
+      // Imported at call time, not at module scope: stores/tenant.js imports the
+      // router singleton and router/index.js imports this store, so a static
+      // import here would close a module cycle.
+      const { useTenantStore } = await import("@/stores/tenant")
+      useTenantStore().clear()
+    } catch {
+      // Best-effort — a stale tenant cache is a lesser problem than a client
+      // that still thinks it is signed in.
+    }
+
     message.success("Logged out successfully")
   }
 

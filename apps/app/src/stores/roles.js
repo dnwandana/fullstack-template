@@ -1,5 +1,5 @@
 /**
- * Roles store - manages roles, permissions, and user permission state
+ * Roles store - manages roles and the org's permission catalog
  */
 
 import { defineStore } from "pinia"
@@ -13,14 +13,13 @@ import {
   deleteRole as apiDeleteRole,
 } from "@/api/roles"
 import { getPermissions as apiGetPermissions } from "@/api/permissions"
-import { getOrgMembers as apiGetOrgMembers } from "@/api/orgMembers"
+import { useTenantStore } from "@/stores/tenant"
 
 export const useRolesStore = defineStore("roles", () => {
   // State
   const roles = ref([])
   const currentRole = ref(null)
   const allPermissions = ref([])
-  const userPermissions = ref([])
   const loading = ref(false)
 
   // Actions
@@ -105,6 +104,12 @@ export const useRolesStore = defineStore("roles", () => {
       message.success("Role updated successfully!")
       // Refresh the roles list to reflect the changes
       await fetchRoles(orgId)
+      // The role's own permission set may have just changed under any member
+      // who holds it, including the current user. This store has no
+      // visibility into who holds which role, so invalidate the org's cached
+      // permissions unconditionally rather than leave `can()` answering from
+      // a stale set until a hard refresh.
+      useTenantStore().invalidatePermissions(orgId)
       return response.data
     } catch {
       // Axios interceptor handles error display
@@ -154,44 +159,6 @@ export const useRolesStore = defineStore("roles", () => {
   }
 
   /**
-   * Load the current user's permissions for a specific organization
-   * This resolves the user's role within the org and extracts permission name strings.
-   * Used to drive permission-based UI rendering (e.g., showing/hiding admin features).
-   * @param {string} orgId - Organization UUID
-   * @param {string} userId - User UUID of the current user
-   * @returns {Promise<void>}
-   */
-  async function loadUserPermissions(orgId, userId) {
-    loading.value = true
-    try {
-      // Step 1: Fetch all org members to find the current user's membership
-      const membersResponse = await apiGetOrgMembers(orgId)
-      const members = membersResponse.data.data
-
-      // Step 2: Find the member entry that matches the given userId
-      const member = members.find((m) => m.user_id === userId)
-
-      if (!member) {
-        // User is not a member of this org, so they have no permissions
-        userPermissions.value = []
-        return
-      }
-
-      // Step 3: Fetch the full role details (including permissions) for the member's role
-      const roleResponse = await apiGetRole(orgId, member.role_id)
-      const role = roleResponse.data.data
-
-      // Step 4: Extract permission name strings from the role's permissions array
-      userPermissions.value = role.permissions.map((p) => p.name)
-    } catch {
-      // On any failure, reset permissions to empty to prevent stale access
-      userPermissions.value = []
-    } finally {
-      loading.value = false
-    }
-  }
-
-  /**
    * Clear roles and currentRole state
    * Used when navigating away from an org context to avoid stale data
    */
@@ -200,20 +167,11 @@ export const useRolesStore = defineStore("roles", () => {
     currentRole.value = null
   }
 
-  /**
-   * Clear user permissions state
-   * Used when switching orgs or logging out to prevent stale permission checks
-   */
-  function clearUserPermissions() {
-    userPermissions.value = []
-  }
-
   return {
     // State
     roles,
     currentRole,
     allPermissions,
-    userPermissions,
     loading,
     // Actions
     fetchRoles,
@@ -222,8 +180,6 @@ export const useRolesStore = defineStore("roles", () => {
     updateRole,
     deleteRole,
     fetchAllPermissions,
-    loadUserPermissions,
     clearRoles,
-    clearUserPermissions,
   }
 })

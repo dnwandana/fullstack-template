@@ -15,6 +15,8 @@ import {
   updateProjectMemberRole as apiUpdateProjectMemberRole,
   removeProjectMember as apiRemoveProjectMember,
 } from "@/api/projectMembers"
+import { useAuthStore } from "@/stores/auth"
+import { useTenantStore } from "@/stores/tenant"
 
 export const useMembersStore = defineStore("members", () => {
   // State
@@ -57,6 +59,12 @@ export const useMembersStore = defineStore("members", () => {
       message.success("Member role updated successfully!")
       // Refresh the org members list to reflect the role change
       await fetchOrgMembers(orgId)
+      // Only the affected member's own permission view can be stale — do not
+      // invalidate every other signed-in member's session over someone else's
+      // role change.
+      if (userId === useAuthStore().user?.id) {
+        useTenantStore().invalidatePermissions(orgId)
+      }
       return response.data
     } catch {
       // Axios interceptor handles error display
@@ -122,6 +130,12 @@ export const useMembersStore = defineStore("members", () => {
       message.success("Member role updated successfully!")
       // Refresh the project members list to reflect the role change
       await fetchProjectMembers(orgId, projectId)
+      // Roles are org-scoped even when assigned to a project member (see
+      // ProjectMembersView), so the invalidation target is still the org's
+      // cached permissions — only when the affected member is the caller.
+      if (userId === useAuthStore().user?.id) {
+        useTenantStore().invalidatePermissions(orgId)
+      }
       return response.data
     } catch {
       // Axios interceptor handles error display
