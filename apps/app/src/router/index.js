@@ -4,9 +4,14 @@
  * Route hierarchy:
  *   /orgs                                    — list organizations
  *   /orgs/:orgId                             — list projects within an org
- *   /orgs/:orgId/settings                    — org settings (members, roles, invitations)
+ *   /orgs/:orgId/members                     — org members
+ *   /orgs/:orgId/roles                       — org roles and permissions
+ *   /orgs/:orgId/invitations                 — invitations sent for the org
+ *   /orgs/:orgId/settings                    — org general settings
  *   /orgs/:orgId/projects/:projectId         — list todos within a project
  *   /orgs/:orgId/projects/:projectId/todos/:id — single todo detail
+ *   /orgs/:orgId/projects/:projectId/members   — project members
+ *   /orgs/:orgId/projects/:projectId/invitations — invitations for the project
  *   /orgs/:orgId/projects/:projectId/settings — project settings
  *   /invitations                             — current user's pending invitations
  *   /invite/:invitationId                    — public invite landing page (?token=)
@@ -15,10 +20,40 @@
  *   - Routes with `requiresAuth` redirect unauthenticated users to /login.
  *   - Routes with `requiresGuest` redirect authenticated users to /orgs.
  *   - Routes with neither flag are public and reachable in any session state.
+ *
+ * Permissions:
+ *   - `meta.permission` names the permission a route requires. SideNav hides
+ *     nav items whose permission the user lacks. Route-level ENFORCEMENT is
+ *     not implemented yet — the field is declarative in this release.
  */
 
 import { createRouter, createWebHistory } from "vue-router"
 import { useAuthStore } from "@/stores/auth"
+
+/**
+ * Build a `beforeEnter` guard that upgrades legacy `?tab=` links to real routes.
+ *
+ * A `redirect` function cannot do this: it must always return a location, but
+ * `?tab=general` and unrecognised values have to fall through to the settings
+ * page itself. Returning `undefined` from a guard is the only way to say
+ * "proceed unchanged".
+ *
+ * @param {Record<string, string>} tabRoutes - tab query value → target route name
+ * @returns {import('vue-router').NavigationGuard}
+ */
+function redirectLegacyTab(tabRoutes) {
+  return (to) => {
+    const target = tabRoutes[to.query.tab]
+    if (target) {
+      return { name: target, params: to.params }
+    }
+    if (to.query.tab) {
+      // Recognised page, unrecognised tab: strip the query so the URL is clean.
+      // The redirected navigation has no `tab`, so this guard no-ops second time.
+      return { name: to.name, params: to.params, query: {} }
+    }
+  }
+}
 
 /** @type {import('vue-router').RouteRecordRaw[]} */
 const routes = [
@@ -53,13 +88,39 @@ const routes = [
     path: "/orgs/:orgId",
     name: "ProjectsList",
     component: () => import("@/views/projects/ProjectsListView.vue"),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, permission: "project:read" },
+  },
+  {
+    path: "/orgs/:orgId/members",
+    name: "OrgMembers",
+    component: () => import("@/views/orgs/OrgMembersView.vue"),
+    meta: { requiresAuth: true, permission: "org:read" },
+  },
+  {
+    // Roles gate on org:read, not org:manage_roles — GET /orgs/:org_id/roles
+    // requires only org:read (apps/api/src/routes/roles.js:21). Editing is
+    // gated separately, in-template, on org:manage_roles.
+    path: "/orgs/:orgId/roles",
+    name: "OrgRoles",
+    component: () => import("@/views/orgs/OrgRolesView.vue"),
+    meta: { requiresAuth: true, permission: "org:read" },
+  },
+  {
+    path: "/orgs/:orgId/invitations",
+    name: "OrgInvitations",
+    component: () => import("@/views/orgs/OrgInvitationsView.vue"),
+    meta: { requiresAuth: true, permission: "invitations:manage" },
   },
   {
     path: "/orgs/:orgId/settings",
     name: "OrgSettings",
     component: () => import("@/views/settings/OrgSettingsView.vue"),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, permission: "org:update" },
+    beforeEnter: redirectLegacyTab({
+      members: "OrgMembers",
+      roles: "OrgRoles",
+      invitations: "OrgInvitations",
+    }),
   },
 
   // ── Project routes (scoped within an organization) ───────────────────
@@ -67,19 +128,35 @@ const routes = [
     path: "/orgs/:orgId/projects/:projectId",
     name: "TodosList",
     component: () => import("@/views/todos/TodosListView.vue"),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, permission: "todos:read" },
   },
   {
     path: "/orgs/:orgId/projects/:projectId/todos/:id",
     name: "TodoDetail",
     component: () => import("@/views/todos/TodoDetailView.vue"),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, permission: "todos:read" },
+  },
+  {
+    path: "/orgs/:orgId/projects/:projectId/members",
+    name: "ProjectMembers",
+    component: () => import("@/views/projects/ProjectMembersView.vue"),
+    meta: { requiresAuth: true, permission: "project:read" },
+  },
+  {
+    path: "/orgs/:orgId/projects/:projectId/invitations",
+    name: "ProjectInvitations",
+    component: () => import("@/views/projects/ProjectInvitationsView.vue"),
+    meta: { requiresAuth: true, permission: "invitations:manage" },
   },
   {
     path: "/orgs/:orgId/projects/:projectId/settings",
     name: "ProjectSettings",
     component: () => import("@/views/settings/ProjectSettingsView.vue"),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, permission: "project:update" },
+    beforeEnter: redirectLegacyTab({
+      members: "ProjectMembers",
+      invitations: "ProjectInvitations",
+    }),
   },
 
   // ── User invitations ────────────────────────────────────────────────
