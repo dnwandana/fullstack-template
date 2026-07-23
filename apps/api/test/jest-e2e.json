@@ -7,5 +7,7 @@
   "setupFiles": ["<rootDir>/test/load-test-env.ts"],
   "globalSetup": "<rootDir>/test/setup-e2e.ts",
   "testTimeout": 30000,
-  "maxWorkers": 1
+  "maxWorkers": 1,
+  "collectCoverageFrom": ["src/**/*.ts", "!src/**/*.module.ts", "!src/main.ts", "!src/**/dto/*.ts"],
+  "coverageDirectory": "<rootDir>/coverage"
 }

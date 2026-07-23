@@ -20,7 +20,8 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "test": "jest --config test/jest-e2e.json",
-    "test:watch": "jest --config test/jest-e2e.json --watch"
+    "test:watch": "jest --config test/jest-e2e.json --watch",
+    "test:cov": "jest --config test/jest-e2e.json --coverage"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
