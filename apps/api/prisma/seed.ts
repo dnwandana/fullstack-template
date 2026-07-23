@@ -24,8 +24,8 @@ export const PERMISSION_NAMES = [
 
 export type PermissionName = (typeof PERMISSION_NAMES)[number]
 
-// Descriptions copied verbatim from the pre-Prisma Knex seed
-// (database/seeds/01_permissions.js) to preserve the original wording.
+// Descriptions copied verbatim from the original pre-Prisma Knex seed
+// (since removed) to preserve the exact wording.
 const PERMISSION_DESCRIPTIONS: Record<PermissionName, string> = {
   "org:read": "View organization details and settings",
   "org:update": "Update organization name, description, and settings",

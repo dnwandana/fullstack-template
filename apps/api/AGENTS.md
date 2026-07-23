@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Multi-tenant **NestJS 11** RESTful API with an Organization → Project → Resource hierarchy, PostgreSQL via **Prisma**, JWT authentication over httpOnly cookies, and RBAC permissions. TypeScript compiled to CommonJS (`nest build` → `dist/`), Node.js v24+ (pinned in `.nvmrc`).
 
-Migration provenance and every deviation from the old Express/Knex contract are recorded in [`MIGRATION-NOTES.md`](MIGRATION-NOTES.md).
-
 ## Commands
 
 ```bash
@@ -152,7 +150,7 @@ The same 16 permission names (with descriptions) are seeded by `prisma/seed.ts` 
 Invite by email, 7-day expiry, accept/decline/revoke/resend. Tokens are hashed (SHA-256) — only the hash (`token_hash`) is stored; the raw token is returned only at create/resend so an admin can deliver the link by hand (no mail provider ships — `InvitationNotifierService` is the seam; the accept URL is built by `invitation-url.ts`).
 
 - **Public preview**: `GET /api/invitations/:invitation_id/preview?token=<64hex>` is `@Public()` — a logged-out invitee can see what they were invited to. Possession of the raw token is the only credential; `404` for both an unknown invitation and a wrong token (no enumeration). Returns `{ id, org_name, project_name, inviter_name, role_name, invitee_email, status, expires_at, is_expired, requires_signup }`.
-- **Accept**: `POST /api/invitations/:invitation_id/accept` is **authenticated** and takes **no token body** (see the deviation in `MIGRATION-NOTES.md`). Ownership is proven by the logged-in user's id/email matching `invitee_id`/`invitee_email`. Uses `SELECT … FOR UPDATE` inside a transaction to serialize concurrent accepts. Project invitations auto-add the user to the parent org as `viewer` if not already a member.
+- **Accept**: `POST /api/invitations/:invitation_id/accept` is **authenticated** and takes **no token body**. Ownership is proven by the logged-in user's id/email matching `invitee_id`/`invitee_email`. Uses `SELECT … FOR UPDATE` inside a transaction to serialize concurrent accepts. Project invitations auto-add the user to the parent org as `viewer` if not already a member.
 - **Pending-account invitations**: inviting an unregistered address is valid (no 404). Signup backfills `invitee_id` on matching pending/unexpired invitations so they appear in `GET /api/invitations`.
 - **Duplicate prevention**: a pending invitation for the same `(invitee_email, org_id, project_id)` scope is rejected with `400 "A pending invitation already exists for this email"`.
 - **Expiry is derived, never written** — evaluated live against `expires_at`.
@@ -285,7 +283,6 @@ Optional with defaults: `NODE_ENV` (development), `PORT` (3000), `ACCESS_TOKEN_E
 - **Schema**: `prisma/schema.prisma` — 11 domain models introspected from the original Knex schema (`@map`/`@@map` keep the DB snake_case). `DATABASE_URL` drives the connection.
 - **Migrations**: `prisma/migrations/` — `prisma migrate deploy` (prod) / `prisma migrate dev` (dev). Never automatic.
 - **Seed**: `prisma/seed.ts` — idempotent upsert of the 16 canonical permissions (`prisma db seed`).
-- The pre-Prisma Knex migrations under `database/migrations/` are kept **read-only as provenance** (the Prisma baseline was introspected from the schema they produced); the Knex `database/seeds/` are removed, superseded by `prisma/seed.ts`.
 
 ## Testing
 
