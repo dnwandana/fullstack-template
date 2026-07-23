@@ -1,0 +1,11 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": "(\\.e2e-spec|\\.spec)\\.ts$",
+  "transform": { "^.+\\.(t|j)s$": "ts-jest" },
+  "setupFiles": ["<rootDir>/test/load-test-env.ts"],
+  "globalSetup": "<rootDir>/test/setup-e2e.ts",
+  "testTimeout": 30000,
+  "maxWorkers": 1
+}
