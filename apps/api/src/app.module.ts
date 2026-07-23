@@ -9,6 +9,13 @@ import { validate } from "./config/env.validation"
 import { HealthModule } from "./health/health.module"
 import { UsersModule } from "./users/users.module"
 import { AuthModule } from "./auth/auth.module"
+import { PermissionsModule } from "./permissions/permissions.module"
+import { OrgsModule } from "./orgs/orgs.module"
+import { RolesModule } from "./roles/roles.module"
+import { MembersModule } from "./members/members.module"
+import { ProjectsModule } from "./projects/projects.module"
+import { TodosModule } from "./todos/todos.module"
+import { InvitationsModule } from "./invitations/invitations.module"
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard"
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor"
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter"
@@ -45,6 +52,13 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter"
     HealthModule,
     UsersModule,
     AuthModule,
+    PermissionsModule,
+    OrgsModule,
+    RolesModule,
+    MembersModule,
+    ProjectsModule,
+    TodosModule,
+    InvitationsModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },

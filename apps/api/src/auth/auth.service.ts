@@ -1,12 +1,14 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config"
 import { Response } from "express"
 import { UsersService } from "../users/users.service"
+import { InvitationsService } from "../invitations/invitations.service"
 import { PasswordService } from "./password.service"
 import { TokenService } from "./token.service"
 import { RefreshTokenService } from "./refresh-token.service"
@@ -21,8 +23,11 @@ type SafeUser = { id: string; name: string; email: string }
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name)
+
   constructor(
     private readonly users: UsersService,
+    private readonly invitations: InvitationsService,
     private readonly passwords: PasswordService,
     private readonly tokens: TokenService,
     private readonly refreshTokens: RefreshTokenService,
@@ -35,7 +40,21 @@ export class AuthService {
     if (existing) throw new BadRequestException("user with the given email already exists")
     try {
       const hashed = await this.passwords.hash(dto.password)
-      return await this.users.create({ name: dto.name, email: dto.email, password: hashed })
+      const created = await this.users.create({
+        name: dto.name,
+        email: dto.email,
+        password: hashed,
+      })
+      try {
+        await this.invitations.linkInviteeByEmail(dto.email, created.id)
+      } catch (backfillErr) {
+        // best-effort backfill — swallow (matches Express behavior); never turns a
+        // successful signup into a 500. Logged so a broken backfill is diagnosable.
+        this.logger.warn(
+          `invitation backfill failed for user ${created.id}: ${(backfillErr as Error).message}`,
+        )
+      }
+      return created
     } catch (err) {
       if ((err as { code?: string })?.code === "P2002") {
         throw new BadRequestException("user with the given email already exists")
