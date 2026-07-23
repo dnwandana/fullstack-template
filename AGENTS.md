@@ -6,19 +6,19 @@ Monorepo root guidance. Each app has its own detailed `CLAUDE.md` — this file 
 
 - **Package manager**: pnpm with Corepack (`corepack pnpm <command>`)
 - **Build orchestration**: Turborepo (`turbo.json`)
-- **Packages**: `apps/api` (Express), `apps/app` (Vue 3)
+- **Packages**: `apps/api` (NestJS 11 + Prisma, TypeScript → `dist/`), `apps/app` (Vue 3)
 
 ## Root commands
 
 ```bash
-corepack pnpm dev           # Start both apps (nodemon + Vite)
+corepack pnpm dev           # Start both apps (nest --watch + Vite)
 corepack pnpm dev:api       # API only  (port 3000)
 corepack pnpm dev:app       # App only  (port 8080)
 corepack pnpm build         # Build both
 corepack pnpm lint          # Lint both
 corepack pnpm format        # Format both (Prettier)
 corepack pnpm test          # Test both apps
-corepack pnpm test:api      # Vitest + Supertest against real PostgreSQL
+corepack pnpm test:api      # Jest (e2e) against real PostgreSQL
 corepack pnpm test:app      # Vitest + jsdom + @vue/test-utils
 ```
 
@@ -26,9 +26,9 @@ corepack pnpm test:app      # Vitest + jsdom + @vue/test-utils
 
 - **Auth cookies**: `access_token` and `refresh_token` — httpOnly, Secure, SameSite=Strict cookies set by the server
 - **Multi-tenancy**: Shared database, tenant isolation via `org_id`/`project_id` columns
-- **RBAC**: `requirePermission(name)` middleware, permissions resolved on `req.permissions`
+- **RBAC**: `@RequirePermission(name)` decorator enforced by `PermissionsGuard`; resolved permissions live on `req.permissions`
 - **Request context**: `req.id` (request ID), `req.user`, `req.org`, `req.project`, `req.permissions`
-- **Error handling**: Controllers throw `HttpError(status, msg)`, caught by centralized `errorHandler`
+- **Error handling**: Controllers/services throw NestJS `HttpException`s, caught by the global `AllExceptionsFilter` → `{ message, data: null }`
 - **Env validation**: API fails fast at startup if required vars are missing (expected behavior)
 
 ## App-specific details
@@ -70,6 +70,6 @@ docker compose -f docker-compose.local.yml down
 ### Common facts
 
 - `app` container: nginx serves Vue static files only in production (no `/api` proxying — the edge nginx routes `api.<DOMAIN>` straight to the `api` container); in local dev it still proxies `/api` and `/health` since `docker-compose.local.yml` stays single-origin
-- `api` container: Express.js, no host port published, only reachable as `http://api:3000` inside Docker network
-- In production, the edge nginx strips the `/api` prefix from both the proxied path and `Set-Cookie` paths (`proxy_cookie_path`), so `api.<DOMAIN>` presents clean URLs while `apps/api/src/app.js` still mounts routes at `/api` unmodified
-- Migrations do **not** run automatically — run manually: `docker compose [-f docker-compose.local.yml] run --rm api sh -c "node_modules/.bin/knex migrate:latest"`
+- `api` container: NestJS (Node, runs `node dist/main`), no host port published, only reachable as `http://api:3000` inside Docker network
+- In production, the edge nginx strips the `/api` prefix from both the proxied path and `Set-Cookie` paths (`proxy_cookie_path`), so `api.<DOMAIN>` presents clean URLs while the API still mounts routes at `/api` unmodified via `setGlobalPrefix("api", { exclude: ["health"] })` in `apps/api/src/bootstrap.ts` (`/health` stays outside the prefix)
+- Migrations do **not** run automatically — run manually: `docker compose [-f docker-compose.local.yml] run --rm api sh -c "node_modules/.bin/prisma migrate deploy"`

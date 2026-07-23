@@ -1,12 +1,12 @@
 # Fullstack Template
 
-A production-ready monorepo for building multi-tenant SaaS applications. Combines a secure Express.js REST API with a Vue 3 SPA, wired together with JWT authentication, RBAC, an invitation system, and a full Organization → Project → Resource hierarchy.
+A production-ready monorepo for building multi-tenant SaaS applications. Combines a secure NestJS REST API with a Vue 3 SPA, wired together with JWT authentication, RBAC, an invitation system, and a full Organization → Project → Resource hierarchy.
 
 ## What's inside
 
 | App        | Stack                              | Purpose                                 |
 | ---------- | ---------------------------------- | --------------------------------------- |
-| `apps/api` | Express 5, PostgreSQL, Knex.js     | REST API with auth, RBAC, multi-tenancy |
+| `apps/api` | NestJS 11, PostgreSQL, Prisma      | REST API with auth, RBAC, multi-tenancy |
 | `apps/app` | Vue 3, Pinia, Ant Design Vue, Vite | Single-page app consuming the API       |
 
 ## Architecture at a glance
@@ -84,13 +84,15 @@ VITE_API_BASE_URL=http://localhost:3000/api
 
 ## Database setup
 
-Run migrations and (optional) seed data:
+Run Prisma migrations and (optional) seed data:
 
 ```bash
 cd apps/api
-npm run migrate
-npm run seed      # loads test users, orgs, projects, ~250 todos
+npm run db:migrate   # prisma migrate deploy
+npm run db:seed      # prisma db seed — inserts the 16 canonical permissions idempotently
 ```
+
+Migrations never run automatically — apply them explicitly on every environment.
 
 ## Development
 
@@ -105,13 +107,13 @@ corepack pnpm dev:app   # http://localhost:8080
 
 ## Scripts
 
-| Command       | Description                        |
-| ------------- | ---------------------------------- |
-| `pnpm dev`    | Start both apps in watch mode      |
-| `pnpm build`  | Build both apps                    |
-| `pnpm lint`   | Lint both apps                     |
-| `pnpm test`   | Run all tests (API + app)          |
-| `pnpm format` | Format both apps with Prettier     |
+| Command       | Description                    |
+| ------------- | ------------------------------ |
+| `pnpm dev`    | Start both apps in watch mode  |
+| `pnpm build`  | Build both apps                |
+| `pnpm lint`   | Lint both apps                 |
+| `pnpm test`   | Run all tests (API + app)      |
+| `pnpm format` | Format both apps with Prettier |
 
 Append `:api` or `:app` to target a single workspace (e.g. `pnpm test:api`).
 
@@ -119,12 +121,12 @@ Append `:api` or `:app` to target a single workspace (e.g. `pnpm test:api`).
 
 ### Authentication endpoints (public)
 
-| Method | Path                | Description                                           |
-| ------ | ------------------- | ----------------------------------------------------- |
-| POST   | `/api/auth/signup`  | Register — returns `{ id, name, email }`              |
-| POST   | `/api/auth/signin`  | Login — sets httpOnly auth cookies, returns user info |
-| POST   | `/api/auth/refresh` | Rotate tokens via httpOnly cookie                     |
-| POST   | `/api/auth/logout`  | Revoke refresh token, clear cookies                   |
+| Method | Path                                              | Description                                                                   |
+| ------ | ------------------------------------------------- | ----------------------------------------------------------------------------- |
+| POST   | `/api/auth/signup`                                | Register — returns `{ id, name, email }`                                      |
+| POST   | `/api/auth/signin`                                | Login — sets httpOnly auth cookies, returns user info                         |
+| POST   | `/api/auth/refresh`                               | Rotate tokens via httpOnly cookie                                             |
+| POST   | `/api/auth/logout`                                | Revoke refresh token, clear cookies                                           |
 | GET    | `/api/invitations/:invitation_id/preview?token=…` | Preview an invitation while logged out — the raw token is the only credential |
 
 ### Protected endpoints (authenticated via httpOnly `access_token` cookie)
@@ -152,7 +154,7 @@ POST /api/orgs/:org_id/roles                       # Create custom role
 Health check (no auth, not rate-limited):
 
 ```
-GET /health    # { status, uptime, database } (production omits uptime/database)
+GET /health    # { status, timestamp, uptime, database } (production omits uptime/database)
 ```
 
 ### Response format
@@ -189,7 +191,7 @@ cp apps/api/.env.example apps/api/.env.test
 # Set DATABASE_URL to a separate test database
 ```
 
-The test suite uses real PostgreSQL (no mocks), runs migrations before each session, and truncates tables between tests. Unit suites cover pagination, sanitize, http-error, and request-id; integration suites cover auth, health, orgs, projects, todos, permissions, and invitations.
+The suite is a single Jest e2e run (`jest --config test/jest-e2e.json`) that boots the real NestJS app with Supertest against real PostgreSQL (no mocks), applies migrations, seeds the permissions, and truncates tables between tests. It exercises every module end to end — auth, health, orgs, roles, members, projects, todos, permissions, and invitations.
 
 ### App (`apps/app`)
 
@@ -243,7 +245,7 @@ docker compose -f docker-compose.local.yml up --build -d
 **3. Run migrations**
 
 ```bash
-docker compose -f docker-compose.local.yml run --rm api sh -c "node_modules/.bin/knex migrate:latest"
+docker compose -f docker-compose.local.yml run --rm api sh -c "node_modules/.bin/prisma migrate deploy"
 ```
 
 App available at `http://localhost`.
@@ -303,23 +305,23 @@ docker compose logs -f api          # API logs only
 docker compose ps                   # container status
 
 # Manual database migration (run before deploying schema changes)
-docker compose run --rm api sh -c "node_modules/.bin/knex migrate:latest"
+docker compose run --rm api sh -c "node_modules/.bin/prisma migrate deploy"
 
 # Manual seed
-docker compose run --rm api sh -c "node_modules/.bin/knex seed:run"
+docker compose run --rm api sh -c "node_modules/.bin/prisma db seed"
 ```
 
 ### Environment variables
 
-| Variable               | Required | Description                                                                                    |
-| ---------------------- | -------- | ------------------------------------------------------------------------------------------------ |
-| `DOMAIN`               | Yes      | Registrable domain. Production derives `app.<DOMAIN>` (SPA) and `api.<DOMAIN>` (API) from it.    |
-| `DATABASE_URL`         | Yes      | PostgreSQL connection string                                                                      |
-| `ACCESS_TOKEN_SECRET`  | Yes      | JWT secret, min 32 chars                                                                          |
-| `REFRESH_TOKEN_SECRET` | Yes      | JWT secret, min 32 chars, must differ from access secret                                          |
-| `JWT_ISSUER`           | Yes      | e.g. `https://api.yourdomain.com`                                                                 |
-| `JWT_AUDIENCE`         | Yes      | e.g. `https://app.yourdomain.com`                                                                 |
-| `CORS_ALLOWED_ORIGINS` | No       | Defaults to `http://localhost:8080`. Set to `https://app.yourdomain.com` in production.           |
+| Variable               | Required | Description                                                                                                                                                                             |
+| ---------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DOMAIN`               | Yes      | Registrable domain. Production derives `app.<DOMAIN>` (SPA) and `api.<DOMAIN>` (API) from it.                                                                                           |
+| `DATABASE_URL`         | Yes      | PostgreSQL connection string                                                                                                                                                            |
+| `ACCESS_TOKEN_SECRET`  | Yes      | JWT secret, min 32 chars                                                                                                                                                                |
+| `REFRESH_TOKEN_SECRET` | Yes      | JWT secret, min 32 chars, must differ from access secret                                                                                                                                |
+| `JWT_ISSUER`           | Yes      | e.g. `https://api.yourdomain.com`                                                                                                                                                       |
+| `JWT_AUDIENCE`         | Yes      | e.g. `https://app.yourdomain.com`                                                                                                                                                       |
+| `CORS_ALLOWED_ORIGINS` | No       | Defaults to `http://localhost:8080`. Set to `https://app.yourdomain.com` in production.                                                                                                 |
 | `APP_BASE_URL`         | No\*     | Public SPA origin used to build invitation accept links. Defaults to `http://localhost:8080` — set `https://app.<DOMAIN>` in production, `http://localhost` for the local Docker stack. |
 
 \* Optional to the validator, effectively required in production: the default produces invitation links pointing at `localhost`. See [`docs/invitation-flow.md`](docs/invitation-flow.md).
@@ -335,20 +337,20 @@ fullstack-template/
 ├── apps/
 │   ├── api/
 │   │   ├── src/
-│   │   │   ├── app.js              # Express app (middleware + routes)
-│   │   │   ├── index.js            # Entry point (env validation, server start)
-│   │   │   ├── config/             # Database config
-│   │   │   ├── controllers/        # Business logic + Joi validation
-│   │   │   ├── models/             # Knex.js queries (no business logic)
-│   │   │   ├── routes/             # Route definitions
-│   │   │   ├── middlewares/        # Auth, tenant resolution, permission guards
-│   │   │   └── utils/              # JWT, logging, response, pagination helpers
-│   │   ├── database/
-│   │   │   ├── migrations/         # 10 Knex migrations
-│   │   │   └── seeds/              # 9 seed files (permissions, users, test data)
-│   │   └── tests/
-│   │       ├── integration/        # HTTP endpoint tests
-│   │       └── unit/               # Utility unit tests
+│   │   │   ├── main.ts             # Entry point — creates the Nest app, calls configureApp, listens
+│   │   │   ├── bootstrap.ts        # helmet/cors/cookie-parser, setGlobalPrefix("api"), pino logger
+│   │   │   ├── app.module.ts       # Root module: global pipe/filter/interceptor/guards + feature modules
+│   │   │   ├── prisma/             # PrismaService (Prisma client lifecycle)
+│   │   │   ├── auth/               # Sign in/up, JWT, cookies, refresh-token rotation
+│   │   │   ├── tenancy/            # Org/Project/Permissions guards + membership resolution
+│   │   │   ├── common/             # Envelope interceptor, exception filter, decorators, DTO helpers
+│   │   │   ├── config/             # env.validation.ts (Joi, fail-fast at startup)
+│   │   │   └── users, permissions, orgs, roles, members, projects, todos, invitations, health/
+│   │   ├── prisma/
+│   │   │   ├── schema.prisma       # 11 domain models (introspected from the original schema)
+│   │   │   ├── migrations/         # Prisma migrations (0_init baseline + subsequent)
+│   │   │   └── seed.ts             # Idempotent seed of the 16 canonical permissions
+│   │   └── test/                   # Jest e2e suite (Supertest against real PostgreSQL)
 │   │
 │   └── app/
 │       └── src/
@@ -367,20 +369,19 @@ fullstack-template/
 
 ## Adding a new resource
 
-1. **Migration**: `npm run migrate:make create_<resource>_table` — add `org_id`/`project_id` FK for tenant scoping
-2. **Model** (`src/models/<resource>.js`): Knex queries with tenant-scoped conditions
-3. **Controller** (`src/controllers/<resource>.js`): Business logic using `req.org.id`/`req.project.id`
-4. **Routes** (`src/routes/<resource>.js`): `Router({ mergeParams: true })`, apply `requirePermission()` guards
-5. Wire into parent route file (e.g. `src/routes/projects.js`)
-6. Add permissions to `01_permissions.js` seed; update `05_role_permissions.js`
+See [`apps/api/CLAUDE.md`](apps/api/CLAUDE.md) for the full recipe. In short:
+
+1. **Module/service/controller**: `nest g module <resource>` (+ service, + controller), or add them by hand under `src/<resource>/`
+2. **Prisma**: add the model to `prisma/schema.prisma` with an `org_id`/`project_id` FK for tenant scoping, then `prisma migrate dev`
+3. **Service**: inject `PrismaService`, scope every query by `org.id`/`project.id`
+4. **Controller**: `@Controller("orgs/:org_id/projects/:project_id/<resource>")`, `@UseGuards(OrgGuard, ProjectGuard, PermissionsGuard)`, `@RequirePermission("<name>")` per handler; return `{ message, data, pagination? }`
+5. **Permissions**: add any new permission names to `prisma/seed.ts` (`PERMISSION_NAMES`) and to `src/orgs/system-roles.ts` (`SYSTEM_ROLE_PERMISSIONS`)
 
 ## Code style
 
-Both apps use the same conventions:
-
 - **Formatter**: Prettier — no semicolons, 2-space indent, 100-char width
 - **Linter**: Oxlint (API), Oxlint + ESLint (app)
-- **Modules**: ES modules (`"type": "module"`)
+- **Modules**: API is TypeScript (NestJS, compiled to `dist/`); the app is ES modules (`"type": "module"`)
 - **File naming**: kebab-case
 
 Run before committing:
