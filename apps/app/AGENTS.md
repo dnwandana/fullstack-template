@@ -70,7 +70,14 @@ Vue 3 SPA built with Vite, using a Pinia store + composables pattern for state m
 | `/orgs/:orgId/projects/:projectId/settings`  | ProjectSettings | `views/settings/ProjectSettingsView.vue`  | `requiresAuth`  |
 | `/invitations`                               | MyInvitations   | `views/invitations/MyInvitationsView.vue` | `requiresAuth`  |
 | `/invite/:invitationId`                      | InviteAccept    | `views/invitations/InviteAcceptView.vue`  | — (public)      |
+| `/orgs/:orgId/members`                       | OrgMembers      | `views/orgs/OrgMembersView.vue`           | `requiresAuth`  |
+| `/orgs/:orgId/roles`                         | OrgRoles        | `views/orgs/OrgRolesView.vue`             | `requiresAuth`  |
+| `/orgs/:orgId/invitations`                   | OrgInvitations  | `views/orgs/OrgInvitationsView.vue`       | `requiresAuth`  |
+| `/orgs/:orgId/projects/:projectId/members`   | ProjectMembers  | `views/projects/ProjectMembersView.vue`   | `requiresAuth`  |
+| `/orgs/:orgId/projects/:projectId/invitations` | ProjectInvitations | `views/projects/ProjectInvitationsView.vue` | `requiresAuth` |
 | `/:pathMatch(.*)*`                           | —               | redirect to `/orgs`                       | —               |
+
+Routes also carry `meta.permission`, and legacy `?tab=` URLs redirect to the matching route via a `beforeEnter` guard.
 
 **Navigation guard**: Unauthenticated users on `requiresAuth` routes are redirected to `/login` with `?redirect=`. Authenticated users on `requiresGuest` routes are redirected to `/orgs`. Routes carrying **neither** flag are public in any session state — the guard only acts on those two meta flags. `/invite/:invitationId` relies on that deliberately: `requiresAuth` would bounce a brand-new invitee to `/login` before they could see what they were invited to, and `requiresGuest` would bounce a signed-in user to `/orgs` before they could accept. Auth store is initialized on first navigation via `GET /auth/me`.
 
@@ -99,7 +106,7 @@ Custom fetch-based client (NOT Axios). Key behaviors:
    **Open-redirect guard**: `?redirect=` is attacker-controllable, so `safeRedirect()` in `composables/useAuth.js` accepts only same-origin relative paths — a single leading `/`, rejecting the protocol-relative `//host` form and the `/\host` variant browsers normalize into it, plus any non-string value (a repeated query key arrives as an array). Anything else falls back.
 2. **Token attachment**: Every API call includes `credentials: 'include'` so cookies are sent automatically by the browser
 3. **Token refresh**: Automatic on 401 responses. Server rotates both tokens via httpOnly cookies.
-4. **Logout**: `AppLayout.vue` → `authStore.logout()` → `POST /auth/logout` (best-effort, cookies sent automatically) → clears all localStorage → redirects to `/login`
+4. **Logout**: `UserMenu.vue` → `authStore.logout()` → `POST /auth/logout` (best-effort, cookies sent automatically) → clears all localStorage → redirects to `/login`
 5. **Route protection**: `router.beforeEach` guard calls `authStore.initAuth()` (which calls `GET /auth/me` to verify cookie validity) on first nav, then checks `requiresAuth`/`requiresGuest` meta flags
 6. **Permission loading**: On entering org-scoped pages, `loadPermissions(orgId, userId)` resolves the user's role and extracts permission name strings for UI gating via `can()` and `canAny()`
 
@@ -111,9 +118,10 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 | `useOrgsStore`        | `stores/orgs.js`        | `orgs`, `currentOrg`, `loading`                                                                                            | `fetchOrgs`, `fetchOrgById`, `createOrg`, `updateOrg`, `deleteOrg`                                                                                          |
 | `useProjectsStore`    | `stores/projects.js`    | `projects`, `currentProject`, `loading`                                                                                    | `fetchProjects`, `fetchProjectById`, `createProject`, `updateProject`, `deleteProject`                                                                      |
 | `useTodosStore`       | `stores/todos.js`       | `todos`, `currentTodo`, `pagination`, `selectedIds`, `sortBy`, `sortOrder`, `searchQuery`, `orgId`, `projectId`, `loading` | `setContext`, `fetchTodos`, `fetchTodoById`, `createTodo`, `updateTodo`, `deleteTodo`, `bulkDelete`, `toggleSelection`, `selectAll`, `setSort`, `setSearch` |
-| `useRolesStore`       | `stores/roles.js`       | `roles`, `currentRole`, `allPermissions`, `userPermissions`, `loading`                                                     | `fetchRoles`, `fetchRoleById`, `createRole`, `updateRole`, `deleteRole`, `fetchAllPermissions`, `loadUserPermissions`                                       |
+| `useRolesStore`       | `stores/roles.js`       | `roles`, `currentRole`, `allPermissions`, `loading`                                                                        | `fetchRoles`, `fetchRoleById`, `createRole`, `updateRole`, `deleteRole`, `fetchAllPermissions`                                                              |
 | `useMembersStore`     | `stores/members.js`     | `orgMembers`, `projectMembers`, `loading`                                                                                  | `fetchOrgMembers`, `fetchProjectMembers`, `updateOrgMemberRole`, `removeOrgMember`, `updateProjectMemberRole`, `removeProjectMember`                        |
 | `useInvitationsStore` | `stores/invitations.js` | `orgInvitations`, `myInvitations`, `loading`                                                                               | `fetchOrgInvitations`, `fetchMyInvitations`, `inviteToOrg`, `inviteToProject`, `acceptInvitation`, `declineInvitation`, `revokeInvitation`                  |
+| `useTenantStore`      | `stores/tenant.js`      | `orgMeta`, `permissions`, `currentOrgId`, `currentProjectId`, `currentOrg`, `currentProject`, `permissionsReady`           | `loadOrgMeta`, `loadAllOrgMeta`, `loadPermissions`, `clear`                                                                                                 |
 
 ## Composable Catalog
 
@@ -132,8 +140,14 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 
 | Component          | File                              | Purpose                                                                                                                            |
 | ------------------ | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `AppLayout`        | `components/AppLayout.vue`        | Main shell: header with org/project selectors, pending invitations badge, logout button, collapsible sidebar, content slot, footer |
-| `AppSidebar`       | `components/AppSidebar.vue`       | Context-aware navigation menu that adapts based on current route (org list, org-scoped, or project-scoped)                         |
+| `AppShell`         | `components/AppShell.vue`         | Application shell: sider or drawer, top bar, breadcrumb, routed content                                                            |
+| `SideNav`          | `components/SideNav.vue`          | Permission-filtered navigation menu, org- or project-scoped by route                                                               |
+| `TopBar`           | `components/TopBar.vue`           | 56px header: org and project switchers, invitations bell, user menu                                                                |
+| `OrgSwitcher`      | `components/OrgSwitcher.vue`      | Org dropdown with member counts and the caller's role                                                                              |
+| `ProjectSwitcher`  | `components/ProjectSwitcher.vue`  | Project dropdown, hidden when no project is selected                                                                               |
+| `InvitationsBell`  | `components/InvitationsBell.vue`  | Pending-invitation badge linking to `/invitations`                                                                                 |
+| `UserMenu`         | `components/UserMenu.vue`         | Avatar dropdown with the signed-in user and Logout                                                                                 |
+| `AppBreadcrumb`    | `components/AppBreadcrumb.vue`    | Org / project / page trail                                                                                                         |
 | `OrgFormModal`     | `components/OrgFormModal.vue`     | Create/edit organization modal form (name + description)                                                                           |
 | `ProjectFormModal` | `components/ProjectFormModal.vue` | Create/edit project modal form (name + description)                                                                                |
 | `TodoFormModal`    | `components/TodoFormModal.vue`    | Create/edit todo modal form (title + description + completed checkbox)                                                             |
@@ -141,6 +155,12 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 | `InviteFormModal`  | `components/InviteFormModal.vue`  | Invite member modal — email input with role selection dropdown                                                                     |
 | `MembersTable`     | `components/MembersTable.vue`     | Members table (Name, Email) with inline role-change dropdown and remove button with confirmation                                   |
 | `InvitationsTable` | `components/InvitationsTable.vue` | Invitations table with color-coded status tags and revoke button for pending invitations                                           |
+
+## Design System & Theme
+
+- **`src/assets/design-system/`**: a byte-identical copy of the design system's tokens, fonts and base stylesheet (`styles.css`). It is copied, not authored here, so `.prettierignore` excludes it — Prettier reformatting it would make future re-syncs from the source design system show a full-file diff instead of a real one.
+- **`src/theme/antd.js`**: exports `antdTheme`, the token object handed to `ConfigProvider` in `App.vue`. Every value is annotated with the design-system custom property it mirrors (e.g. `colorPrimary: "#0e7c72" // --teal-500`), and `theme/antd.test.js` asserts the two stay in agreement. Component-level tokens (`Layout`, `Menu`) are overridden by their v5 internal names, read from `node_modules/ant-design-vue/es/<component>/style/index.d.ts` rather than the current antd React docs, which describe a newer schema.
+- **Import order in `main.js` is load-bearing**: `ant-design-vue/dist/reset.css`, then `@/assets/design-system/styles.css`, then `@/assets/app.css`, so app-level overrides always win over both antd's reset and the design system's base styles.
 
 ## API Service Catalog
 
@@ -189,7 +209,7 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 ## File Naming
 
 - Views: `*View.vue` (e.g., `LoginView.vue`, `TodosListView.vue`)
-- Components: PascalCase (e.g., `AppLayout.vue`, `TodoFormModal.vue`)
+- Components: PascalCase (e.g., `AppShell.vue`, `TodoFormModal.vue`)
 - Stores: camelCase with `use` prefix (e.g., `useAuthStore`)
 - Composables: camelCase with `use` prefix (e.g., `useAuth`, `useTodos`)
 - API modules: camelCase (e.g., `auth.js`, `orgMembers.js`)
