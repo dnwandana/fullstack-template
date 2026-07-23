@@ -19,6 +19,13 @@ const NO_RETRY_ENDPOINTS = ["/auth/signin", "/auth/signup", "/auth/refresh"]
 // and, since it re-triggers the same probe on load, causes an infinite loop.
 const NO_REDIRECT_ENDPOINTS = ["/auth/me"]
 
+// Pages where we are already at (or on our way to) the login screen, so a hard
+// redirect to /login would only reload the same page. Guarding against this
+// breaks any refresh-failure reload loop regardless of which endpoint triggered
+// it — a background 401 fired during app boot (before the router guard settles)
+// can otherwise redirect -> reload -> re-fire -> redirect forever.
+const AUTH_PATHS = ["/login", "/signup"]
+
 // ---------------------------------------------------------------------------
 // HttpError — axios-compatible error shape
 // ---------------------------------------------------------------------------
@@ -91,7 +98,10 @@ async function handleRefresh(originalOptions) {
   } catch (error) {
     processQueue(error)
     clearUserData()
-    if (!NO_REDIRECT_ENDPOINTS.some((ep) => originalOptions.url.includes(ep))) {
+    const skipRedirect =
+      NO_REDIRECT_ENDPOINTS.some((ep) => originalOptions.url.includes(ep)) ||
+      AUTH_PATHS.includes(window.location.pathname)
+    if (!skipRedirect) {
       window.location.href = "/login"
     }
     throw error
