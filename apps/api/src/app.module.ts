@@ -7,6 +7,9 @@ import { randomUUID } from "crypto"
 import { PrismaModule } from "./prisma/prisma.module"
 import { validate } from "./config/env.validation"
 import { HealthModule } from "./health/health.module"
+import { UsersModule } from "./users/users.module"
+import { AuthModule } from "./auth/auth.module"
+import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard"
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor"
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter"
 
@@ -40,6 +43,8 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter"
       },
     ]),
     HealthModule,
+    UsersModule,
+    AuthModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
@@ -53,6 +58,7 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter"
       }),
     },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })
 export class AppModule {}
