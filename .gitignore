@@ -15,6 +15,7 @@ node_modules/
 .superpowers/
 docs/
 skills-lock.json
+claude-design/
 
 # Environment files
 .env
