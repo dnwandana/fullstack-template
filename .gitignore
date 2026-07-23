@@ -12,6 +12,7 @@ node_modules/
 
 # Coding agents
 .agents/
+.superpowers/
 docs/
 skills-lock.json
 
