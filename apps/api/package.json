@@ -23,9 +23,6 @@
     "db:seed": "prisma db seed",
     "db:generate": "prisma generate"
   },
-  "prisma": {
-    "seed": "node prisma/seed.ts"
-  },
   "dependencies": {
     "@nestjs/common": "^11.1.28",
     "@nestjs/config": "^4.0.4",
