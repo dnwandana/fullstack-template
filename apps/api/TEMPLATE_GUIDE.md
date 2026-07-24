@@ -59,14 +59,27 @@ Handlers return a plain object; `TransformInterceptor` normalizes it. Controller
 
 ```typescript
 return { message: "OK", data, pagination } // list
-return { message: "Created", data }        // POST
-return { message: "OK", data: null }       // delete
+return { message: "Created", data } // POST
+return { message: "OK", data: null } // delete
 ```
 
 The **success** envelope:
 
 ```json
-{ "message": "OK", "data": {}, "pagination": { "current_page": 1, "total_pages": 5, "total_items": 42, "items_per_page": 10, "has_next_page": true, "has_previous_page": false, "next_page": 2, "previous_page": null } }
+{
+  "message": "OK",
+  "data": {},
+  "pagination": {
+    "current_page": 1,
+    "total_pages": 5,
+    "total_items": 42,
+    "items_per_page": 10,
+    "has_next_page": true,
+    "has_previous_page": false,
+    "next_page": 2,
+    "previous_page": null
+  }
+}
 ```
 
 The **error** envelope (from `AllExceptionsFilter`) is always `{ "message": "…", "data": null }` with the thrown `HttpException`'s status. `class-validator` failures (arrays of messages) are flattened to a single `"; "`-joined string.
@@ -705,4 +718,3 @@ Fetch related rows with Prisma `select`/`include` rather than hand-written joins
 **See README.md** for quick start and setup instructions.
 
 **See AGENTS.md** (symlinked as CLAUDE.md) for the full architecture and command reference.
-</content>

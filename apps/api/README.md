@@ -65,21 +65,21 @@ You can still run package-local commands from `apps/api` with `pnpm`.
 
 ## Tech Stack
 
-| Component          | Version                          | Description                     |
-| ------------------ | -------------------------------- | ------------------------------- |
-| **Runtime**        | Node.js >=24.0.0                 | JavaScript runtime              |
-| **Framework**      | NestJS ^11.1.28                  | Progressive Node.js framework   |
-| **HTTP Platform**  | Express ^5.2.1                   | Underlying HTTP adapter         |
-| **Database**       | PostgreSQL                       | Relational database             |
-| **ORM**            | Prisma ^6.19.3                   | Type-safe ORM & migrations      |
-| **Authentication** | @nestjs/jwt ^11.0.2, Argon2 ^0.45.1 | Token-based auth & hashing   |
-| **Cookies**        | cookie-parser ^1.4.7             | httpOnly cookie management       |
-| **Validation**     | class-validator ^0.15.1, Joi ^18.2.3 | DTO validation & env checks |
-| **Security**       | Helmet ^8.3.0                    | Security middleware              |
-| **Rate Limiting**  | @nestjs/throttler ^6.5.0         | Request throttling               |
-| **Logging**        | nestjs-pino ^4.6.1, pino-http ^11.0.0 | Structured logging          |
-| **Testing**        | Jest ^30.4.2, Supertest ^7.2.2   | Test runner & HTTP testing       |
-| **Code Quality**   | Oxlint ^1.75.0, Prettier ^3.9.6  | Linting and formatting           |
+| Component          | Version                               | Description                   |
+| ------------------ | ------------------------------------- | ----------------------------- |
+| **Runtime**        | Node.js >=24.0.0                      | JavaScript runtime            |
+| **Framework**      | NestJS ^11.1.28                       | Progressive Node.js framework |
+| **HTTP Platform**  | Express ^5.2.1                        | Underlying HTTP adapter       |
+| **Database**       | PostgreSQL                            | Relational database           |
+| **ORM**            | Prisma ^6.19.3                        | Type-safe ORM & migrations    |
+| **Authentication** | @nestjs/jwt ^11.0.2, Argon2 ^0.45.1   | Token-based auth & hashing    |
+| **Cookies**        | cookie-parser ^1.4.7                  | httpOnly cookie management    |
+| **Validation**     | class-validator ^0.15.1, Joi ^18.2.3  | DTO validation & env checks   |
+| **Security**       | Helmet ^8.3.0                         | Security middleware           |
+| **Rate Limiting**  | @nestjs/throttler ^6.5.0              | Request throttling            |
+| **Logging**        | nestjs-pino ^4.6.1, pino-http ^11.0.0 | Structured logging            |
+| **Testing**        | Jest ^30.4.2, Supertest ^7.2.2        | Test runner & HTTP testing    |
+| **Code Quality**   | Oxlint ^1.75.0, Prettier ^3.9.6       | Linting and formatting        |
 
 ## Prerequisites
 
@@ -464,5 +464,3 @@ See [TEMPLATE_GUIDE.md](TEMPLATE_GUIDE.md) for detailed instructions on:
 - Authentication & authorization
 - Input validation patterns
 - Common recipes (pagination, sorting, filtering)
-</content>
-</invoke>
