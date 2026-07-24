@@ -30,7 +30,7 @@ describe("Orgs (e2e)", () => {
     expect(res.status).toBe(201)
     expect(res.body.data).toMatchObject({ id: expect.any(String), name: "Acme" })
     const roles = await prisma.role.findMany({ where: { orgId: res.body.data.id } })
-    expect(roles.map((r) => r.name).sort()).toEqual(["admin", "member", "owner", "viewer"])
+    expect(roles.map((r) => r.name).toSorted()).toEqual(["admin", "member", "owner", "viewer"])
     const membership = await prisma.orgMember.findFirst({
       where: { orgId: res.body.data.id, userId },
     })
