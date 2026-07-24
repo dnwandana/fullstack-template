@@ -145,4 +145,21 @@ describe("Todos (e2e)", () => {
       .set("Cookie", cookies)
     expect(single.status).toBe(200)
   })
+
+  it("bumps updated_at on edit and reorders the default list", async () => {
+    const first = await agent().post(base()).set("Cookie", cookies).send({ title: "Older" })
+    await agent().post(base()).set("Cookie", cookies).send({ title: "Newer" })
+
+    const updated = await agent()
+      .put(`${base()}/${first.body.data.id}`)
+      .set("Cookie", cookies)
+      .send({ title: "Older, edited" })
+    expect(updated.status).toBe(200)
+    expect(new Date(updated.body.data.updated_at).getTime()).toBeGreaterThan(
+      new Date(updated.body.data.created_at).getTime(),
+    )
+
+    const list = await agent().get(base()).set("Cookie", cookies)
+    expect(list.body.data[0].id).toBe(first.body.data.id)
+  })
 })

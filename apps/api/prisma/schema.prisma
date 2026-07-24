@@ -15,7 +15,7 @@ model User {
   failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime? @map("locked_until") @db.Timestamptz(6)
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   invitationsReceived  Invitation[]    @relation("InvitationInvitee")
   invitationsSent      Invitation[]    @relation("InvitationInviter")
@@ -35,7 +35,7 @@ model Organization {
   description String?
   createdBy   String   @map("created_by") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   creator     User         @relation(fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "organizations_created_by_foreign")
   invitations Invitation[]
@@ -67,7 +67,7 @@ model Role {
   description String?
   isSystem    Boolean  @default(false) @map("is_system")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization    Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "roles_org_id_foreign")
   invitations     Invitation[]
@@ -111,7 +111,7 @@ model Project {
   description String?
   createdBy   String   @map("created_by") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   invitations    Invitation[]
   projectMembers ProjectMember[]
@@ -148,7 +148,7 @@ model Invitation {
   tokenHash    String?  @unique(map: "invitations_token_hash_unique") @map("token_hash") @db.VarChar(64)
   expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   invitee      User?        @relation("InvitationInvitee", fields: [inviteeId], references: [id], onUpdate: NoAction, map: "invitations_invitee_id_foreign")
   inviter      User         @relation("InvitationInviter", fields: [inviterId], references: [id], onUpdate: NoAction, map: "invitations_inviter_id_foreign")
@@ -171,7 +171,7 @@ model Todo {
   description String?
   isCompleted Boolean  @default(false) @map("is_completed")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "todos_project_id_foreign")
   user    User    @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "todos_user_id_foreign")
@@ -188,7 +188,7 @@ model RefreshToken {
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "refresh_tokens_user_id_foreign")
 
