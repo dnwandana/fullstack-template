@@ -3,6 +3,7 @@ import { MembersService } from "./members.service"
 import { UpdateMemberDto } from "./dto/update-member.dto"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { CurrentOrg } from "../common/decorators/current-org.decorator"
+import { CurrentPermissions } from "../common/decorators/current-permissions.decorator"
 import { RequirePermission } from "../common/decorators/require-permission.decorator"
 import { OrgGuard } from "../tenancy/org.guard"
 import { PermissionsGuard } from "../tenancy/permissions.guard"
@@ -23,10 +24,17 @@ export class OrgMembersController {
   async update(
     @CurrentOrg() org: { id: string },
     @CurrentUser("id") actingUserId: string,
+    @CurrentPermissions() actorPermissions: string[],
     @Param("user_id", ParseUUIDPipe) targetUserId: string,
     @Body() dto: UpdateMemberDto,
   ) {
-    await this.members.updateOrgMemberRole(org.id, actingUserId, targetUserId, dto.role_id)
+    await this.members.updateOrgMemberRole(
+      org.id,
+      actingUserId,
+      targetUserId,
+      dto.role_id,
+      actorPermissions,
+    )
     return { message: "OK", data: null }
   }
 

@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common"
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
 
@@ -64,17 +69,49 @@ export class MembersService {
     return tx.orgMember.count({ where: { orgId, role: { name: "owner" } } })
   }
 
+  // Owner-gate (H-2): only owners may assign the owner role or change/remove an
+  // owner. Re-reads the actor's role inside the locked transaction so the check
+  // cannot go stale.
+  private async assertActingIsOwner(
+    tx: Prisma.TransactionClient,
+    orgId: string,
+    actingUserId: string,
+  ) {
+    const acting = await tx.orgMember.findUnique({
+      where: { userId_orgId: { userId: actingUserId, orgId } },
+      select: { role: { select: { name: true } } },
+    })
+    if (acting?.role.name !== "owner")
+      throw new ForbiddenException("Only owners can assign or remove the owner role")
+  }
+
+  // Granting a role is granting its permissions: an actor may not hand out
+  // permissions they do not hold themselves (H-2 fix b). actorPermissions is
+  // guard-resolved at request time — the owner-gate re-read inside the locked
+  // transaction remains the race-safe check for the owner paths.
+  private assertGrantablePermissions(
+    role: { rolePermissions: { permission: { name: string } }[] },
+    actorPermissions: string[],
+  ) {
+    const unheld = role.rolePermissions.some((rp) => !actorPermissions.includes(rp.permission.name))
+    if (unheld) throw new ForbiddenException("Cannot grant a role with permissions you do not hold")
+  }
+
   async updateOrgMemberRole(
     orgId: string,
     actingUserId: string,
     targetUserId: string,
     roleId: string,
+    actorPermissions: string[],
   ) {
     await this.prisma.$transaction(async (tx) => {
       await this.lockOrg(tx, orgId)
       const role = await tx.role.findFirst({
         where: { id: roleId, orgId },
-        select: { name: true },
+        select: {
+          name: true,
+          rolePermissions: { select: { permission: { select: { name: true } } } },
+        },
       })
       if (!role) throw new NotFoundException("Role not found in this organization")
 
@@ -83,6 +120,12 @@ export class MembersService {
         select: { role: { select: { name: true } } },
       })
       if (!target) throw new NotFoundException("User is not a member of this organization")
+
+      if (role.name === "owner" || target.role.name === "owner") {
+        await this.assertActingIsOwner(tx, orgId, actingUserId)
+      }
+
+      this.assertGrantablePermissions(role, actorPermissions)
 
       // Protect the org-orphaning invariant before the self-action guard: demoting
       // the last owner is blocked with a specific reason even when it's a self-change.
@@ -111,6 +154,10 @@ export class MembersService {
       })
       if (!target) throw new NotFoundException("User is not a member of this organization")
 
+      if (target.role.name === "owner") {
+        await this.assertActingIsOwner(tx, orgId, actingUserId)
+      }
+
       // Protect the org-orphaning invariant before the self-action guard: removing
       // the last owner is blocked with a specific reason even when it's a self-removal.
       if (target.role.name === "owner" && (await this.ownerCount(tx, orgId)) <= 1) {
@@ -129,14 +176,22 @@ export class MembersService {
     actingUserId: string,
     targetUserId: string,
     roleId: string,
+    actorPermissions: string[],
   ) {
     if (actingUserId === targetUserId)
       throw new BadRequestException("You cannot change your own role")
     const role = await this.prisma.role.findFirst({
       where: { id: roleId, orgId },
-      select: { id: true },
+      select: {
+        name: true,
+        rolePermissions: { select: { permission: { select: { name: true } } } },
+      },
     })
     if (!role) throw new NotFoundException("Role not found in this organization")
+    // Owner-gate (H-2): owner is an org-level concept — never assignable at project scope.
+    if (role.name === "owner")
+      throw new BadRequestException("The owner role cannot be assigned at project scope")
+    this.assertGrantablePermissions(role, actorPermissions)
     const target = await this.prisma.projectMember.findUnique({
       where: { userId_projectId: { userId: targetUserId, projectId } },
       select: { userId: true },

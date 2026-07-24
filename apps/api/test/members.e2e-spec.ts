@@ -79,7 +79,7 @@ describe("Members (e2e)", () => {
         .set("Cookie", b.cookies)
         .send({ role_id: adminRoleId }),
     ])
-    expect([r1.status, r2.status].sort()).toEqual([200, 400])
+    expect([r1.status, r2.status].toSorted()).toEqual([200, 403])
     const owners = await prisma.orgMember.count({
       where: { orgId: org.id, role: { name: "owner" } },
     })

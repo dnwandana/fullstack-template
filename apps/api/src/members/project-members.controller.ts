@@ -4,6 +4,7 @@ import { UpdateMemberDto } from "./dto/update-member.dto"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { CurrentOrg } from "../common/decorators/current-org.decorator"
 import { CurrentProject } from "../common/decorators/current-project.decorator"
+import { CurrentPermissions } from "../common/decorators/current-permissions.decorator"
 import { RequirePermission } from "../common/decorators/require-permission.decorator"
 import { OrgGuard } from "../tenancy/org.guard"
 import { ProjectGuard } from "../tenancy/project.guard"
@@ -26,6 +27,7 @@ export class ProjectMembersController {
     @CurrentOrg() org: { id: string },
     @CurrentProject() project: { id: string },
     @CurrentUser("id") actingUserId: string,
+    @CurrentPermissions() actorPermissions: string[],
     @Param("user_id", ParseUUIDPipe) targetUserId: string,
     @Body() dto: UpdateMemberDto,
   ) {
@@ -35,6 +37,7 @@ export class ProjectMembersController {
       actingUserId,
       targetUserId,
       dto.role_id,
+      actorPermissions,
     )
     return { message: "OK", data: null }
   }
