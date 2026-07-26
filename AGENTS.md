@@ -30,6 +30,9 @@ corepack pnpm test:app      # Vitest + jsdom + @vue/test-utils
 - **Request context**: `req.id` (request ID), `req.user`, `req.org`, `req.project`, `req.permissions`
 - **Error handling**: Controllers/services throw NestJS `HttpException`s, caught by the global `AllExceptionsFilter` → `{ message, data: null }`
 - **Env validation**: API fails fast at startup if required vars are missing (expected behavior)
+- **Health probes**: `/health/live` (process only), `/health/ready` (database probe), `/health` (combined) — all three sit outside the `/api` prefix, are public, and skip rate limiting
+- **API docs**: OpenAPI is generated at boot by `@nestjs/swagger` and served at `/api/docs`; gated by `SWAGGER_ENABLED`, which defaults to off in production. No spec file is checked in
+- **Scheduled work**: `@nestjs/schedule` cron in `apps/api/src/maintenance/` prunes expired auth and invitation rows nightly, in bounded batches, each guarded by a Postgres advisory lock so replicas never duplicate work (`CLEANUP_ENABLED`)
 
 ## App-specific details
 
@@ -71,5 +74,6 @@ docker compose -f docker-compose.local.yml down
 
 - `app` container: nginx serves Vue static files only in production (no `/api` proxying — the edge nginx routes `api.<DOMAIN>` straight to the `api` container); in local dev it still proxies `/api` and `/health` since `docker-compose.local.yml` stays single-origin
 - `api` container: NestJS (Node, runs `node dist/main`), no host port published, only reachable as `http://api:3000` inside Docker network
-- In production, the edge nginx strips the `/api` prefix from both the proxied path and `Set-Cookie` paths (`proxy_cookie_path`), so `api.<DOMAIN>` presents clean URLs while the API still mounts routes at `/api` unmodified via `setGlobalPrefix("api", { exclude: ["health"] })` in `apps/api/src/bootstrap.ts` (`/health` stays outside the prefix)
+- In production, the edge nginx strips the `/api` prefix from both the proxied path and `Set-Cookie` paths (`proxy_cookie_path`), so `api.<DOMAIN>` presents clean URLs while the API still mounts routes at `/api` unmodified via `setGlobalPrefix("api", { exclude: ["health", "health/live", "health/ready"] })` in `apps/api/src/bootstrap.ts`. Each `exclude` entry is an **exact** path, not a prefix — `"health"` alone would not cover `health/live`
+- Container healthchecks in both compose files probe `http://localhost:3000/health/live` from inside the `api` container, so they never traverse nginx
 - Migrations do **not** run automatically — run manually: `docker compose [-f docker-compose.local.yml] run --rm api sh -c "node_modules/.bin/prisma migrate deploy"`

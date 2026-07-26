@@ -487,7 +487,7 @@ npm run migrate:dev    # prisma migrate dev — create + apply a migration in de
 npm run db:migrate     # prisma migrate deploy — apply pending migrations (prod)
 npm run db:generate    # prisma generate — regenerate the typed client after schema edits
 npm run prisma:pull    # prisma db pull — introspect an existing DB into schema.prisma
-npm run db:seed        # prisma db seed — idempotent upsert of the 16 canonical permissions
+npm run db:seed        # prisma db seed — idempotent upsert of the 17 canonical permissions
 ```
 
 **Best practices:**
@@ -509,7 +509,7 @@ npm run db:seed        # prisma db seed — idempotent upsert of the 16 canonica
 
 ### Making a route public
 
-Global `JwtAuthGuard` protects everything by default. Opt a handler out with `@Public()` (see the invitation preview endpoint and `/health`).
+Global `JwtAuthGuard` protects everything by default. Opt a handler out with `@Public()` (see the invitation preview endpoint and the health routes, where `@Public()` sits on the controller class so all three inherit it).
 
 ### Authorizing a handler
 
@@ -525,7 +525,7 @@ export class CategoriesController {
 }
 ```
 
-Read context with `@CurrentUser("id")`, `@CurrentOrg()`, `@CurrentProject()`. Org admins/owners reach all projects in the org without explicit project membership; project permissions merge with org permissions (deduped).
+Read context with `@CurrentUser("id")`, `@CurrentOrg()`, `@CurrentProject()`. Project permissions merge with org permissions (deduped). Org-wide project visibility comes from the `project:read_all` permission rather than a role-name check, so any role granted it — including a custom one — sees every project in the org.
 
 ## Input Validation
 

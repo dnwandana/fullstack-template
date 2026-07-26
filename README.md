@@ -18,8 +18,8 @@ Organization
 ```
 
 - **Multi-tenancy**: Shared PostgreSQL database, tenant-scoped via `org_id`/`project_id` columns
-- **RBAC**: 4 system roles (owner / admin / member / viewer) + custom roles, 16 granular permissions
-- **Auth**: Dual-token JWT via httpOnly cookies, Argon2 password hashing, password complexity, account lockout
+- **RBAC**: 4 system roles (owner / admin / member / viewer) + custom roles, 17 granular permissions. Cross-project visibility is a permission (`project:read_all`), not a hard-coded role name
+- **Auth**: Dual-token JWT via httpOnly cookies, Argon2 password hashing, password complexity, account lockout, token-based password reset, and refresh-token reuse detection
 - **Invitations**: Invite by email, 7-day expiry, accept/decline/revoke/resend flow with a public `/invite/:id?token=…` landing page that works logged out. Inviting an address with no account creates a pending-account invitation; signing up claims it. Email delivery is a single documented seam — no mail provider is shipped. See [`docs/invitation-flow.md`](docs/invitation-flow.md).
 
 ## Prerequisites
@@ -67,9 +67,11 @@ REFRESH_TOKEN_EXPIRES_IN=7d
 CORS_ALLOWED_ORIGINS=http://localhost:8080
 APP_BASE_URL=http://localhost:8080
 RATE_LIMIT_AUTH_MAX=10
-RATE_LIMIT_GENERAL_MAX=100
+RATE_LIMIT_GENERAL_MAX=1000
 LOG_LEVEL=info
 LOG_TO_FILE=true
+CLEANUP_ENABLED=true
+# SWAGGER_ENABLED=true  # leave unset: derives to true outside production, false in production
 ```
 
 ### App (`apps/app`)
@@ -89,7 +91,7 @@ Run Prisma migrations and (optional) seed data:
 ```bash
 cd apps/api
 npm run db:migrate   # prisma migrate deploy
-npm run db:seed      # prisma db seed — inserts the 16 canonical permissions idempotently
+npm run db:seed      # prisma db seed — inserts the 17 canonical permissions idempotently
 ```
 
 Migrations never run automatically — apply them explicitly on every environment.
@@ -127,6 +129,8 @@ Append `:api` or `:app` to target a single workspace (e.g. `pnpm test:api`).
 | POST   | `/api/auth/signin`                                | Login — sets httpOnly auth cookies, returns user info                         |
 | POST   | `/api/auth/refresh`                               | Rotate tokens via httpOnly cookie                                             |
 | POST   | `/api/auth/logout`                                | Revoke refresh token, clear cookies                                           |
+| POST   | `/api/auth/forgot-password`                       | Request a reset link — always 200, never reveals whether the account exists   |
+| POST   | `/api/auth/reset-password`                        | Consume a single-use 64-hex reset token and set a new password                |
 | GET    | `/api/invitations/:invitation_id/preview?token=…` | Preview an invitation while logged out — the raw token is the only credential |
 
 ### Protected endpoints (authenticated via httpOnly `access_token` cookie)
@@ -151,11 +155,21 @@ GET  /api/orgs/:org_id/roles                       # List roles
 POST /api/orgs/:org_id/roles                       # Create custom role
 ```
 
-Health check (no auth, not rate-limited):
+Health checks (no auth, not rate-limited, outside the `/api` prefix):
 
 ```
-GET /health    # { status, timestamp, uptime, database } (production omits uptime/database)
+GET /health/live    # liveness — process only, never touches the database; always 200
+GET /health/ready   # readiness — database probe; 200 ready, 503 not_ready
+GET /health         # combined check; 200 healthy, 503 unhealthy
 ```
+
+All three return `{ status, timestamp }`. `/health/ready` and `/health` also include `uptime` and `database` outside production; `/health/live` never does — it is a fixed, dependency-free response. The container healthchecks in both compose files probe `/health/live` from inside the `api` container.
+
+Note that the production edge nginx publishes health with an **exact** match (`location = /health`), so only `https://api.<DOMAIN>/health` is reachable from outside; the `live`/`ready` sub-paths are internal-only unless you widen that `location` to a prefix match. The local HTTP stack already uses a prefix match, so all three work there.
+
+### Interactive API docs
+
+The OpenAPI document is generated from the controllers and DTOs at boot by `@nestjs/swagger` and served at `/api/docs` (e.g. `http://localhost:3000/api/docs` in dev). There is no checked-in spec file to keep in sync. `SWAGGER_ENABLED` gates it and defaults to `false` when `NODE_ENV=production`.
 
 ### Response format
 
@@ -174,7 +188,9 @@ The API uses httpOnly cookies (not headers) for token management:
 - `access_token` — httpOnly cookie, short-lived (default 15 min), scoped to `/api`
 - `refresh_token` — httpOnly cookie, long-lived (default 7 days), scoped to `/api/auth`
 
-Tokens are set by the server on signin/refresh and never exposed to JavaScript. Both use `Secure` (production), `SameSite=Strict`.
+Each cookie's lifetime is derived from `ACCESS_TOKEN_EXPIRES_IN` / `REFRESH_TOKEN_EXPIRES_IN`, so the cookie and the JWT it carries always expire together. Both variables use the grammar `<number><s|m|h|d>` (e.g. `15m`, `7d`).
+
+Tokens are set by the server on signin/refresh and never exposed to JavaScript. Both use `Secure` (production), `SameSite=Strict`. Refresh tokens rotate on every use, and replaying an already-revoked one revokes the user's entire refresh-token family.
 
 ## Testing
 
@@ -184,12 +200,14 @@ Tokens are set by the server on signin/refresh and never exposed to JavaScript. 
 corepack pnpm test:api
 ```
 
-Tests require a PostgreSQL test database. Copy and configure:
+Tests require a PostgreSQL test database. Copy the committed test template:
 
 ```bash
-cp apps/api/.env.example apps/api/.env.test
-# Set DATABASE_URL to a separate test database
+cp apps/api/.env.test.example apps/api/.env.test
+# Adjust DATABASE_URL to point at your test database
 ```
+
+`.env.test.example` ships valid dummy secrets and generous rate limits — the app boots from it as-is. Do **not** copy `.env.example` for tests: its `changeme_…` secrets are rejected by env validation at startup by design.
 
 The suite is a single Jest e2e run (`jest --config test/jest-e2e.json`) that boots the real NestJS app with Supertest against real PostgreSQL (no mocks), applies migrations, seeds the permissions, and truncates tables between tests. It exercises every module end to end — auth, health, orgs, roles, members, projects, todos, permissions, and invitations.
 
@@ -323,6 +341,8 @@ docker compose run --rm api sh -c "node_modules/.bin/prisma db seed"
 | `JWT_AUDIENCE`         | Yes      | e.g. `https://app.yourdomain.com`                                                                                                                                                       |
 | `CORS_ALLOWED_ORIGINS` | No       | Defaults to `http://localhost:8080`. Set to `https://app.yourdomain.com` in production.                                                                                                 |
 | `APP_BASE_URL`         | No\*     | Public SPA origin used to build invitation accept links. Defaults to `http://localhost:8080` — set `https://app.<DOMAIN>` in production, `http://localhost` for the local Docker stack. |
+| `SWAGGER_ENABLED`      | No       | Serves the generated OpenAPI spec and Swagger UI at `/api/docs`. Defaults to `false` when `NODE_ENV=production`, `true` otherwise.                                                      |
+| `CLEANUP_ENABLED`      | No       | Runs the nightly cleanup cron job that prunes expired refresh/reset tokens and dead invitations. Defaults to `true`.                                                                    |
 
 \* Optional to the validator, effectively required in production: the default produces invitation links pointing at `localhost`. See [`docs/invitation-flow.md`](docs/invitation-flow.md).
 
@@ -338,18 +358,19 @@ fullstack-template/
 │   ├── api/
 │   │   ├── src/
 │   │   │   ├── main.ts             # Entry point — creates the Nest app, calls configureApp, listens
-│   │   │   ├── bootstrap.ts        # helmet/cors/cookie-parser, setGlobalPrefix("api"), pino logger
+│   │   │   ├── bootstrap.ts        # helmet/cors/cookie-parser, setGlobalPrefix("api"), pino logger, Swagger
 │   │   │   ├── app.module.ts       # Root module: global pipe/filter/interceptor/guards + feature modules
 │   │   │   ├── prisma/             # PrismaService (Prisma client lifecycle)
-│   │   │   ├── auth/               # Sign in/up, JWT, cookies, refresh-token rotation
+│   │   │   ├── auth/               # Sign in/up, password reset, JWT, cookies, refresh-token rotation
 │   │   │   ├── tenancy/            # Org/Project/Permissions guards + membership resolution
+│   │   │   ├── maintenance/        # CleanupService — nightly cron pruning expired auth/invitation rows
 │   │   │   ├── common/             # Envelope interceptor, exception filter, decorators, DTO helpers
-│   │   │   ├── config/             # env.validation.ts (Joi, fail-fast at startup)
+│   │   │   ├── config/             # env.validation.ts (Joi, fail-fast at startup), pino.config.ts
 │   │   │   └── users, permissions, orgs, roles, members, projects, todos, invitations, health/
 │   │   ├── prisma/
-│   │   │   ├── schema.prisma       # 11 domain models (introspected from the original schema)
+│   │   │   ├── schema.prisma       # 12 domain models (@map/@@map keep the DB snake_case)
 │   │   │   ├── migrations/         # Prisma migrations (0_init baseline + subsequent)
-│   │   │   └── seed.ts             # Idempotent seed of the 16 canonical permissions
+│   │   │   └── seed.ts             # Idempotent seed of the 17 canonical permissions
 │   │   └── test/                   # Jest e2e suite (Supertest against real PostgreSQL)
 │   │
 │   └── app/
