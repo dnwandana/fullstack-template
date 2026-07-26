@@ -14,6 +14,7 @@ import { OrgsService } from "../orgs/orgs.service"
 import { UsersService } from "../users/users.service"
 import { CreateInvitationDto } from "./dto/create-invitation.dto"
 import { PreviewQueryDto } from "./dto/preview-query.dto"
+import { AcceptInvitationDto } from "./dto/accept-invitation.dto"
 import { Public } from "../common/decorators/public.decorator"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { CurrentOrg } from "../common/decorators/current-org.decorator"
@@ -118,9 +119,10 @@ export class InvitationsController {
   async accept(
     @Param("invitation_id", ParseUUIDPipe) invitationId: string,
     @CurrentUser("id") userId: string,
+    @Body() dto: AcceptInvitationDto,
   ) {
     const user = await this.users.findSafeById(userId)
-    return this.invitations.accept(invitationId, userId, user?.email ?? "")
+    return this.invitations.accept(invitationId, userId, user?.email ?? "", dto.token)
   }
 
   @Post("invitations/:invitation_id/decline")

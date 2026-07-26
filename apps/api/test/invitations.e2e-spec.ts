@@ -51,23 +51,25 @@ describe("Invitations (e2e)", () => {
     expect(mine.body.data).toHaveLength(1)
     expect(mine.body.data[0].id).toBe(invitationId)
 
-    // Invitee accepts (ownership-based, no token in body).
+    // Invitee accepts — the raw token from create is required, then ownership is checked.
     const accept = await agent()
       .post(`/api/invitations/${invitationId}/accept`)
       .set("Cookie", invitee.cookies)
-      .send({})
+      .send({ token: created.body.data.token })
     expect(accept.status).toBe(201)
 
     // The invitee is now an org member (member role grants org:read).
     const readOrg = await agent().get(`/api/orgs/${org.id}`).set("Cookie", invitee.cookies)
     expect(readOrg.status).toBe(200)
 
-    // Accepting again fails — no longer pending.
+    // Accepting again fails — no longer pending. Accept does not rotate token_hash,
+    // so the same token still matches and the status branch is what rejects this.
     const again = await agent()
       .post(`/api/invitations/${invitationId}/accept`)
       .set("Cookie", invitee.cookies)
-      .send({})
+      .send({ token: created.body.data.token })
     expect(again.status).toBe(400)
+    expect(again.body.message).toBe("Invitation is no longer pending")
   })
 
   it("rejects acceptance by a user the invitation does not belong to", async () => {
@@ -82,11 +84,13 @@ describe("Invitations (e2e)", () => {
     const invitationId = created.body.data.id as string
 
     const stranger = await signupAndSignin(app, { email: "stranger@x.io" })
+    // A valid token gets past the token check, so the 403 comes from the ownership check.
     const accept = await agent()
       .post(`/api/invitations/${invitationId}/accept`)
       .set("Cookie", stranger.cookies)
-      .send({})
+      .send({ token: created.body.data.token })
     expect(accept.status).toBe(403)
+    expect(accept.body.message).toBe("This invitation does not belong to you")
   })
 
   it("lets the invitee decline an invitation", async () => {
@@ -188,10 +192,11 @@ describe("Invitations (e2e)", () => {
       .set("Cookie", owner.cookies)
       .send({ email: "invitee@x.io", role_id: memberRoleId })
     const invitee = await signupAndSignin(app, { email: "invitee@x.io" })
-    await agent()
+    const firstAccept = await agent()
       .post(`/api/invitations/${first.body.data.id}/accept`)
       .set("Cookie", invitee.cookies)
-      .send({})
+      .send({ token: first.body.data.token })
+    expect(firstAccept.status).toBe(201)
 
     // The first invitation is consumed, so a second one is legal to create…
     const second = await agent()
@@ -203,8 +208,9 @@ describe("Invitations (e2e)", () => {
     const res = await agent()
       .post(`/api/invitations/${second.body.data.id}/accept`)
       .set("Cookie", invitee.cookies)
-      .send({})
+      .send({ token: second.body.data.token })
     expect(res.status).toBe(400)
+    expect(res.body.message).toBe("You are already a member of this organization")
   })
 
   it("rejects resending an invitation that is no longer pending", async () => {
@@ -216,10 +222,11 @@ describe("Invitations (e2e)", () => {
       .set("Cookie", owner.cookies)
       .send({ email: "invitee@x.io", role_id: memberRoleId })
     const invitee = await signupAndSignin(app, { email: "invitee@x.io" })
-    await agent()
+    const accept = await agent()
       .post(`/api/invitations/${created.body.data.id}/accept`)
       .set("Cookie", invitee.cookies)
-      .send({})
+      .send({ token: created.body.data.token })
+    expect(accept.status).toBe(201)
 
     const resend = await agent()
       .post(`/api/orgs/${org.id}/invitations/${created.body.data.id}/resend`)
@@ -290,10 +297,13 @@ describe("Invitations (e2e)", () => {
       .send({ email: "member@x.io", role_id: memberRoleId })
     const invitationId = created.body.data.id as string
     const member = await signupAndSignin(app, { email: "member@x.io" })
-    await agent()
+    // The accept must succeed, otherwise the 403 below would come from OrgGuard
+    // (non-member) rather than from PermissionsGuard, which is what this test names.
+    const accepted = await agent()
       .post(`/api/invitations/${invitationId}/accept`)
       .set("Cookie", member.cookies)
-      .send({})
+      .send({ token: created.body.data.token })
+    expect(accepted.status).toBe(201)
 
     const forbidden = await agent()
       .post(`/api/orgs/${org.id}/invitations`)

@@ -213,13 +213,16 @@ export class InvitationsService {
     }
   }
 
-  async accept(invitationId: string, userId: string, userEmail: string) {
+  async accept(invitationId: string, userId: string, userEmail: string, rawToken: string) {
     return this.prisma.$transaction(async (tx) => {
       // Serialize concurrent accepts of the same invitation (parity with the
       // Express SELECT ... FOR UPDATE) so the status check below is race-free.
       await tx.$queryRaw`SELECT id FROM invitations WHERE id = ${invitationId}::uuid FOR UPDATE`
-      const invitation = await tx.invitation.findUnique({
-        where: { id: invitationId },
+      // Match on the token hash as well as the id — mirrors preview(). Possession of
+      // the emailed secret is required, and a wrong token is reported as "not found"
+      // so callers cannot probe which invitation ids exist.
+      const invitation = await tx.invitation.findFirst({
+        where: { id: invitationId, tokenHash: this.hash(rawToken) },
         select: INVITE_SELECT,
       })
       if (!invitation) throw new NotFoundException("Invitation not found")
