@@ -3,7 +3,12 @@
   "rootDir": "..",
   "testEnvironment": "node",
   "testRegex": "(\\.e2e-spec|\\.spec)\\.ts$",
-  "transform": { "^.+\\.(t|j)s$": "ts-jest" },
+  "transform": {
+    "^.+\\.(t|j)s$": [
+      "ts-jest",
+      { "astTransformers": { "before": ["<rootDir>/test/swagger-plugin.transformer.js"] } }
+    ]
+  },
   "setupFiles": ["<rootDir>/test/load-test-env.ts"],
   "globalSetup": "<rootDir>/test/setup-e2e.ts",
   "testTimeout": 30000,

@@ -1,5 +1,6 @@
 import { INestApplication } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config"
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
 import { Logger } from "nestjs-pino"
 import helmet from "helmet"
 import cookieParser from "cookie-parser"
@@ -42,6 +43,25 @@ export function configureApp(app: INestApplication): void {
   app.use(cookieParser())
 
   app.setGlobalPrefix("api", { exclude: ["health"] })
+
+  // Read through ConfigService, never process.env. Joi's NODE_ENV-derived default is applied
+  // to the validated config object that backs ConfigService, and @nestjs/config does not
+  // write defaults for absent keys back into process.env — so a production deploy with
+  // SWAGGER_ENABLED unset would evaluate `undefined !== "false"` and publish the whole spec.
+  // The comparison is fail-closed (=== "true") so an unexpected undefined also stays off.
+  // configureApp runs after NestFactory.create, so the container is available here.
+  if (config.get<string>("SWAGGER_ENABLED") === "true") {
+    const docs = new DocumentBuilder()
+      .setTitle("Fullstack Template API")
+      .setDescription("Multi-tenant API with org/project scoping and RBAC")
+      .setVersion("1.0")
+      // This API authenticates with the access_token httpOnly cookie, not a bearer header.
+      .addCookieAuth("access_token")
+      .build()
+    // Mounted after setGlobalPrefix so the documented paths carry the /api prefix the
+    // client actually calls.
+    SwaggerModule.setup("api/docs", app, SwaggerModule.createDocument(app, docs))
+  }
 
   app.enableShutdownHooks()
 }
