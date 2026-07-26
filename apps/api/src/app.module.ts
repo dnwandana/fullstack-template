@@ -25,7 +25,10 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter"
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate }),
-    LoggerModule.forRoot({ pinoHttp: buildPinoHttpOptions() }),
+    LoggerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({ pinoHttp: buildPinoHttpOptions(config) }),
+    }),
     // Without forRoot() the @Cron decorator in CleanupService is inert and the job never
     // fires — with no error anywhere.
     ScheduleModule.forRoot(),

@@ -1,7 +1,13 @@
+import { ConfigService } from "@nestjs/config"
 import { buildPinoHttpOptions } from "../src/config/pino.config"
 
+// Stubbed ConfigService, mirroring test/swagger.e2e-spec.ts.
+const config = {
+  getOrThrow: (k: string) => ({ LOG_LEVEL: "info", NODE_ENV: "test" })[k],
+} as unknown as ConfigService
+
 function genId(incoming?: string): string {
-  const options = buildPinoHttpOptions()
+  const options = buildPinoHttpOptions(config)
   const req = { headers: incoming === undefined ? {} : { "x-request-id": incoming } }
   const res = { setHeader: jest.fn() }
   return (options.genReqId as unknown as (r: unknown, s: unknown) => string)(req, res)

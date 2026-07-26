@@ -1,4 +1,5 @@
 import { Controller, Get, Header, INestApplication, Module } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
 import { Test } from "@nestjs/testing"
 import { LoggerModule } from "nestjs-pino"
 import request from "supertest"
@@ -18,15 +19,17 @@ class PingController {
 describe("pino redaction (H-1)", () => {
   let app: INestApplication
   const lines: string[] = []
-  const prevNodeEnv = process.env.NODE_ENV
 
   beforeAll(async () => {
-    // Force the pino-pretty transport off so lines hit the in-memory stream.
-    process.env.NODE_ENV = "production"
+    // NODE_ENV "production" forces the pino-pretty transport off so lines hit the
+    // in-memory stream. Stubbed ConfigService, mirroring test/swagger.e2e-spec.ts.
+    const config = {
+      getOrThrow: (k: string) => ({ LOG_LEVEL: "info", NODE_ENV: "production" })[k],
+    } as unknown as ConfigService
     const stream = { write: (line: string) => void lines.push(line) }
 
     @Module({
-      imports: [LoggerModule.forRoot({ pinoHttp: [buildPinoHttpOptions(), stream] })],
+      imports: [LoggerModule.forRoot({ pinoHttp: [buildPinoHttpOptions(config), stream] })],
       controllers: [PingController],
     })
     class RedactionTestModule {}
@@ -37,7 +40,6 @@ describe("pino redaction (H-1)", () => {
   })
 
   afterAll(async () => {
-    process.env.NODE_ENV = prevNodeEnv
     await app.close()
   })
 

@@ -1,4 +1,5 @@
 import { Controller, Get, HttpCode, Res } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
 import { SkipThrottle } from "@nestjs/throttler"
 import { Response as ExResponse } from "express"
 import { HealthService } from "./health.service"
@@ -8,7 +9,10 @@ import { Public } from "../common/decorators/public.decorator"
 @SkipThrottle({ general: true })
 @Public()
 export class HealthController {
-  constructor(private readonly health: HealthService) {}
+  constructor(
+    private readonly health: HealthService,
+    private readonly config: ConfigService,
+  ) {}
 
   // Liveness: is the process running and able to answer? Deliberately does NOT touch
   // the database — an unreachable DB is a reason to stop routing traffic here, not a
@@ -32,7 +36,7 @@ export class HealthController {
       status: healthy ? "ready" : "not_ready",
       timestamp: new Date().toISOString(),
     }
-    if (process.env.NODE_ENV !== "production") {
+    if (this.config.get<string>("NODE_ENV") !== "production") {
       data.uptime = process.uptime()
       data.database = dbStatus
     }
@@ -43,7 +47,7 @@ export class HealthController {
   @HttpCode(200)
   async get(@Res({ passthrough: true }) res: ExResponse) {
     const { healthy, dbStatus } = await this.health.check()
-    const isProd = process.env.NODE_ENV === "production"
+    const isProd = this.config.get<string>("NODE_ENV") === "production"
     const status = healthy ? "healthy" : "unhealthy"
 
     res.status(healthy ? 200 : 503)

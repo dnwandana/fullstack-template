@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto"
+import { ConfigService } from "@nestjs/config"
 import type { Options } from "pino-http"
 
 // Two accepted shapes: a dashed UUID (what this app mints) and 32 undashed hex chars
@@ -11,9 +12,9 @@ const REQUEST_ID_RE =
 
 // Extracted from AppModule so tests can build a logger from the exact same
 // options and assert that no auth-token material reaches the log stream.
-export function buildPinoHttpOptions(): Options {
+export function buildPinoHttpOptions(config: ConfigService): Options {
   return {
-    level: process.env.LOG_LEVEL ?? "info",
+    level: config.getOrThrow<string>("LOG_LEVEL"),
     redact: {
       paths: ["req.headers.cookie", "req.headers.authorization", 'res.headers["set-cookie"]'],
       remove: true,
@@ -26,7 +27,7 @@ export function buildPinoHttpOptions(): Options {
       return id
     },
     transport:
-      process.env.NODE_ENV !== "production"
+      config.getOrThrow<string>("NODE_ENV") !== "production"
         ? { target: "pino-pretty", options: { singleLine: true } }
         : undefined,
   }
