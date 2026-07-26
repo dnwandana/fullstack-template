@@ -1,3 +1,7 @@
+# PostgreSQL is deliberately NOT part of the production topology — point
+# DATABASE_URL at a managed/external instance instead (L-23 decision).
+# The local stack (docker-compose.local.yml) ships a postgres service for
+# development only.
 services:
   nginx:
     build:

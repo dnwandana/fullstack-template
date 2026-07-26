@@ -20,6 +20,9 @@ services:
       dockerfile: apps/api/Dockerfile
     env_file:
       - .env.local
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       # Liveness, not readiness: a DB outage should drop this instance out of the
       # traffic pool, not make Docker keep restarting a healthy process.
@@ -28,3 +31,30 @@ services:
       timeout: 5s
       retries: 3
     restart: unless-stopped
+
+  # Development database for the local stack. Compose reads ${POSTGRES_*}
+  # interpolations from the shell / a compose-root .env file — NOT from
+  # .env.local — so the literal defaults below are authoritative; override
+  # via environment or an .env file at the compose root if needed.
+  # DATABASE_URL in .env.local must use hostname "postgres" (the service name).
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pg_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pg_password}
+      POSTGRES_DB: ${POSTGRES_DB:-fullstack_template}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-pg_user} -d ${POSTGRES_DB:-fullstack_template}",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
