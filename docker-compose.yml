@@ -33,7 +33,9 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      # Liveness, not readiness: a DB outage should drop this instance out of the
+      # traffic pool, not make Docker keep restarting a healthy process.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health/live || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3

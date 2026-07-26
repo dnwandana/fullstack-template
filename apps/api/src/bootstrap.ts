@@ -42,7 +42,9 @@ export function configureApp(app: INestApplication): void {
   app.use(urlencoded({ extended: true, limit: "100kb" }))
   app.use(cookieParser())
 
-  app.setGlobalPrefix("api", { exclude: ["health"] })
+  // Each entry matches an exact route path, not a prefix — "health" alone does NOT
+  // cover "health/live". Container healthchecks hit these unprefixed.
+  app.setGlobalPrefix("api", { exclude: ["health", "health/live", "health/ready"] })
 
   // Read through ConfigService, never process.env. Joi's NODE_ENV-derived default is applied
   // to the validated config object that backs ConfigService, and @nestjs/config does not

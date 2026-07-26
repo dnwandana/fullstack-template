@@ -44,7 +44,7 @@ RUN set -eux; \
 FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-# wget (busybox) is used by the compose healthcheck against /health.
+# wget (busybox) is used by the compose healthcheck against /health/live.
 COPY --from=build /prod ./
 USER node
 EXPOSE 3000
