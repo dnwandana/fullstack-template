@@ -1,6 +1,6 @@
 import { Module, ValidationPipe } from "@nestjs/common"
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core"
-import { ConfigModule } from "@nestjs/config"
+import { ConfigModule, ConfigService } from "@nestjs/config"
 import { LoggerModule } from "nestjs-pino"
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
 import { PrismaModule } from "./prisma/prisma.module"
@@ -25,13 +25,22 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter"
     ConfigModule.forRoot({ isGlobal: true, validate }),
     LoggerModule.forRoot({ pinoHttp: buildPinoHttpOptions() }),
     PrismaModule,
-    ThrottlerModule.forRoot([
-      {
-        name: "general",
-        ttl: 15 * 60 * 1000,
-        limit: Number(process.env.RATE_LIMIT_GENERAL_MAX ?? 100),
-      },
-    ]),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => [
+        {
+          name: "general",
+          ttl: 15 * 60 * 1000,
+          // Read through ConfigService, not process.env: the factory runs after
+          // ConfigModule validation, so Joi's coercion and default apply by
+          // construction. The previous inline `Number(process.env.X ?? 100)` only
+          // saw them because ConfigModule.forRoot happens to be evaluated earlier in
+          // this same imports array — reordering it would have silently produced NaN,
+          // and a NaN limit disables throttling with no error anywhere.
+          limit: config.get<number>("RATE_LIMIT_GENERAL_MAX") as number,
+        },
+      ],
+    }),
     HealthModule,
     UsersModule,
     AuthModule,
