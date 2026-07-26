@@ -28,6 +28,6 @@ export default async function globalSetup(): Promise<void> {
 
 export async function truncateAll(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe(
-    "TRUNCATE TABLE refresh_tokens, invitations, todos, project_members, projects, org_members, role_permissions, roles, organizations, users CASCADE",
+    "TRUNCATE TABLE password_reset_tokens, refresh_tokens, invitations, todos, project_members, projects, org_members, role_permissions, roles, organizations, users CASCADE",
   )
 }

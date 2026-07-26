@@ -138,6 +138,19 @@ CREATE TABLE "refresh_tokens" (
     CONSTRAINT "refresh_tokens_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "password_reset_tokens" (
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
+    "token_hash" VARCHAR(64) NOT NULL,
+    "expires_at" TIMESTAMPTZ(6) NOT NULL,
+    "used_at" TIMESTAMPTZ(6),
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "password_reset_tokens_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_unique" ON "users"("email");
 
@@ -152,6 +165,9 @@ CREATE UNIQUE INDEX "roles_org_id_name_unique" ON "roles"("org_id", "name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "invitations_token_hash_unique" ON "invitations"("token_hash");
+
+-- CreateIndex
+CREATE INDEX "invitations_expires_at_index" ON "invitations"("expires_at");
 
 -- CreateIndex
 CREATE INDEX "invitations_invitee_email_index" ON "invitations"("invitee_email");
@@ -172,10 +188,25 @@ CREATE INDEX "todos_project_id_index" ON "todos"("project_id");
 CREATE INDEX "todos_project_id_user_id_index" ON "todos"("project_id", "user_id");
 
 -- CreateIndex
+CREATE INDEX "refresh_tokens_expires_at_index" ON "refresh_tokens"("expires_at");
+
+-- CreateIndex
+CREATE INDEX "refresh_tokens_revoked_at_index" ON "refresh_tokens"("revoked_at");
+
+-- CreateIndex
 CREATE INDEX "refresh_tokens_token_hash_index" ON "refresh_tokens"("token_hash");
 
 -- CreateIndex
 CREATE INDEX "refresh_tokens_user_id_index" ON "refresh_tokens"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "password_reset_tokens_token_hash_unique" ON "password_reset_tokens"("token_hash");
+
+-- CreateIndex
+CREATE INDEX "password_reset_tokens_expires_at_index" ON "password_reset_tokens"("expires_at");
+
+-- CreateIndex
+CREATE INDEX "password_reset_tokens_user_id_index" ON "password_reset_tokens"("user_id");
 
 -- AddForeignKey
 ALTER TABLE "organizations" ADD CONSTRAINT "organizations_created_by_foreign" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
@@ -193,7 +224,7 @@ ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_role_id_foreign"
 ALTER TABLE "org_members" ADD CONSTRAINT "org_members_org_id_foreign" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "org_members" ADD CONSTRAINT "org_members_role_id_foreign" FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE "org_members" ADD CONSTRAINT "org_members_role_id_foreign" FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 
 -- AddForeignKey
 ALTER TABLE "org_members" ADD CONSTRAINT "org_members_user_id_foreign" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
@@ -208,7 +239,7 @@ ALTER TABLE "projects" ADD CONSTRAINT "projects_org_id_foreign" FOREIGN KEY ("or
 ALTER TABLE "project_members" ADD CONSTRAINT "project_members_project_id_foreign" FOREIGN KEY ("project_id") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "project_members" ADD CONSTRAINT "project_members_role_id_foreign" FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE "project_members" ADD CONSTRAINT "project_members_role_id_foreign" FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 
 -- AddForeignKey
 ALTER TABLE "project_members" ADD CONSTRAINT "project_members_user_id_foreign" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
@@ -236,4 +267,7 @@ ALTER TABLE "todos" ADD CONSTRAINT "todos_user_id_foreign" FOREIGN KEY ("user_id
 
 -- AddForeignKey
 ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_user_id_foreign" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE "password_reset_tokens" ADD CONSTRAINT "password_reset_tokens_user_id_foreign" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 
