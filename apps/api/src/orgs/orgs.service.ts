@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common"
 import { randomUUID } from "crypto"
 import { PrismaService } from "../prisma/prisma.service"
+import { toSnakeKeys } from "../common/to-snake-keys"
 import { OrgBodyDto } from "./dto/org-body.dto"
 import { SYSTEM_ROLE_NAMES, SYSTEM_ROLE_PERMISSIONS } from "./system-roles"
 
@@ -21,16 +22,6 @@ type OrgRow = {
   createdAt: Date
   updatedAt: Date
 }
-
-// API responses keep the Express-era snake_case contract the SPA consumes.
-const toSnake = (org: OrgRow) => ({
-  id: org.id,
-  name: org.name,
-  description: org.description,
-  created_by: org.createdBy,
-  created_at: org.createdAt,
-  updated_at: org.updatedAt,
-})
 
 @Injectable()
 export class OrgsService {
@@ -80,7 +71,7 @@ export class OrgsService {
       await tx.orgMember.create({ data: { orgId: created.id, userId, roleId: ownerRoleId } })
       return created
     })
-    return toSnake(org)
+    return toSnakeKeys<OrgRow>(org)
   }
 
   async findManyByUserId(userId: string) {
@@ -89,7 +80,7 @@ export class OrgsService {
       select: ORG_SELECT,
       orderBy: { createdAt: "desc" },
     })
-    return rows.map(toSnake)
+    return rows.map((row) => toSnakeKeys<OrgRow>(row))
   }
 
   async findById(orgId: string) {
@@ -97,7 +88,7 @@ export class OrgsService {
       where: { id: orgId },
       select: ORG_SELECT,
     })
-    return org ? toSnake(org) : null
+    return org ? toSnakeKeys<OrgRow>(org) : null
   }
 
   async update(orgId: string, dto: OrgBodyDto) {
@@ -106,7 +97,7 @@ export class OrgsService {
       data: { name: dto.name, description: dto.description ?? null },
       select: ORG_SELECT,
     })
-    return toSnake(org)
+    return toSnakeKeys<OrgRow>(org)
   }
 
   async remove(orgId: string): Promise<void> {

@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common"
 import { randomUUID } from "crypto"
 import { PrismaService } from "../prisma/prisma.service"
+import { toSnakeKeys } from "../common/to-snake-keys"
 import { ProjectBodyDto } from "./dto/project-body.dto"
 
 const PROJECT_SELECT = {
@@ -23,17 +24,6 @@ type ProjectRow = {
   updatedAt: Date
 }
 
-// API responses keep the Express-era snake_case contract the SPA consumes.
-const toSnake = (project: ProjectRow) => ({
-  id: project.id,
-  org_id: project.orgId,
-  name: project.name,
-  description: project.description,
-  created_by: project.createdBy,
-  created_at: project.createdAt,
-  updated_at: project.updatedAt,
-})
-
 @Injectable()
 export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -44,7 +34,7 @@ export class ProjectsService {
       select: PROJECT_SELECT,
       orderBy: { createdAt: "desc" },
     })
-    return rows.map(toSnake)
+    return rows.map((row) => toSnakeKeys<ProjectRow>(row))
   }
 
   async findManyByUserId(orgId: string, userId: string) {
@@ -53,7 +43,7 @@ export class ProjectsService {
       select: PROJECT_SELECT,
       orderBy: { createdAt: "desc" },
     })
-    return rows.map(toSnake)
+    return rows.map((row) => toSnakeKeys<ProjectRow>(row))
   }
 
   async create(orgId: string, userId: string, dto: ProjectBodyDto) {
@@ -80,7 +70,7 @@ export class ProjectsService {
       }
       return created
     })
-    return toSnake(project)
+    return toSnakeKeys<ProjectRow>(project)
   }
 
   async findById(projectId: string) {
@@ -88,7 +78,7 @@ export class ProjectsService {
       where: { id: projectId },
       select: PROJECT_SELECT,
     })
-    return project ? toSnake(project) : null
+    return project ? toSnakeKeys<ProjectRow>(project) : null
   }
 
   async update(projectId: string, dto: ProjectBodyDto) {
@@ -97,7 +87,7 @@ export class ProjectsService {
       data: { name: dto.name, description: dto.description ?? null },
       select: PROJECT_SELECT,
     })
-    return toSnake(project)
+    return toSnakeKeys<ProjectRow>(project)
   }
 
   async remove(projectId: string): Promise<void> {
