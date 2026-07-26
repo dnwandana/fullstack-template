@@ -2,6 +2,7 @@ import { Module, ValidationPipe } from "@nestjs/common"
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core"
 import { ConfigModule, ConfigService } from "@nestjs/config"
 import { LoggerModule } from "nestjs-pino"
+import { ScheduleModule } from "@nestjs/schedule"
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
 import { PrismaModule } from "./prisma/prisma.module"
 import { validate } from "./config/env.validation"
@@ -16,6 +17,7 @@ import { MembersModule } from "./members/members.module"
 import { ProjectsModule } from "./projects/projects.module"
 import { TodosModule } from "./todos/todos.module"
 import { InvitationsModule } from "./invitations/invitations.module"
+import { MaintenanceModule } from "./maintenance/maintenance.module"
 import { JwtAuthGuard } from "./auth/guards/jwt-auth.guard"
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor"
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter"
@@ -24,6 +26,9 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter"
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate }),
     LoggerModule.forRoot({ pinoHttp: buildPinoHttpOptions() }),
+    // Without forRoot() the @Cron decorator in CleanupService is inert and the job never
+    // fires — with no error anywhere.
+    ScheduleModule.forRoot(),
     PrismaModule,
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
@@ -51,6 +56,7 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter"
     ProjectsModule,
     TodosModule,
     InvitationsModule,
+    MaintenanceModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
