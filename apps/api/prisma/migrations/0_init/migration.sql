@@ -93,6 +93,9 @@ CREATE TABLE "project_members" (
     CONSTRAINT "project_members_pkey" PRIMARY KEY ("user_id","project_id")
 );
 
+-- CreateEnum
+CREATE TYPE "InvitationStatus" AS ENUM ('pending', 'accepted', 'declined');
+
 -- CreateTable
 CREATE TABLE "invitations" (
     "id" UUID NOT NULL,
@@ -102,7 +105,7 @@ CREATE TABLE "invitations" (
     "invitee_email" VARCHAR(255),
     "invitee_id" UUID,
     "role_id" UUID NOT NULL,
-    "status" VARCHAR(20) NOT NULL DEFAULT 'pending',
+    "status" "InvitationStatus" NOT NULL DEFAULT 'pending',
     "token_hash" VARCHAR(64),
     "expires_at" TIMESTAMPTZ(6) NOT NULL,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -127,7 +130,7 @@ CREATE TABLE "todos" (
 
 -- CreateTable
 CREATE TABLE "refresh_tokens" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "id" UUID NOT NULL,
     "user_id" UUID NOT NULL,
     "token_hash" VARCHAR(64) NOT NULL,
     "expires_at" TIMESTAMPTZ(6) NOT NULL,
@@ -163,6 +166,9 @@ CREATE UNIQUE INDEX "permissions_resource_action_unique" ON "permissions"("resou
 -- CreateIndex
 CREATE UNIQUE INDEX "roles_org_id_name_unique" ON "roles"("org_id", "name");
 
+-- CreateIndex (SQL-only: Prisma cannot model functional indexes)
+CREATE UNIQUE INDEX "roles_org_id_lower_name_unique" ON "roles"("org_id", lower("name"));
+
 -- CreateIndex
 CREATE UNIQUE INDEX "invitations_token_hash_unique" ON "invitations"("token_hash");
 
@@ -180,6 +186,15 @@ CREATE INDEX "invitations_org_id_index" ON "invitations"("org_id");
 
 -- CreateIndex
 CREATE INDEX "invitations_status_expires_at_index" ON "invitations"("status", "expires_at");
+
+-- CreateIndex
+-- Two partial unique indexes because "project_id" is nullable and NULLs never
+-- collide in a single unique index. These are the DB-level backstop for the
+-- duplicate-pending-invitation race the service pre-check cannot close alone.
+CREATE UNIQUE INDEX "invitations_pending_org_email_unique" ON "invitations"("org_id", "invitee_email") WHERE "status" = 'pending' AND "project_id" IS NULL;
+
+-- CreateIndex
+CREATE UNIQUE INDEX "invitations_pending_project_email_unique" ON "invitations"("org_id", "project_id", "invitee_email") WHERE "status" = 'pending' AND "project_id" IS NOT NULL;
 
 -- CreateIndex
 CREATE INDEX "todos_project_id_index" ON "todos"("project_id");

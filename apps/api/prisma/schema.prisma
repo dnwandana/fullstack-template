@@ -61,6 +61,10 @@ model Permission {
   @@map("permissions")
 }
 
+// Role names are also case-insensitively unique per org via the SQL-only functional
+// index roles_org_id_lower_name_unique on (org_id, lower(name)) in the migration —
+// Prisma cannot model functional indexes. The plain @@unique below stays for
+// compound-key queries.
 model Role {
   id          String   @id @db.Uuid
   orgId       String   @map("org_id") @db.Uuid
@@ -137,19 +141,28 @@ model ProjectMember {
   @@map("project_members")
 }
 
+// Partial unique indexes on pending invitations
+// (invitations_pending_org_email_unique, invitations_pending_project_email_unique)
+// exist only in the migration SQL — Prisma cannot model partial indexes.
+enum InvitationStatus {
+  pending
+  accepted
+  declined
+}
+
 model Invitation {
-  id           String   @id @db.Uuid
-  orgId        String   @map("org_id") @db.Uuid
-  projectId    String?  @map("project_id") @db.Uuid
-  inviterId    String   @map("inviter_id") @db.Uuid
-  inviteeEmail String?  @map("invitee_email") @db.VarChar(255)
-  inviteeId    String?  @map("invitee_id") @db.Uuid
-  roleId       String   @map("role_id") @db.Uuid
-  status       String   @default("pending") @db.VarChar(20)
-  tokenHash    String?  @unique(map: "invitations_token_hash_unique") @map("token_hash") @db.VarChar(64)
-  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id           String           @id @db.Uuid
+  orgId        String           @map("org_id") @db.Uuid
+  projectId    String?          @map("project_id") @db.Uuid
+  inviterId    String           @map("inviter_id") @db.Uuid
+  inviteeEmail String?          @map("invitee_email") @db.VarChar(255)
+  inviteeId    String?          @map("invitee_id") @db.Uuid
+  roleId       String           @map("role_id") @db.Uuid
+  status       InvitationStatus @default(pending)
+  tokenHash    String?          @unique(map: "invitations_token_hash_unique") @map("token_hash") @db.VarChar(64)
+  expiresAt    DateTime         @map("expires_at") @db.Timestamptz(6)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   invitee      User?        @relation("InvitationInvitee", fields: [inviteeId], references: [id], onUpdate: NoAction, map: "invitations_invitee_id_foreign")
   inviter      User         @relation("InvitationInviter", fields: [inviterId], references: [id], onUpdate: NoAction, map: "invitations_inviter_id_foreign")
@@ -184,7 +197,10 @@ model Todo {
 }
 
 model RefreshToken {
-  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // All IDs are app-generated crypto.randomUUID() (v4) — refresh-token.service.ts
+  // always supplies the id, so the old gen_random_uuid() DB default was dead code.
+  // UUIDv7 is the upgrade path if B-tree locality on this hot table ever matters.
+  id        String    @id @db.Uuid
   userId    String    @map("user_id") @db.Uuid
   tokenHash String    @map("token_hash") @db.VarChar(64)
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)

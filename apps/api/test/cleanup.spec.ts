@@ -40,7 +40,7 @@ describe("CleanupService", () => {
 
   const plantRefreshToken = (hashChar: string, expiresAt: Date, revokedAt?: Date) =>
     prisma.refreshToken.create({
-      data: { userId, tokenHash: hashChar.repeat(64), expiresAt, revokedAt },
+      data: { id: randomUUID(), userId, tokenHash: hashChar.repeat(64), expiresAt, revokedAt },
     })
 
   const plantResetToken = (hashChar: string, expiresAt: Date) =>
