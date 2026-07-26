@@ -6,10 +6,16 @@ import {
 } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
+import { PaginationService } from "../common/pagination/pagination.service"
+import { toSnakeKeys } from "../common/to-snake-keys"
+import { ListQueryDto } from "../common/pagination/list-query.dto"
 
 @Injectable()
 export class MembersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pagination: PaginationService,
+  ) {}
 
   // Serializes owner-invariant checks per org: without this, two concurrent
   // demotions can each observe two owners and together leave the org with none.
@@ -19,9 +25,11 @@ export class MembersService {
     return tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${orgId}))::text`
   }
 
-  async listOrgMembers(orgId: string) {
+  async listOrgMembers(orgId: string, query: ListQueryDto) {
+    const where = { orgId }
+    const totalItems = await this.prisma.orgMember.count({ where })
     const rows = await this.prisma.orgMember.findMany({
-      where: { orgId },
+      where,
       select: {
         userId: true,
         orgId: true,
@@ -30,21 +38,29 @@ export class MembersService {
         user: { select: { name: true, email: true } },
         role: { select: { name: true } },
       },
+      // Deterministic order — pagination without a stable order is nondeterministic.
+      orderBy: { joinedAt: "asc" },
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
     })
-    return rows.map((m) => ({
-      user_id: m.userId,
-      org_id: m.orgId,
-      role_id: m.roleId,
-      joined_at: m.joinedAt,
-      name: m.user.name,
-      email: m.user.email,
-      role_name: m.role.name,
-    }))
+    return {
+      // Destructure the relations off before mapping — nested objects must not
+      // reach the shallow key mapper.
+      data: rows.map(({ user, role, ...cols }) => ({
+        ...toSnakeKeys(cols),
+        name: user.name,
+        email: user.email,
+        role_name: role.name,
+      })),
+      pagination: this.pagination.buildMeta(query.page, query.limit, totalItems),
+    }
   }
 
-  async listProjectMembers(projectId: string) {
+  async listProjectMembers(projectId: string, query: ListQueryDto) {
+    const where = { projectId }
+    const totalItems = await this.prisma.projectMember.count({ where })
     const rows = await this.prisma.projectMember.findMany({
-      where: { projectId },
+      where,
       select: {
         userId: true,
         projectId: true,
@@ -53,16 +69,22 @@ export class MembersService {
         user: { select: { name: true, email: true } },
         role: { select: { name: true } },
       },
+      // Deterministic order — pagination without a stable order is nondeterministic.
+      orderBy: { joinedAt: "asc" },
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
     })
-    return rows.map((m) => ({
-      user_id: m.userId,
-      project_id: m.projectId,
-      role_id: m.roleId,
-      joined_at: m.joinedAt,
-      name: m.user.name,
-      email: m.user.email,
-      role_name: m.role.name,
-    }))
+    return {
+      // Destructure the relations off before mapping — nested objects must not
+      // reach the shallow key mapper.
+      data: rows.map(({ user, role, ...cols }) => ({
+        ...toSnakeKeys(cols),
+        name: user.name,
+        email: user.email,
+        role_name: role.name,
+      })),
+      pagination: this.pagination.buildMeta(query.page, query.limit, totalItems),
+    }
   }
 
   private ownerCount(tx: Prisma.TransactionClient, orgId: string): Promise<number> {
@@ -104,7 +126,7 @@ export class MembersService {
     roleId: string,
     actorPermissions: string[],
   ) {
-    await this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx) => {
       await this.lockOrg(tx, orgId)
       const role = await tx.role.findFirst({
         where: { id: roleId, orgId },
@@ -138,10 +160,25 @@ export class MembersService {
       }
       if (actingUserId === targetUserId)
         throw new BadRequestException("You cannot change your own role")
-      await tx.orgMember.update({
+      const updated = await tx.orgMember.update({
         where: { userId_orgId: { userId: targetUserId, orgId } },
         data: { roleId },
+        select: {
+          userId: true,
+          orgId: true,
+          roleId: true,
+          joinedAt: true,
+          user: { select: { name: true, email: true } },
+          role: { select: { name: true } },
+        },
       })
+      const { user, role: updatedRole, ...cols } = updated
+      return {
+        ...toSnakeKeys(cols),
+        name: user.name,
+        email: user.email,
+        role_name: updatedRole.name,
+      }
     })
   }
 
@@ -197,10 +234,25 @@ export class MembersService {
       select: { userId: true },
     })
     if (!target) throw new NotFoundException("User is not a member of this project")
-    await this.prisma.projectMember.update({
+    const updated = await this.prisma.projectMember.update({
       where: { userId_projectId: { userId: targetUserId, projectId } },
       data: { roleId },
+      select: {
+        userId: true,
+        projectId: true,
+        roleId: true,
+        joinedAt: true,
+        user: { select: { name: true, email: true } },
+        role: { select: { name: true } },
+      },
     })
+    const { user, role: updatedRole, ...cols } = updated
+    return {
+      ...toSnakeKeys(cols),
+      name: user.name,
+      email: user.email,
+      role_name: updatedRole.name,
+    }
   }
 
   async removeProjectMember(projectId: string, actingUserId: string, targetUserId: string) {

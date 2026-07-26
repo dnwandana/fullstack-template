@@ -1,24 +1,23 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Put, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Put, Query } from "@nestjs/common"
 import { MembersService } from "./members.service"
 import { UpdateMemberDto } from "./dto/update-member.dto"
+import { ListQueryDto } from "../common/pagination/list-query.dto"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { CurrentOrg } from "../common/decorators/current-org.decorator"
 import { CurrentProject } from "../common/decorators/current-project.decorator"
 import { CurrentPermissions } from "../common/decorators/current-permissions.decorator"
 import { RequirePermission } from "../common/decorators/require-permission.decorator"
-import { OrgGuard } from "../tenancy/org.guard"
-import { ProjectGuard } from "../tenancy/project.guard"
-import { PermissionsGuard } from "../tenancy/permissions.guard"
+import { ProjectScoped } from "../tenancy/scoped.decorators"
 
 @Controller("orgs/:org_id/projects/:project_id/members")
-@UseGuards(OrgGuard, ProjectGuard, PermissionsGuard)
+@ProjectScoped()
 export class ProjectMembersController {
   constructor(private readonly members: MembersService) {}
 
   @Get()
   @RequirePermission("project:read")
-  async list(@CurrentProject() project: { id: string }) {
-    return { message: "OK", data: await this.members.listProjectMembers(project.id) }
+  async list(@CurrentProject() project: { id: string }, @Query() query: ListQueryDto) {
+    return { message: "OK", ...(await this.members.listProjectMembers(project.id, query)) }
   }
 
   @Put(":user_id")
@@ -31,7 +30,7 @@ export class ProjectMembersController {
     @Param("user_id", ParseUUIDPipe) targetUserId: string,
     @Body() dto: UpdateMemberDto,
   ) {
-    await this.members.updateProjectMemberRole(
+    const data = await this.members.updateProjectMemberRole(
       org.id,
       project.id,
       actingUserId,
@@ -39,7 +38,7 @@ export class ProjectMembersController {
       dto.role_id,
       actorPermissions,
     )
-    return { message: "OK", data: null }
+    return { message: "OK", data }
   }
 
   @Delete(":user_id")

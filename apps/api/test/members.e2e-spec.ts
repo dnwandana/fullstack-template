@@ -2,7 +2,7 @@ import { Test } from "@nestjs/testing"
 import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
-import { configureApp } from "../src/bootstrap"
+import { createTestApp } from "./create-test-app"
 import { PrismaService } from "../src/prisma/prisma.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
 import { signupAndSignin, createOrg, getRoleId } from "./factory"
@@ -12,9 +12,7 @@ describe("Members (e2e)", () => {
   let prisma: PrismaService
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
-    app = ref.createNestApplication({ bufferLogs: true })
-    configureApp(app)
-    await app.init()
+    app = await createTestApp(ref)
     prisma = app.get(PrismaService)
   })
   beforeEach(async () => {
@@ -84,6 +82,132 @@ describe("Members (e2e)", () => {
       where: { orgId: org.id, role: { name: "owner" } },
     })
     expect(owners).toBe(1)
+  })
+
+  it("returns the updated membership in the response body", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const member = await signupAndSignin(app)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+    const adminRoleId = await getRoleId(prisma, org.id, "admin")
+    await prisma.orgMember.create({
+      data: { orgId: org.id, userId: member.userId, roleId: memberRoleId },
+    })
+
+    const { body } = await agent()
+      .put(`/api/orgs/${org.id}/members/${member.userId}`)
+      .set("Cookie", owner.cookies)
+      .send({ role_id: adminRoleId })
+      .expect(200)
+    expect(body.data).toEqual({
+      user_id: member.userId,
+      org_id: org.id,
+      role_id: adminRoleId,
+      joined_at: expect.any(String),
+      name: expect.any(String),
+      email: expect.any(String),
+      role_name: "admin",
+    })
+  })
+
+  it("returns the updated project membership in the response body", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const proj = await agent()
+      .post(`/api/orgs/${org.id}/projects`)
+      .set("Cookie", owner.cookies)
+      .send({ name: "P" })
+    const projectId = proj.body.data.id as string
+
+    const member = await signupAndSignin(app)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+    const viewerRoleId = await getRoleId(prisma, org.id, "viewer")
+    await prisma.orgMember.create({
+      data: { orgId: org.id, userId: member.userId, roleId: memberRoleId },
+    })
+    await prisma.projectMember.create({
+      data: { projectId, userId: member.userId, roleId: memberRoleId },
+    })
+
+    const { body } = await agent()
+      .put(`/api/orgs/${org.id}/projects/${projectId}/members/${member.userId}`)
+      .set("Cookie", owner.cookies)
+      .send({ role_id: viewerRoleId })
+      .expect(200)
+    expect(body.data).toEqual({
+      user_id: member.userId,
+      project_id: projectId,
+      role_id: viewerRoleId,
+      joined_at: expect.any(String),
+      name: expect.any(String),
+      email: expect.any(String),
+      role_name: "viewer",
+    })
+  })
+
+  it("paginates the org members list", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const member = await signupAndSignin(app)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+    await prisma.orgMember.create({
+      data: { orgId: org.id, userId: member.userId, roleId: memberRoleId },
+    })
+
+    const { body } = await agent()
+      .get(`/api/orgs/${org.id}/members?page=1&limit=1`)
+      .set("Cookie", owner.cookies)
+      .expect(200)
+    expect(body.data).toHaveLength(1)
+    expect(body.pagination).toMatchObject({
+      current_page: 1,
+      items_per_page: 1,
+      total_items: expect.any(Number),
+      total_pages: expect.any(Number),
+    })
+    expect(body.pagination.total_items).toBe(2)
+    expect(body.pagination.total_pages).toBe(2)
+  })
+
+  it("defaults to limit 50 when no query is sent", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const { body } = await agent()
+      .get(`/api/orgs/${org.id}/members`)
+      .set("Cookie", owner.cookies)
+      .expect(200)
+    expect(body.pagination.items_per_page).toBe(50)
+  })
+
+  it("rejects a members list limit above 100", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    await agent()
+      .get(`/api/orgs/${org.id}/members?limit=200`)
+      .set("Cookie", owner.cookies)
+      .expect(400)
+  })
+
+  it("paginates the project members list", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const proj = await agent()
+      .post(`/api/orgs/${org.id}/projects`)
+      .set("Cookie", owner.cookies)
+      .send({ name: "P" })
+    const projectId = proj.body.data.id as string
+
+    const { body } = await agent()
+      .get(`/api/orgs/${org.id}/projects/${projectId}/members?page=1&limit=1`)
+      .set("Cookie", owner.cookies)
+      .expect(200)
+    expect(body.data).toHaveLength(1)
+    expect(body.pagination).toMatchObject({
+      current_page: 1,
+      items_per_page: 1,
+      total_items: 1,
+      total_pages: 1,
+    })
   })
 
   it("blocks removing the last owner", async () => {
