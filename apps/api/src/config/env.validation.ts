@@ -21,7 +21,6 @@ const schema = Joi.object({
     .default("7d")
     .messages({ "string.pattern.base": "{{#label}} must be <number><s|m|h|d>, e.g. 7d" }),
   LOG_LEVEL: Joi.string().valid("error", "warn", "info", "debug").default("info"),
-  LOG_TO_FILE: Joi.string().valid("true", "false").default("true"),
   CLEANUP_ENABLED: Joi.string().valid("true", "false").default("true"),
   CORS_ALLOWED_ORIGINS: Joi.string().default("http://localhost:8080"),
   APP_BASE_URL: Joi.string().uri().default("http://localhost:8080"),
