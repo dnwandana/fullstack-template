@@ -3,7 +3,7 @@ import { INestApplication } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
-import { configureApp } from "../src/bootstrap"
+import { createTestApp } from "./create-test-app"
 import { validate } from "../src/config/env.validation"
 
 // SwaggerModule registers its routes straight on the Express instance, so these responses
@@ -46,9 +46,7 @@ describe("GET /api/docs (enabled)", () => {
   let app: INestApplication
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
-    app = ref.createNestApplication({ bufferLogs: true })
-    configureApp(app)
-    await app.init()
+    app = await createTestApp(ref)
   })
   afterAll(async () => app.close())
 
@@ -84,11 +82,11 @@ describe("GET /api/docs (enabled)", () => {
   it("infers DTO constraints from class-validator decorators", async () => {
     const res = await request(app.getHttpServer()).get("/api/docs-json")
     const { properties, required } = res.body.components.schemas.SignupDto
-    // These come from @MinLength(8)/@MaxLength(72)/@IsEmail on SignupDto — nothing in src/
+    // These come from @MinLength(8)/@MaxLength(128)/@IsEmail on SignupDto — nothing in src/
     // writes @ApiProperty by hand, so an empty properties object here means the plugin
     // stopped running and every schema in the published spec is silently blank.
     expect(properties.password.minLength).toBe(8)
-    expect(properties.password.maxLength).toBe(72)
+    expect(properties.password.maxLength).toBe(128)
     expect(properties.email.format).toBe("email")
     expect(required).toEqual(
       expect.arrayContaining(["name", "email", "password", "confirmation_password"]),
@@ -147,9 +145,7 @@ describe("GET /api/docs (disabled)", () => {
         },
       })
       .compile()
-    app = ref.createNestApplication({ bufferLogs: true })
-    configureApp(app)
-    await app.init()
+    app = await createTestApp(ref)
   })
   afterAll(async () => app.close())
 
@@ -161,7 +157,11 @@ describe("GET /api/docs (disabled)", () => {
     for (const path of ["/api/docs-json", "/api/docs"]) {
       const res = await request(app.getHttpServer()).get(path)
       expect(res.status).toBe(404)
-      expect(res.body).toEqual({ message: expect.stringContaining("Cannot GET"), data: null })
+      expect(res.body).toEqual({
+        message: expect.stringContaining("Cannot GET"),
+        data: null,
+        request_id: expect.any(String),
+      })
     }
   })
 })

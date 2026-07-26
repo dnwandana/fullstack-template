@@ -6,10 +6,12 @@ export class ResetPasswordDto {
   token!: string
 
   // Rules copied verbatim from SignupDto — a reset that accepts a weaker password
-  // than signup would be a bypass of the signup policy.
+  // than signup would be a bypass of the signup policy. The shared cap is 8–128:
+  // Argon2 hashes arbitrary-length input, so the old 72-char ceiling was a
+  // bcrypt artifact (L-15), not a real constraint.
   @IsString()
   @MinLength(8, { message: "password must be at least 8 characters" })
-  @MaxLength(72, { message: "password must be at most 72 characters" })
+  @MaxLength(128, { message: "password must be at most 128 characters" })
   @Matches(/[A-Z]/, { message: "password must contain at least one uppercase letter" })
   @Matches(/[a-z]/, { message: "password must contain at least one lowercase letter" })
   @Matches(/[0-9]/, { message: "password must contain at least one digit" })

@@ -2,10 +2,13 @@ import { Test } from "@nestjs/testing"
 import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
-import { configureApp } from "../src/bootstrap"
+import { createTestApp } from "./create-test-app"
 import { PrismaService } from "../src/prisma/prisma.service"
 import { signupAndSignin } from "./factory"
 import { truncateAll } from "./setup-e2e"
+
+// "Aa1!" satisfies the complexity rules; Argon2 has no 72-byte bcrypt cap.
+const passphrase = (length: number) => "Aa1!" + "a".repeat(length - 4)
 
 const CREDS = {
   name: "Ada",
@@ -19,9 +22,7 @@ describe("Auth (e2e)", () => {
   let prisma: PrismaService
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
-    app = ref.createNestApplication({ bufferLogs: true })
-    configureApp(app)
-    await app.init()
+    app = await createTestApp(ref)
     prisma = app.get(PrismaService)
   })
   beforeEach(async () => truncateAll(prisma))
@@ -39,6 +40,28 @@ describe("Auth (e2e)", () => {
     const dup = await agent().post("/api/auth/signup").send(CREDS)
     expect(dup.status).toBe(400)
     expect(typeof dup.body.message).toBe("string")
+  })
+
+  it("accepts a 128-char password end-to-end and rejects 129 (L-15)", async () => {
+    const long = passphrase(128)
+    const res = await agent()
+      .post("/api/auth/signup")
+      .send({ name: "Max", email: "max@x.io", password: long, confirmation_password: long })
+    expect(res.status).toBe(201)
+    const signin = await agent()
+      .post("/api/auth/signin")
+      .send({ email: "max@x.io", password: long })
+    expect(signin.status).toBe(200)
+
+    const tooLong = passphrase(129)
+    const rejected = await agent().post("/api/auth/signup").send({
+      name: "Max2",
+      email: "max2@x.io",
+      password: tooLong,
+      confirmation_password: tooLong,
+    })
+    expect(rejected.status).toBe(400)
+    expect(rejected.body.message).toMatch(/at most 128 characters/)
   })
 
   it("signs in, sets both cookies, and reads /me", async () => {
@@ -65,7 +88,11 @@ describe("Auth (e2e)", () => {
       .post("/api/auth/signin")
       .send({ email: CREDS.email, password: "Wr0ng!pass" })
     expect(res.status).toBe(401)
-    expect(res.body).toEqual({ message: "invalid credentials", data: null })
+    expect(res.body).toEqual({
+      message: "invalid credentials",
+      data: null,
+      request_id: expect.any(String),
+    })
   })
 
   it("rotates the refresh token and revokes the old one", async () => {

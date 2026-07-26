@@ -9,6 +9,6 @@ export class SigninDto {
 
   @IsString()
   @MinLength(8)
-  @MaxLength(72)
+  @MaxLength(128)
   password!: string
 }
