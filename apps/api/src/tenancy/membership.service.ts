@@ -1,6 +1,11 @@
 import { Injectable } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 
+// PERFORMANCE SEAM: every org-scoped request costs 2 queries here (resolveOrg)
+// and project-scoped requests 2 more (resolveProject) — it is the hot path
+// traces will flag first. When that day comes, add a short-TTL cache keyed on
+// (userId, orgId) INSIDE this service; guards and controllers must not grow
+// their own caches.
 @Injectable()
 export class MembershipService {
   constructor(private readonly prisma: PrismaService) {}

@@ -1,22 +1,18 @@
-import { Body, Controller, Delete, Get, Post, Put, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Post, Put } from "@nestjs/common"
 import { ProjectsService } from "./projects.service"
 import { ProjectBodyDto } from "./dto/project-body.dto"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { CurrentOrg } from "../common/decorators/current-org.decorator"
 import { CurrentPermissions } from "../common/decorators/current-permissions.decorator"
 import { CurrentProject } from "../common/decorators/current-project.decorator"
-import { RequirePermission } from "../common/decorators/require-permission.decorator"
-import { OrgGuard } from "../tenancy/org.guard"
-import { ProjectGuard } from "../tenancy/project.guard"
-import { PermissionsGuard } from "../tenancy/permissions.guard"
+import { OrgScoped, ProjectScoped } from "../tenancy/scoped.decorators"
 
 @Controller("orgs/:org_id/projects")
 export class ProjectsController {
   constructor(private readonly projects: ProjectsService) {}
 
   @Get()
-  @UseGuards(OrgGuard, PermissionsGuard)
-  @RequirePermission("project:read")
+  @OrgScoped("project:read")
   async list(
     @CurrentUser("id") userId: string,
     @CurrentOrg() org: { id: string },
@@ -31,8 +27,7 @@ export class ProjectsController {
   }
 
   @Post()
-  @UseGuards(OrgGuard, PermissionsGuard)
-  @RequirePermission("project:create")
+  @OrgScoped("project:create")
   async create(
     @CurrentUser("id") userId: string,
     @CurrentOrg() org: { id: string },
@@ -42,22 +37,19 @@ export class ProjectsController {
   }
 
   @Get(":project_id")
-  @UseGuards(OrgGuard, ProjectGuard, PermissionsGuard)
-  @RequirePermission("project:read")
+  @ProjectScoped("project:read")
   async read(@CurrentProject() project: { id: string }) {
     return { message: "OK", data: await this.projects.findById(project.id) }
   }
 
   @Put(":project_id")
-  @UseGuards(OrgGuard, ProjectGuard, PermissionsGuard)
-  @RequirePermission("project:update")
+  @ProjectScoped("project:update")
   async update(@CurrentProject() project: { id: string }, @Body() dto: ProjectBodyDto) {
     return { message: "OK", data: await this.projects.update(project.id, dto) }
   }
 
   @Delete(":project_id")
-  @UseGuards(OrgGuard, ProjectGuard, PermissionsGuard)
-  @RequirePermission("project:delete")
+  @ProjectScoped("project:delete")
   async remove(@CurrentProject() project: { id: string }) {
     await this.projects.remove(project.id)
     return { message: "OK", data: null }

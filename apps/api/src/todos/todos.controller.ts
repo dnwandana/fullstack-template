@@ -8,7 +8,6 @@ import {
   Post,
   Put,
   Query,
-  UseGuards,
 } from "@nestjs/common"
 import { TodosService } from "./todos.service"
 import { TodoBodyDto } from "./dto/todo-body.dto"
@@ -17,12 +16,10 @@ import { BulkDeleteDto } from "./dto/bulk-delete.dto"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { CurrentProject } from "../common/decorators/current-project.decorator"
 import { RequirePermission } from "../common/decorators/require-permission.decorator"
-import { OrgGuard } from "../tenancy/org.guard"
-import { ProjectGuard } from "../tenancy/project.guard"
-import { PermissionsGuard } from "../tenancy/permissions.guard"
+import { ProjectScoped } from "../tenancy/scoped.decorators"
 
 @Controller("orgs/:org_id/projects/:project_id/todos")
-@UseGuards(OrgGuard, ProjectGuard, PermissionsGuard)
+@ProjectScoped()
 export class TodosController {
   constructor(private readonly todos: TodosService) {}
 

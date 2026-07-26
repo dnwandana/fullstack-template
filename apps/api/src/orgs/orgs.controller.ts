@@ -1,11 +1,9 @@
-import { Body, Controller, Delete, Get, Post, Put, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Post, Put } from "@nestjs/common"
 import { OrgsService } from "./orgs.service"
 import { OrgBodyDto } from "./dto/org-body.dto"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { CurrentOrg } from "../common/decorators/current-org.decorator"
-import { RequirePermission } from "../common/decorators/require-permission.decorator"
-import { OrgGuard } from "../tenancy/org.guard"
-import { PermissionsGuard } from "../tenancy/permissions.guard"
+import { OrgScoped } from "../tenancy/scoped.decorators"
 
 @Controller("orgs")
 export class OrgsController {
@@ -24,24 +22,21 @@ export class OrgsController {
   }
 
   @Get(":org_id")
-  @UseGuards(OrgGuard, PermissionsGuard)
-  @RequirePermission("org:read")
+  @OrgScoped("org:read")
   async read(@CurrentOrg() org: { id: string }) {
     const data = await this.orgs.findById(org.id)
     return { message: "OK", data }
   }
 
   @Put(":org_id")
-  @UseGuards(OrgGuard, PermissionsGuard)
-  @RequirePermission("org:update")
+  @OrgScoped("org:update")
   async update(@CurrentOrg() org: { id: string }, @Body() dto: OrgBodyDto) {
     const data = await this.orgs.update(org.id, dto)
     return { message: "OK", data }
   }
 
   @Delete(":org_id")
-  @UseGuards(OrgGuard, PermissionsGuard)
-  @RequirePermission("org:delete")
+  @OrgScoped("org:delete")
   async remove(@CurrentOrg() org: { id: string }) {
     await this.orgs.remove(org.id)
     return { message: "OK", data: null }

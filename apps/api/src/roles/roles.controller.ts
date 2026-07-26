@@ -1,24 +1,13 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  Put,
-  UseGuards,
-} from "@nestjs/common"
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put } from "@nestjs/common"
 import { RolesService } from "./roles.service"
 import { CreateRoleDto } from "./dto/create-role.dto"
 import { UpdateRoleDto } from "./dto/update-role.dto"
 import { CurrentOrg } from "../common/decorators/current-org.decorator"
 import { RequirePermission } from "../common/decorators/require-permission.decorator"
-import { OrgGuard } from "../tenancy/org.guard"
-import { PermissionsGuard } from "../tenancy/permissions.guard"
+import { OrgScoped } from "../tenancy/scoped.decorators"
 
 @Controller("orgs/:org_id/roles")
-@UseGuards(OrgGuard, PermissionsGuard)
+@OrgScoped()
 export class RolesController {
   constructor(private readonly roles: RolesService) {}
 
