@@ -3,6 +3,9 @@ packages:
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
+  # Transitive dep of @nestjs/swagger. Its postinstall is anonymous usage telemetry —
+  # nothing needs it to build or run, so it stays denied.
+  '@scarf/scarf': false
   argon2: true
   core-js: true
   esbuild: true
