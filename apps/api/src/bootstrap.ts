@@ -1,4 +1,5 @@
 import { INestApplication } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
 import { Logger } from "nestjs-pino"
 import helmet from "helmet"
 import cookieParser from "cookie-parser"
@@ -18,12 +19,21 @@ export function configureApp(app: INestApplication): void {
     }),
   )
 
+  const config = app.get(ConfigService)
+
   app.enableCors({
-    origin: (process.env.CORS_ALLOWED_ORIGINS ?? "http://localhost:8080")
+    // Through ConfigService, not process.env: the Joi default is the single source of
+    // truth for the fallback. A literal `?? "http://localhost:8080"` here duplicates it,
+    // and the two silently diverge the day someone edits one of them.
+    origin: config
+      .getOrThrow<string>("CORS_ALLOWED_ORIGINS")
       .split(",")
       .map((s) => s.trim()),
     methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type"],
+    allowedHeaders: ["Content-Type", "X-Request-Id"],
+    // Browser JS cannot read a response header that is not exposed, so without this a
+    // SPA has no way to surface the correlation id in a bug report.
+    exposedHeaders: ["X-Request-Id"],
     credentials: true,
   })
 
