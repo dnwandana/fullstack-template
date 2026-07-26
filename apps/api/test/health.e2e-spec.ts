@@ -2,7 +2,7 @@ import { Test } from "@nestjs/testing"
 import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
-import { configureApp } from "../src/bootstrap"
+import { createTestApp } from "./create-test-app"
 import { HealthService } from "../src/health/health.service"
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -11,9 +11,7 @@ describe("GET /health", () => {
   let app: INestApplication
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
-    app = ref.createNestApplication({ bufferLogs: true })
-    configureApp(app)
-    await app.init()
+    app = await createTestApp(ref)
   })
   afterAll(async () => app.close())
   // Restore unconditionally: an inline restore at the end of a test is skipped when an
@@ -36,7 +34,7 @@ describe("GET /health", () => {
   })
 
   it("is not rate limited across rapid requests", async () => {
-    let res
+    let res!: request.Response
     for (let i = 0; i < 5; i++) {
       res = await request(app.getHttpServer()).get("/health")
       expect(res.status).toBe(200)

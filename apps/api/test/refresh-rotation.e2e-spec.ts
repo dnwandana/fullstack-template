@@ -3,7 +3,7 @@ import { INestApplication } from "@nestjs/common"
 import { randomUUID } from "crypto"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
-import { configureApp } from "../src/bootstrap"
+import { createTestApp } from "./create-test-app"
 import { PrismaService } from "../src/prisma/prisma.service"
 import { RefreshTokenService } from "../src/auth/refresh-token.service"
 import { signupAndSignin } from "./factory"
@@ -18,9 +18,7 @@ describe("Refresh rotation claims the token atomically (e2e)", () => {
   let prisma: PrismaService
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
-    app = ref.createNestApplication({ bufferLogs: true })
-    configureApp(app)
-    await app.init()
+    app = await createTestApp(ref)
     prisma = app.get(PrismaService)
   })
   beforeEach(async () => truncateAll(prisma))
@@ -56,7 +54,7 @@ describe("Refresh rotation claims the token atomically (e2e)", () => {
       Array.from({ length: 4 }, () => agent().post("/api/auth/refresh").set("Cookie", cookies)),
     )
 
-    const statuses = responses.map((r) => r.status).toSorted()
+    const statuses = responses.map((r: { status: number }) => r.status).toSorted()
     expect(statuses).toEqual([200, 401, 401, 401])
   })
 })

@@ -1,0 +1,24 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": "\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": [
+      "ts-jest",
+      { "astTransformers": { "before": ["<rootDir>/test/swagger-plugin.transformer.js"] } }
+    ]
+  },
+  "setupFiles": ["<rootDir>/test/load-test-env.ts"],
+  "testPathIgnorePatterns": [
+    "/node_modules/",
+    "membership.spec.ts",
+    "org-creation.spec.ts",
+    "cleanup.spec.ts",
+    "seed.spec.ts",
+    "users.spec.ts",
+    "refresh-token.spec.ts",
+    "password-reset.spec.ts"
+  ],
+  "testTimeout": 10000
+}

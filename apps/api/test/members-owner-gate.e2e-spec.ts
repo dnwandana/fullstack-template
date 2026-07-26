@@ -3,7 +3,7 @@ import { Test } from "@nestjs/testing"
 import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
-import { configureApp } from "../src/bootstrap"
+import { createTestApp } from "./create-test-app"
 import { PrismaService } from "../src/prisma/prisma.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
 import { signupAndSignin, createOrg, getRoleId } from "./factory"
@@ -13,9 +13,7 @@ describe("Owner-role gate (e2e)", () => {
   let prisma: PrismaService
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
-    app = ref.createNestApplication({ bufferLogs: true })
-    configureApp(app)
-    await app.init()
+    app = await createTestApp(ref)
     prisma = app.get(PrismaService)
   })
   beforeEach(async () => {
