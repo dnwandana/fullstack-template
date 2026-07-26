@@ -2,7 +2,9 @@ import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from "@nes
 import { Throttle } from "@nestjs/throttler"
 import { Request, Response } from "express"
 import { AuthService } from "./auth.service"
+import { CookieService } from "./cookie.service"
 import { PasswordResetService } from "./password-reset.service"
+import { RefreshReuseException } from "./refresh-reuse.exception"
 import { SignupDto } from "./dto/signup.dto"
 import { SigninDto } from "./dto/signin.dto"
 import { ForgotPasswordDto } from "./dto/forgot-password.dto"
@@ -10,16 +12,20 @@ import { ResetPasswordDto } from "./dto/reset-password.dto"
 import { Public } from "../common/decorators/public.decorator"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { RefreshTokenGuard } from "./guards/refresh-token.guard"
+import { authThrottleLimit } from "../config/auth-throttle"
 
 // Override the global "general" throttler with the stricter auth limit
 // (RATE_LIMIT_AUTH_MAX, default 10/15min) for every route in this controller.
+// Read via authThrottleLimit() — decorator arguments run before the DI container
+// (and Joi) exist, so the helper mirrors Joi's constraints and fails fast.
 @Throttle({
-  general: { limit: Number(process.env.RATE_LIMIT_AUTH_MAX ?? 10), ttl: 15 * 60 * 1000 },
+  general: { limit: authThrottleLimit(), ttl: 15 * 60 * 1000 },
 })
 @Controller("auth")
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
+    private readonly cookies: CookieService,
     private readonly passwordReset: PasswordResetService,
   ) {}
 
@@ -34,8 +40,10 @@ export class AuthController {
   @Post("signin")
   @HttpCode(200)
   async signin(@Body() dto: SigninDto, @Res({ passthrough: true }) res: Response) {
-    const data = await this.auth.signin(dto, res)
-    return { message: "OK", data }
+    const { user, accessToken, refreshToken } = await this.auth.signin(dto)
+    this.cookies.setAccess(res, accessToken)
+    this.cookies.setRefresh(res, refreshToken)
+    return { message: "OK", data: user }
   }
 
   @Public()
@@ -68,8 +76,20 @@ export class AuthController {
     @Req() req: Request & { cookies?: Record<string, string> },
     @Res({ passthrough: true }) res: Response,
   ) {
-    const data = await this.auth.refresh(userId, req.cookies?.refresh_token as string, res)
-    return { message: "OK", data }
+    try {
+      const { accessToken, refreshToken } = await this.auth.refresh(
+        userId,
+        req.cookies?.refresh_token as string,
+      )
+      this.cookies.setAccess(res, accessToken)
+      this.cookies.setRefresh(res, refreshToken)
+      return { message: "OK", data: null }
+    } catch (err) {
+      // Reuse of a rotated token nukes the session family server-side; clear the
+      // client's cookies too. A plain-invalid refresh (401) leaves cookies alone.
+      if (err instanceof RefreshReuseException) this.cookies.clear(res)
+      throw err
+    }
   }
 
   @Public()
@@ -80,8 +100,9 @@ export class AuthController {
     @Req() req: Request & { cookies?: Record<string, string> },
     @Res({ passthrough: true }) res: Response,
   ) {
-    const data = await this.auth.logout(req.cookies?.refresh_token, res)
-    return { message: "OK", data }
+    await this.auth.logout(req.cookies?.refresh_token)
+    this.cookies.clear(res)
+    return { message: "OK", data: null }
   }
 
   @Get("me")

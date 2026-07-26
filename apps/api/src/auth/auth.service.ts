@@ -6,13 +6,12 @@ import {
   UnauthorizedException,
 } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config"
-import { Response } from "express"
 import { UsersService } from "../users/users.service"
 import { InvitationsService } from "../invitations/invitations.service"
 import { PasswordService } from "./password.service"
 import { TokenService } from "./token.service"
 import { RefreshTokenService } from "./refresh-token.service"
-import { CookieService } from "./cookie.service"
+import { RefreshReuseException } from "./refresh-reuse.exception"
 import { SignupDto } from "./dto/signup.dto"
 import { SigninDto } from "./dto/signin.dto"
 
@@ -31,7 +30,6 @@ export class AuthService {
     private readonly passwords: PasswordService,
     private readonly tokens: TokenService,
     private readonly refreshTokens: RefreshTokenService,
-    private readonly cookies: CookieService,
     private readonly config: ConfigService,
   ) {}
 
@@ -63,7 +61,9 @@ export class AuthService {
     }
   }
 
-  async signin(dto: SigninDto, res: Response): Promise<SafeUser> {
+  async signin(
+    dto: SigninDto,
+  ): Promise<{ user: SafeUser; accessToken: string; refreshToken: string }> {
     const user = await this.users.findWithPasswordByEmail(dto.email)
 
     // Always run one Argon2 verify (real or dummy hash) before branching on lock
@@ -87,11 +87,14 @@ export class AuthService {
     }
 
     await this.users.resetLockout(user.id)
-    await this.issueCookies(user.id, res)
-    return { id: user.id, name: user.name, email: user.email }
+    const tokens = await this.issueTokens(user.id)
+    return { user: { id: user.id, name: user.name, email: user.email }, ...tokens }
   }
 
-  async refresh(userId: string, rawRefreshToken: string, res: Response): Promise<null> {
+  async refresh(
+    userId: string,
+    rawRefreshToken: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     const stored = await this.refreshTokens.findByToken(rawRefreshToken)
     if (!stored || stored.userId !== userId) {
       throw new UnauthorizedException("Invalid refresh token")
@@ -99,7 +102,7 @@ export class AuthService {
     if (stored.revokedAt) {
       // This token was already rotated, so the presenter is replaying a token that
       // should no longer exist anywhere.
-      return this.handleReuse(stored.userId, res)
+      return this.handleReuse(stored.userId)
     }
     if (stored.expiresAt < new Date()) throw new UnauthorizedException("Refresh token has expired")
     const user = await this.users.findSafeById(userId)
@@ -108,27 +111,24 @@ export class AuthService {
     // presenters of the same token exactly one rotates; the loser is a replay by
     // definition, even though the revokedAt check above saw null.
     const claimed = await this.refreshTokens.claimForRotation(stored.id)
-    if (!claimed) return this.handleReuse(stored.userId, res)
-    await this.issueCookies(userId, res)
-    return null
+    if (!claimed) return this.handleReuse(stored.userId)
+    return this.issueTokens(userId)
   }
 
   // Assume the replayed token leaked and kill every live session for the user —
-  // including the one minted by whoever rotated it.
-  private async handleReuse(userId: string, res: Response): Promise<never> {
+  // including the one minted by whoever rotated it. Throws RefreshReuseException
+  // so the controller knows to clear the auth cookies on exactly this path.
+  private async handleReuse(userId: string): Promise<never> {
     await this.refreshTokens.revokeAllForUser(userId)
-    this.cookies.clear(res)
     this.logger.warn(`Refresh token reuse detected for user ${userId}`)
-    throw new UnauthorizedException("Invalid refresh token")
+    throw new RefreshReuseException()
   }
 
-  async logout(rawRefreshToken: string | undefined, res: Response): Promise<null> {
+  async logout(rawRefreshToken: string | undefined): Promise<void> {
     if (rawRefreshToken) {
       const stored = await this.refreshTokens.findActive(rawRefreshToken)
       if (stored) await this.refreshTokens.revoke(stored.id)
     }
-    this.cookies.clear(res)
-    return null
   }
 
   async me(userId: string): Promise<SafeUser> {
@@ -137,14 +137,15 @@ export class AuthService {
     return user
   }
 
-  private async issueCookies(userId: string, res: Response): Promise<void> {
+  private async issueTokens(
+    userId: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
     const accessToken = await this.tokens.signAccess(userId)
     const refreshToken = await this.tokens.signRefresh(userId)
     const expiresAt = this.refreshTokens.expiryFromDuration(
       this.config.get<string>("REFRESH_TOKEN_EXPIRES_IN") as string,
     )
     await this.refreshTokens.persist(userId, refreshToken, expiresAt)
-    this.cookies.setAccess(res, accessToken)
-    this.cookies.setRefresh(res, refreshToken)
+    return { accessToken, refreshToken }
   }
 }
