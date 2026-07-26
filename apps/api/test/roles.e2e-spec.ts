@@ -3,7 +3,7 @@ import { BadRequestException, INestApplication } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
-import { configureApp } from "../src/bootstrap"
+import { createTestApp } from "./create-test-app"
 import { PrismaService } from "../src/prisma/prisma.service"
 import { RolesService } from "../src/roles/roles.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
@@ -15,9 +15,7 @@ describe("Roles (e2e)", () => {
   let prisma: PrismaService
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
-    app = ref.createNestApplication({ bufferLogs: true })
-    configureApp(app)
-    await app.init()
+    app = await createTestApp(ref)
     prisma = app.get(PrismaService)
   })
   beforeEach(async () => {
@@ -63,6 +61,39 @@ describe("Roles (e2e)", () => {
     expect(res.status).toBe(400)
   })
 
+  it("rejects a role name that differs only by case or whitespace from an existing role", async () => {
+    const { cookies } = await signupAndSignin(app)
+    const org = await createOrg(app, cookies)
+    const perm = await prisma.permission.findFirstOrThrow({ where: { name: "todos:read" } })
+
+    // "Owner" collides with the system role "owner" only via the lower(name) index.
+    const caseOnly = await agent()
+      .post(`/api/orgs/${org.id}/roles`)
+      .set("Cookie", cookies)
+      .send({ name: "Owner", description: "x", permission_ids: [perm.id] })
+    expect(caseOnly.status).toBe(400)
+
+    // " owner " collides after the DTO trims it.
+    const padded = await agent()
+      .post(`/api/orgs/${org.id}/roles`)
+      .set("Cookie", cookies)
+      .send({ name: " owner ", description: "x", permission_ids: [perm.id] })
+    expect(padded.status).toBe(400)
+  })
+
+  it("trims the role name before storing", async () => {
+    const { cookies } = await signupAndSignin(app)
+    const org = await createOrg(app, cookies)
+    const perm = await prisma.permission.findFirstOrThrow({ where: { name: "todos:read" } })
+
+    const { body } = await agent()
+      .post(`/api/orgs/${org.id}/roles`)
+      .set("Cookie", cookies)
+      .send({ name: "  Auditor  ", description: "x", permission_ids: [perm.id] })
+      .expect(201)
+    expect(body.data.name).toBe("Auditor")
+  })
+
   it("returns 400 when creating a role with unknown permission ids", async () => {
     const { cookies } = await signupAndSignin(app)
     const org = await createOrg(app, cookies)
@@ -105,6 +136,27 @@ describe("Roles (e2e)", () => {
       .get(`/api/orgs/${org.id}/roles/11111111-1111-1111-1111-111111111111`)
       .set("Cookie", cookies)
     expect(missing.status).toBe(404)
+  })
+
+  it("returns the same permission projection from list and detail", async () => {
+    const { cookies } = await signupAndSignin(app)
+    const org = await createOrg(app, cookies)
+    const list = await agent().get(`/api/orgs/${org.id}/roles`).set("Cookie", cookies).expect(200)
+    const ownerRole = list.body.data.find((r: { name: string }) => r.name === "owner")
+    const detail = await agent()
+      .get(`/api/orgs/${org.id}/roles/${ownerRole.id}`)
+      .set("Cookie", cookies)
+      .expect(200)
+    const shape = {
+      id: expect.any(String),
+      name: expect.any(String),
+      resource: expect.any(String),
+      action: expect.any(String),
+      description: expect.any(String),
+    }
+    expect(ownerRole.permissions[0]).toEqual(shape)
+    expect(detail.body.data.permissions[0]).toEqual(shape)
+    expect(ownerRole.permissions.length).toBe(detail.body.data.permissions.length)
   })
 
   it("blocks deleting a role that is in use", async () => {

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { Prisma } from "@prisma/client"
 import { randomUUID } from "crypto"
 import { PrismaService } from "../prisma/prisma.service"
+import { toSnakeKeys } from "../common/to-snake-keys"
 import { CreateRoleDto } from "./dto/create-role.dto"
 import { UpdateRoleDto } from "./dto/update-role.dto"
 
@@ -15,6 +16,17 @@ const ROLE_SELECT = {
   updatedAt: true,
 } as const
 
+// One projection for every role response — the list endpoint returning fewer
+// fields than the detail endpoint was accidental drift (L-27), and description
+// is what a role-picker UI renders.
+const PERMISSION_SELECT = {
+  id: true,
+  name: true,
+  resource: true,
+  action: true,
+  description: true,
+} as const
+
 type RoleRow = {
   id: string
   orgId: string
@@ -24,17 +36,6 @@ type RoleRow = {
   createdAt: Date
   updatedAt: Date
 }
-
-// API responses keep the Express-era snake_case contract the SPA consumes.
-const toSnake = (role: RoleRow) => ({
-  id: role.id,
-  org_id: role.orgId,
-  name: role.name,
-  description: role.description,
-  is_system: role.isSystem,
-  created_at: role.createdAt,
-  updated_at: role.updatedAt,
-})
 
 const isUniqueViolation = (err: unknown): boolean =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
@@ -64,7 +65,7 @@ export class RolesService {
   private permissionsOf(roleId: string) {
     return this.prisma.permission.findMany({
       where: { rolePermissions: { some: { roleId } } },
-      select: { id: true, name: true, resource: true, action: true },
+      select: PERMISSION_SELECT,
       orderBy: { name: "asc" },
     })
   }
@@ -74,13 +75,15 @@ export class RolesService {
       where: { orgId },
       select: {
         ...ROLE_SELECT,
-        rolePermissions: { select: { permission: { select: { id: true, name: true } } } },
+        rolePermissions: { select: { permission: { select: PERMISSION_SELECT } } },
       },
       orderBy: { name: "asc" },
     })
-    return rows.map((r) => ({
-      ...toSnake(r),
-      permissions: r.rolePermissions.map((rp) => rp.permission),
+    // Destructure the relation off before mapping — nested objects must not
+    // reach the shallow key mapper.
+    return rows.map(({ rolePermissions, ...cols }) => ({
+      ...toSnakeKeys<RoleRow>(cols),
+      permissions: rolePermissions.map((rp) => rp.permission),
     }))
   }
 
@@ -90,7 +93,7 @@ export class RolesService {
       select: ROLE_SELECT,
     })
     if (!role) throw new NotFoundException("Role not found in this organization")
-    return { ...toSnake(role), permissions: await this.permissionsOf(roleId) }
+    return { ...toSnakeKeys<RoleRow>(role), permissions: await this.permissionsOf(roleId) }
   }
 
   async create(orgId: string, dto: CreateRoleDto) {
@@ -112,7 +115,7 @@ export class RolesService {
         })
         return created
       })
-      return { ...toSnake(role), permissions: await this.permissionsOf(role.id) }
+      return { ...toSnakeKeys<RoleRow>(role), permissions: await this.permissionsOf(role.id) }
     } catch (err) {
       if (isUniqueViolation(err)) {
         throw new BadRequestException("A role with this name already exists")
@@ -147,7 +150,7 @@ export class RolesService {
         }
         return row
       })
-      return { ...toSnake(updated), permissions: await this.permissionsOf(roleId) }
+      return { ...toSnakeKeys<RoleRow>(updated), permissions: await this.permissionsOf(roleId) }
     } catch (err) {
       if (isUniqueViolation(err)) {
         throw new BadRequestException("A role with this name already exists")
