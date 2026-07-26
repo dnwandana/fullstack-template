@@ -20,13 +20,15 @@ Organization
 - **Multi-tenancy**: Shared PostgreSQL database, tenant-scoped via `org_id`/`project_id` columns
 - **RBAC**: 4 system roles (owner / admin / member / viewer) + custom roles, 17 granular permissions. Cross-project visibility is a permission (`project:read_all`), not a hard-coded role name
 - **Auth**: Dual-token JWT via httpOnly cookies, Argon2 password hashing, password complexity, account lockout, token-based password reset, and refresh-token reuse detection
-- **Invitations**: Invite by email, 7-day expiry, accept/decline/revoke/resend flow with a public `/invite/:id?token=…` landing page that works logged out. Inviting an address with no account creates a pending-account invitation; signing up claims it. Email delivery is a single documented seam — no mail provider is shipped. See [`docs/invitation-flow.md`](docs/invitation-flow.md).
+- **Invitations**: Invite by email with an accept/decline/revoke/resend flow. In short: creating an invitation issues a raw token (stored only as a hash) that expires after 7 days; the public `/invite/:id?token=…` landing page previews the invitation while logged out — possession of the raw token is the only credential; accepting requires being logged in **and** presenting that token in the request body; project invitations auto-add the invitee to the parent org as a viewer. Inviting an address with no account creates a pending-account invitation; signing up claims it. Email delivery is a single documented seam — no mail provider is shipped.
 
 ## Prerequisites
 
 - Node.js `>=24.0.0`
 - Corepack (bundled with Node 24+)
 - PostgreSQL (for the API)
+
+Node 24+ is a hard floor, not a preference: `apps/api/prisma.config.ts` runs the database seed as `node prisma/seed.ts`, relying on Node's native TypeScript type-stripping (no ts-node/tsx is installed). Node ≤ 22 fails there with a confusing syntax error.
 
 For production deployment:
 
@@ -69,7 +71,6 @@ APP_BASE_URL=http://localhost:8080
 RATE_LIMIT_AUTH_MAX=10
 RATE_LIMIT_GENERAL_MAX=1000
 LOG_LEVEL=info
-LOG_TO_FILE=true
 CLEANUP_ENABLED=true
 # SWAGGER_ENABLED=true  # leave unset: derives to true outside production, false in production
 ```
@@ -175,11 +176,22 @@ The OpenAPI document is generated from the controllers and DTOs at boot by `@nes
 
 ```json
 {
-  "message": "Success",
+  "message": "OK",
   "data": { ... },
-  "pagination": { "page": 1, "limit": 10, "total": 42, "totalPages": 5 }
+  "pagination": {
+    "current_page": 1,
+    "total_pages": 5,
+    "total_items": 42,
+    "items_per_page": 10,
+    "has_next_page": true,
+    "has_previous_page": false,
+    "next_page": 2,
+    "previous_page": null
+  }
 }
 ```
+
+Errors come back as `{ "message": "…", "data": null, "request_id": "…" }` with the failing request's correlation id.
 
 ### Authentication cookies
 
@@ -191,6 +203,15 @@ The API uses httpOnly cookies (not headers) for token management:
 Each cookie's lifetime is derived from `ACCESS_TOKEN_EXPIRES_IN` / `REFRESH_TOKEN_EXPIRES_IN`, so the cookie and the JWT it carries always expire together. Both variables use the grammar `<number><s|m|h|d>` (e.g. `15m`, `7d`).
 
 Tokens are set by the server on signin/refresh and never exposed to JavaScript. Both use `Secure` (production), `SameSite=Strict`. Refresh tokens rotate on every use, and replaying an already-revoked one revokes the user's entire refresh-token family.
+
+### Security trade-offs
+
+Four behaviors are deliberate design decisions, not omissions — don't "fix" them without revisiting the reasoning:
+
+- **Org 404 vs 403** — a non-member requesting a real org gets `403`; an unknown org id gets `404`. This discloses org existence to authenticated users and is intentional (specified in the NestJS rebuild design): org ids are UUIDs, so enumeration is impractical, and the split gives a would-be member a correct error. Projects do **not** make this distinction — unknown and forbidden are both `404`.
+- **Signup enumeration** — `POST /api/auth/signup` says when an email is already taken. Signin and forgot-password are hardened against enumeration; signup is not, because the "if an account exists we've emailed you" pattern requires real email delivery, which the template does not ship. Revisit when a mailer lands.
+- **SameSite=Strict cookies** — the SPA and API must share a registrable domain (the shipped `app.<DOMAIN>` / `api.<DOMAIN>` topology qualifies). Splitting them across registrable domains silently breaks auth; changing this means editing `cookie.service.ts`, not an env var.
+- **Invitation-only membership** — there is no direct "add member" endpoint by design. Membership is created only by accepting an invitation (or by creating the org/project), so every join is invitee-consented and auditable through the invitation flow.
 
 ## Testing
 
@@ -221,7 +242,7 @@ Vitest with jsdom and `@vue/test-utils`. Tests mock exactly one application boun
 
 ## Deployment
 
-Production deployment uses Docker Compose with an edge nginx container as a name-based virtual host router, splitting the SPA and API onto separate subdomains (`app.<DOMAIN>`, `api.<DOMAIN>`). Three containers run on the host VM; PostgreSQL remains an external service.
+Production deployment uses Docker Compose with an edge nginx container as a name-based virtual host router, splitting the SPA and API onto separate subdomains (`app.<DOMAIN>`, `api.<DOMAIN>`). Three containers run on the host VM; PostgreSQL remains an external service. This same-registrable-domain layout is what makes the `SameSite=Strict` auth cookies work — see [Security trade-offs](#security-trade-offs).
 
 ### How it works
 
@@ -240,18 +261,20 @@ api (internal only)
 
 ### Local Docker
 
-Test the production images locally over HTTP (no SSL required).
+Test the production images locally over HTTP (no SSL required). Unlike production, the local stack ships its own PostgreSQL container — three containers total (`app`, `api`, `postgres`), no external database needed.
 
 **1. Configure environment**
 
 ```bash
 cp .env.example .env.local
-# Edit .env.local — fill in DATABASE_URL, JWT secrets, and set these local values:
+# Edit .env.local — fill in JWT secrets, and set these local values:
 #   NODE_ENV=development        ← required: keeps cookies non-Secure so browsers accept them over HTTP
 #   JWT_ISSUER=http://localhost
 #   JWT_AUDIENCE=http://localhost
 #   CORS_ALLOWED_ORIGINS=http://localhost
 #   APP_BASE_URL=http://localhost   ← base of invitation accept links
+#   DATABASE_URL=postgresql://pg_user:pg_password@postgres:5432/fullstack_template
+#     ← the hostname is the compose service name "postgres", not localhost
 ```
 
 **2. Build and start**
@@ -275,7 +298,10 @@ docker compose -f docker-compose.local.yml logs -f        # tail all logs
 docker compose -f docker-compose.local.yml logs -f api    # API logs only
 docker compose -f docker-compose.local.yml ps             # container status
 docker compose -f docker-compose.local.yml down           # stop and remove containers
+docker compose -f docker-compose.local.yml down -v        # …and wipe the postgres_data volume
 ```
+
+Database data persists across restarts in the named `postgres_data` volume; `down -v` deletes it. Production has no bundled database — point `DATABASE_URL` at a managed/external PostgreSQL instance.
 
 ### First deploy
 
@@ -344,7 +370,7 @@ docker compose run --rm api sh -c "node_modules/.bin/prisma db seed"
 | `SWAGGER_ENABLED`      | No       | Serves the generated OpenAPI spec and Swagger UI at `/api/docs`. Defaults to `false` when `NODE_ENV=production`, `true` otherwise.                                                      |
 | `CLEANUP_ENABLED`      | No       | Runs the nightly cleanup cron job that prunes expired refresh/reset tokens and dead invitations. Defaults to `true`.                                                                    |
 
-\* Optional to the validator, effectively required in production: the default produces invitation links pointing at `localhost`. See [`docs/invitation-flow.md`](docs/invitation-flow.md).
+\* Optional to the validator, effectively required in production: the default produces invitation links pointing at `localhost`.
 
 See `.env.example` for the full list.
 

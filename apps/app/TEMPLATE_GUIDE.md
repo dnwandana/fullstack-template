@@ -11,7 +11,7 @@ Clone the repository or fork it to your own GitHub account
 ### 2. Install Dependencies
 
 ```bash
-npm install
+corepack pnpm install
 ```
 
 ### 3. Configure Environment
@@ -83,10 +83,10 @@ Create a new API service file. This layer only handles HTTP requests:
 
 ```javascript
 // src/api/posts.js
-import { request } from '@/utils/http'
+import { request } from "@/utils/http"
 
 export function getPosts(params = {}) {
-  return request.get('/posts', { params })
+  return request.get("/posts", { params })
 }
 
 export function getPostById(id) {
@@ -94,7 +94,7 @@ export function getPostById(id) {
 }
 
 export function createPost(data) {
-  return request.post('/posts', data)
+  return request.post("/posts", data)
 }
 
 export function updatePost(id, data) {
@@ -112,18 +112,18 @@ Create a Pinia store using the Composition API setup syntax:
 
 ```javascript
 // src/stores/posts.js
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import { message } from 'ant-design-vue'
+import { defineStore } from "pinia"
+import { ref, computed } from "vue"
+import { message } from "ant-design-vue"
 import {
   getPosts as apiGetPosts,
   getPostById as apiGetPostById,
   createPost as apiCreatePost,
   updatePost as apiUpdatePost,
   deletePost as apiDeletePost,
-} from '@/api/posts'
+} from "@/api/posts"
 
-export const usePostsStore = defineStore('posts', () => {
+export const usePostsStore = defineStore("posts", () => {
   // State
   const posts = ref([])
   const currentPost = ref(null)
@@ -162,7 +162,7 @@ export const usePostsStore = defineStore('posts', () => {
     loading.value = true
     try {
       const response = await apiCreatePost(data)
-      message.success('Post created successfully!')
+      message.success("Post created successfully!")
       await fetchPosts()
       return response.data
     } finally {
@@ -174,7 +174,7 @@ export const usePostsStore = defineStore('posts', () => {
     loading.value = true
     try {
       const response = await apiUpdatePost(id, data)
-      message.success('Post updated successfully!')
+      message.success("Post updated successfully!")
       await fetchPosts()
       return response.data
     } finally {
@@ -186,7 +186,7 @@ export const usePostsStore = defineStore('posts', () => {
     loading.value = true
     try {
       const response = await apiDeletePost(id)
-      message.success('Post deleted successfully!')
+      message.success("Post deleted successfully!")
       await fetchPosts()
       return response.data
     } finally {
@@ -215,8 +215,8 @@ Create a composable for UI logic and form handling:
 
 ```javascript
 // src/composables/usePosts.js
-import { ref, computed } from 'vue'
-import { usePostsStore } from '@/stores/posts'
+import { ref, computed } from "vue"
+import { usePostsStore } from "@/stores/posts"
 
 export function usePosts() {
   const postsStore = usePostsStore()
@@ -227,11 +227,11 @@ export function usePosts() {
 
   // Validation rules
   const titleRules = [
-    { required: true, message: 'Please enter a title' },
-    { max: 255, message: 'Title cannot exceed 255 characters' },
+    { required: true, message: "Please enter a title" },
+    { max: 255, message: "Title cannot exceed 255 characters" },
   ]
 
-  const contentRules = [{ required: true, message: 'Please enter content' }]
+  const contentRules = [{ required: true, message: "Please enter content" }]
 
   // Computed
   const isEditing = computed(() => !!editingPost.value)
@@ -292,8 +292,8 @@ Create a view component that uses the composable:
 ```vue
 <!-- src/views/posts/PostsListView.vue -->
 <script setup>
-import { onMounted } from 'vue'
-import { usePosts } from '@/composables/usePosts'
+import { onMounted } from "vue"
+import { usePosts } from "@/composables/usePosts"
 
 const {
   posts,
@@ -371,9 +371,9 @@ Use Ant Design's form validation with composable-defined rules:
 ```javascript
 // In composable
 const rules = [
-  { required: true, message: 'Field is required' },
-  { min: 3, message: 'Must be at least 3 characters' },
-  { max: 100, message: 'Cannot exceed 100 characters' },
+  { required: true, message: "Field is required" },
+  { min: 3, message: "Must be at least 3 characters" },
+  { max: 100, message: "Cannot exceed 100 characters" },
 ]
 
 // Custom validator
@@ -381,7 +381,7 @@ const customRules = [
   {
     validator: async (_rule, value) => {
       if (value && value !== formState.confirmValue) {
-        throw new Error('Values do not match')
+        throw new Error("Values do not match")
       }
     },
   },
@@ -458,8 +458,8 @@ Edit `src/components/AppLayout.vue` and remove the Todos menu item.
 Customize Ant Design in `vite.config.js`:
 
 ```javascript
-import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
+import { defineConfig } from "vite"
+import vue from "@vitejs/plugin-vue"
 
 export default defineConfig(({ mode }) => ({
   plugins: [
@@ -470,8 +470,8 @@ export default defineConfig(({ mode }) => ({
     preprocessorOptions: {
       less: {
         modifyVars: {
-          'primary-color': '#1890ff',
-          'border-radius-base': '4px',
+          "primary-color": "#1890ff",
+          "border-radius-base": "4px",
         },
         javascriptEnabled: true,
       },
@@ -488,7 +488,7 @@ Add global styles in your component files or create a global stylesheet:
 <style>
 /* Global styles */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 </style>
 ```
@@ -519,21 +519,21 @@ async function fetchData() {
 ### Message Notifications
 
 ```javascript
-import { message } from 'ant-design-vue'
+import { message } from "ant-design-vue"
 
-message.success('Operation successful!')
-message.error('Something went wrong')
-message.warning('Please check your input')
-message.info('Here is some information')
+message.success("Operation successful!")
+message.error("Something went wrong")
+message.warning("Please check your input")
+message.info("Here is some information")
 ```
 
 ### localStorage Helpers
 
 ```javascript
-import { setUserData, getUserData, clearUserData } from '@/utils/storage'
+import { setUserData, getUserData, clearUserData } from "@/utils/storage"
 
 // Save user data
-setUserData({ id: 1, name: 'John Doe', email: 'john@example.com' })
+setUserData({ id: 1, name: "John Doe", email: "john@example.com" })
 
 // Retrieve user data
 const user = getUserData()
@@ -547,8 +547,8 @@ Auth tokens are stored as httpOnly cookies (managed by the server) — no token 
 ## Testing
 
 ```bash
-npm test              # single run
-npm run test:watch    # watch mode
+corepack pnpm test              # single run
+corepack pnpm run test:watch    # watch mode
 ```
 
 Vitest runs in a jsdom environment with `@vue/test-utils` for mounting components. Configuration lives in `vitest.config.js`, which merges `vite.config.js` so the `@` alias has a single definition.
@@ -558,8 +558,8 @@ Tests live beside the code they cover and are picked up by the `src/**/*.test.js
 **Mocking convention**: mock exactly one application boundary — `@/utils/http`. Composables, stores, and API service modules run for real, so a wrong argument order anywhere in the view → composable → store → api chain fails the test. Mocking `@/api/*` or `@/stores/*` defeats this. `vue-router` and Ant Design Vue's `message` are stubbed only as environment shims; `@/utils/storage` is left real because jsdom provides `localStorage`.
 
 ```javascript
-vi.mock('@/utils/http', () => ({
-  baseURL: 'http://test/api',
+vi.mock("@/utils/http", () => ({
+  baseURL: "http://test/api",
   request: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn(), send: vi.fn() },
 }))
 ```

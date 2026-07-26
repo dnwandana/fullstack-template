@@ -73,7 +73,7 @@ Guards run in registration order: **global guards first, then controller-level, 
 
 1. **`ThrottlerGuard`** (global) — rate limiting.
 2. **`JwtAuthGuard`** (global) — authentication. Verifies the `access_token` cookie and sets `req.user = { id }`. Routes marked `@Public()` (the health routes, invitation preview, signup/signin/refresh/logout, forgot/reset password) bypass it.
-3. **`OrgGuard`** (`@UseGuards` on `/orgs/:org_id/...` controllers) — validates `org_id` is a UUID, loads the org, verifies membership via `MembershipService.resolveOrg`, sets `req.org` + `req.permissions`. `400` invalid id, `404` unknown org, `403` non-member.
+3. **`OrgGuard`** (`@UseGuards` on `/orgs/:org_id/...` controllers) — validates `org_id` is a UUID, loads the org, verifies membership via `MembershipService.resolveOrg`, sets `req.org` + `req.permissions`. `400` invalid id, `404` unknown org, `403` non-member. The 404/403 split is a **deliberate** existence disclosure to authenticated users (L-13, specified in the rebuild design): org ids are UUIDs, so enumeration is impractical, and non-members get an accurate error. Do not "fix" it to a uniform 404. `ProjectGuard` intentionally does not mirror it.
 4. **`ProjectGuard`** (on nested `/:project_id/...` controllers) — validates `project_id`, loads the project scoped to the org, **merges project-level permissions into the org permissions**, sets `req.project`. `404` if not found.
 5. **`PermissionsGuard`** — reads the `@RequirePermission("<name>")` metadata for the handler and throws `403` unless `req.permissions.includes(name)`. Handlers with no `@RequirePermission` pass through.
 
@@ -89,7 +89,16 @@ Handlers return a plain payload; `TransformInterceptor` normalizes it. The **suc
 {
   "message": "OK",
   "data": {},
-  "pagination": { "page": 1, "limit": 10, "total": 42, "totalPages": 5 }
+  "pagination": {
+    "current_page": 1,
+    "total_pages": 5,
+    "total_items": 42,
+    "items_per_page": 10,
+    "has_next_page": true,
+    "has_previous_page": false,
+    "next_page": 2,
+    "previous_page": null
+  }
 }
 ```
 
@@ -100,7 +109,7 @@ Handlers return a plain payload; `TransformInterceptor` normalizes it. The **suc
 The **error** envelope (from `AllExceptionsFilter`) is always:
 
 ```json
-{ "message": "…", "data": null }
+{ "message": "…", "data": null, "request_id": "…" }
 ```
 
 with the thrown `HttpException`'s status. `class-validator` failures (arrays of messages) are **flattened to a single string** joined by `"; "`. Non-Nest errors carrying an http-errors `status`/`statusCode` (e.g. body-parser `PayloadTooLargeError`) surface that real status instead of collapsing to 500; in production, non-`HttpException` messages are replaced with the generic status text.
@@ -127,7 +136,7 @@ req.permissions // ["todos:create", ...] merged org + project permissions
 
 ### Authentication flow
 
-- `POST /api/auth/signup` → creates user, returns `{ id, name, email }` (no tokens). Backfills any pending invitations for that email (best-effort). Email required + unique; name is a display name.
+- `POST /api/auth/signup` → creates user, returns `{ id, name, email }` (no tokens). Backfills any pending invitations for that email (best-effort). Email required + unique; name is a display name. **Deliberate trade-off (L-14)**: signup reveals when an email is taken. Signin and forgot-password are enumeration-hardened; signup is not, because the "if an account exists we've emailed you" pattern requires real email delivery, which the template does not ship. Revisit when a mailer lands — do not "fix" this alone.
 - `POST /api/auth/signin` → authenticates by email + password, stores the refresh-token hash, sets `access_token` + `refresh_token` httpOnly cookies, returns `{ id, name, email }`.
 - `POST /api/auth/refresh` → **token rotation**: claims the old refresh token atomically (`claimForRotation` sets `revokedAt` only where still null — a read-check-revoke sequence would let two concurrent presenters both rotate), stores the new hash, sets new cookies. **Reuse detection**: the row is looked up with `findByToken` (which deliberately does _not_ filter on `revokedAt`, so a replay is distinguishable from a forgery); if the presented token is already revoked — or loses the atomic claim — every refresh token for that user is revoked, the cookies are cleared, a warning is logged, and the request gets `401 "Invalid refresh token"`.
 - `POST /api/auth/logout` → revokes the refresh token, clears cookies. Idempotent.
@@ -135,7 +144,7 @@ req.permissions // ["todos:create", ...] merged org + project permissions
 - `POST /api/auth/forgot-password` → `{ email }`, always `200` with a neutral message. Unknown addresses are a silent no-op (no enumeration). Issuing a new token voids any earlier outstanding ones — the newest link is the only valid link. Delivery goes through `PasswordResetNotifierService`, whose always-on log line carries the user id (the address is PII); the reset URL is logged at `debug` **only** when `NODE_ENV === "development"`.
 - `POST /api/auth/reset-password` → `{ token, password, confirmation_password }`. `token` is 64 hex chars; only its SHA-256 hash is stored. Claimed atomically via `updateMany({ where: { tokenHash, usedAt: null, expiresAt: { gt: now } } })` — 0 rows updated means `400 "Invalid or expired reset token"`. TTL is 1 hour. Success is a full credential rotation: it clears `failedLoginAttempts`/`lockedUntil`, revokes every outstanding refresh token, and voids every other outstanding reset token for that user.
 
-Cookies: `access_token` (path `/api`) and `refresh_token` (path `/api/auth`), both httpOnly, `SameSite=Strict`, `Secure` in production. `maxAge` is **derived** from `ACCESS_TOKEN_EXPIRES_IN` / `REFRESH_TOKEN_EXPIRES_IN` via `parseDuration` (`src/common/duration.ts`) rather than hard-coded, so cookie and JWT lifetimes cannot drift; `clear()` uses `maxAge: 0`. JWT pinned to HS256. Signin hardening (constant-time dummy hash for unknown emails, account lockout after 5 failed attempts for 15 min) is preserved from the Express implementation.
+Cookies: `access_token` (path `/api`) and `refresh_token` (path `/api/auth`), both httpOnly, `SameSite=Strict`, `Secure` in production. `SameSite=Strict` is a **deliberate** choice (L-24): it requires the SPA and API to share a registrable domain — the shipped `app.<DOMAIN>` / `api.<DOMAIN>` topology qualifies; splitting them across registrable domains silently breaks auth, and changing it means editing `cookie.service.ts`, not an env var. `maxAge` is **derived** from `ACCESS_TOKEN_EXPIRES_IN` / `REFRESH_TOKEN_EXPIRES_IN` via `parseDuration` (`src/common/duration.ts`) rather than hard-coded, so cookie and JWT lifetimes cannot drift; `clear()` uses `maxAge: 0`. JWT pinned to HS256. Signin hardening (constant-time dummy hash for unknown emails, account lockout after 5 failed attempts for 15 min) is preserved from the Express implementation.
 
 ### Multi-tenancy & RBAC
 
@@ -163,6 +172,7 @@ Invite by email, 7-day expiry, accept/decline/revoke/resend. Tokens are hashed (
 - **Pending-account invitations**: inviting an unregistered address is valid (no 404). Signup backfills `invitee_id` on matching pending/unexpired invitations so they appear in `GET /api/invitations`.
 - **Duplicate prevention**: a pending invitation for the same `(invitee_email, org_id, project_id)` scope is rejected with `400 "A pending invitation already exists for this email"`.
 - **Expiry is derived, never written** — evaluated live against `expires_at`.
+- **Invitation-only membership (I-9)**: there is **no** direct "add member" endpoint, by design. Membership rows are created only by accepting an invitation (or by creating the org/project). Do not add a POST-a-member route — every join must stay invitee-consented and flow through the invitation system.
 
 ### Environment validation
 
@@ -181,7 +191,7 @@ Two things to know when reading env values elsewhere:
 
 ### Pagination
 
-List endpoints accept a `ListXDto` (page, limit, sort, search) and services return `{ data, pagination }`, which the controller passes straight into the envelope. Pagination meta shape (`{ page, limit, total, totalPages }`) is unchanged from the Express era. Search terms are escaped for PostgreSQL `ILIKE`.
+List endpoints accept a `ListXDto` (page, limit, sort, search) and services return `{ data, pagination }`, which the controller passes straight into the envelope. Pagination meta shape (`{ current_page, total_pages, total_items, items_per_page, has_next_page, has_previous_page, next_page, previous_page }`) is unchanged from the Express era. Search terms are escaped for PostgreSQL `ILIKE`.
 
 ## Complete Endpoint Table
 
@@ -301,11 +311,11 @@ The OpenAPI document needs no manual step: the `@nestjs/swagger` CLI plugin in `
 
 Required: `DATABASE_URL`, `ACCESS_TOKEN_SECRET` (≥32 chars), `REFRESH_TOKEN_SECRET` (≥32 chars, must differ from `ACCESS_TOKEN_SECRET`), `JWT_ISSUER`, `JWT_AUDIENCE`.
 
-Optional with defaults: `NODE_ENV` (development), `PORT` (3000), `ACCESS_TOKEN_EXPIRES_IN` (15m), `REFRESH_TOKEN_EXPIRES_IN` (7d), `LOG_LEVEL` (info — `error|warn|info|debug` only), `LOG_TO_FILE` (true), `CLEANUP_ENABLED` (true), `CORS_ALLOWED_ORIGINS` (http://localhost:8080), `APP_BASE_URL` (http://localhost:8080), `RATE_LIMIT_AUTH_MAX` (10, capped at 50), `RATE_LIMIT_GENERAL_MAX` (1000), `SWAGGER_ENABLED` (false when `NODE_ENV=production`, true otherwise).
+Optional with defaults: `NODE_ENV` (development), `PORT` (3000), `ACCESS_TOKEN_EXPIRES_IN` (15m), `REFRESH_TOKEN_EXPIRES_IN` (7d), `LOG_LEVEL` (info — `error|warn|info|debug` only), `CLEANUP_ENABLED` (true), `CORS_ALLOWED_ORIGINS` (http://localhost:8080), `APP_BASE_URL` (http://localhost:8080), `RATE_LIMIT_AUTH_MAX` (10, capped at 50), `RATE_LIMIT_GENERAL_MAX` (1000), `SWAGGER_ENABLED` (false when `NODE_ENV=production`, true otherwise).
 
 `.env.example` is the operator-facing template; `.env.test.example` ships valid dummy secrets so the e2e suite boots from `cp .env.test.example .env.test` unchanged. Do not copy `.env.example` for tests — its `changeme_…` secrets are rejected by validation on purpose.
 
-`APP_BASE_URL` is the base of every invitation accept link; the default is only correct for `corepack pnpm dev` and **must** be set in production (`https://app.<DOMAIN>`). See [`docs/invitation-flow.md`](../../docs/invitation-flow.md).
+`APP_BASE_URL` is the base of every invitation accept link; the default is only correct for `corepack pnpm dev` and **must** be set in production (`https://app.<DOMAIN>`).
 
 ## Database
 
@@ -314,6 +324,7 @@ Optional with defaults: `NODE_ENV` (development), `PORT` (3000), `ACCESS_TOKEN_E
 - **Role FKs**: `OrgMember.role` and `ProjectMember.role` use `onDelete: Restrict`, not `Cascade` — deleting a role that is still assigned must not silently strip memberships. `RolesService` maps the resulting `P2003`/`P2014` to `400 "Cannot delete a role that is in use"`.
 - **Migrations**: `prisma/migrations/` — `prisma migrate deploy` (prod) / `prisma migrate dev` (dev). Never automatic.
 - **Seed**: `prisma/seed.ts` — idempotent upsert of the 17 canonical permissions (`prisma db seed`).
+- **Dependency placement (deliberate)**: `prisma` and `dotenv` are **production** dependencies — the runtime image runs `prisma migrate deploy`/`prisma db seed`, and `prisma.config.ts` imports `dotenv/config` at runtime, so neither may move to `devDependencies`. `express` is a direct dependency because `bootstrap.ts` imports the `json`/`urlencoded` values from it rather than through `@nestjs/platform-express`. The auto-generated banner in `prisma.config.ts` suggesting `--save-dev` is wrong for this image — do not "fix" it.
 
 ## Testing
 

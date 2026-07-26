@@ -6,28 +6,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Install dependencies
-npm install
+corepack pnpm install
 
 # Start dev server (runs on port 8080)
-npm run dev
+corepack pnpm dev
 
 # Build for production
-npm run build
+corepack pnpm build
 
 # Preview production build
-npm run preview
+corepack pnpm preview
 
 # Lint code (runs oxlint then eslint sequentially via npm-run-all2)
-npm run lint
+corepack pnpm lint
 
 # Run tests
-npm test
+corepack pnpm test
 
 # Run tests in watch mode
-npm run test:watch
+corepack pnpm test:watch
 
 # Format code with Prettier
-npm run format
+corepack pnpm format
 ```
 
 ## Architecture Overview

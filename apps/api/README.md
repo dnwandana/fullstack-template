@@ -61,7 +61,7 @@ You can still run package-local commands from `apps/api` with `pnpm`.
 ### Developer Experience
 
 - **Standardized Responses**: Consistent success/error envelope via a global interceptor and exception filter
-- **Error Handling**: Global `AllExceptionsFilter` normalizes every error into `{ message, data: null }`
+- **Error Handling**: Global `AllExceptionsFilter` normalizes every error into `{ message, data: null, request_id }`
 - **OpenAPI / Swagger UI**: The spec is generated from the controllers and DTOs at boot by `@nestjs/swagger` and served at `/api/docs` — no hand-maintained schema file to drift. On by default outside production, controlled by `SWAGGER_ENABLED`
 - **Testing**: Jest + Supertest e2e suite booting the real app against a real PostgreSQL test database (no mocks)
 - **Environment Config**: dotenv for environment-specific settings, validated at startup
@@ -93,22 +93,24 @@ You can still run package-local commands from `apps/api` with `pnpm`.
 - **PostgreSQL** database server ([Download](https://www.postgresql.org/download/))
 - **Git** for cloning the repository
 
+Node 24 is a hard floor: `prisma.config.ts` runs the database seed as `node prisma/seed.ts`, relying on Node's native TypeScript type-stripping — no ts-node/tsx is installed, and Node ≤ 22 fails there with a confusing syntax error.
+
 ## Quick Start
 
 ```bash
 # 1. Install dependencies
-npm install
+corepack pnpm install
 
 # 2. Create environment file
 cp .env.example .env
 # Edit .env with your database credentials and secrets
 
 # 3. Set up the database
-npm run db:migrate   # prisma migrate deploy
-npm run db:seed      # prisma db seed — 17 canonical permissions (idempotent)
+corepack pnpm run db:migrate   # prisma migrate deploy
+corepack pnpm run db:seed      # prisma db seed — 17 canonical permissions (idempotent)
 
 # 4. Start development server
-npm run dev
+corepack pnpm run dev
 ```
 
 The API will be available at `http://localhost:3000/api`
@@ -129,7 +131,6 @@ Create a `.env` file in the project root with the following variables:
 | `JWT_ISSUER`               | JWT issuer claim (iss)               | -                                  | Yes      |
 | `JWT_AUDIENCE`             | JWT audience claim (aud)             | -                                  | Yes      |
 | `LOG_LEVEL`                | Logging level                        | `info`                             | No       |
-| `LOG_TO_FILE`              | Enable file logging                  | `true`                             | No       |
 | `CLEANUP_ENABLED`          | Run the nightly cleanup cron job     | `true`                             | No       |
 | `SWAGGER_ENABLED`          | Serve Swagger UI at `/api/docs`      | `false` in production, else `true` | No       |
 | `CORS_ALLOWED_ORIGINS`     | Comma-separated allowed origins      | `http://localhost:8080`            | No       |
@@ -137,9 +138,9 @@ Create a `.env` file in the project root with the following variables:
 | `RATE_LIMIT_AUTH_MAX`      | Auth endpoint rate limit (per 15min) | `10` (max 50)                      | No       |
 | `RATE_LIMIT_GENERAL_MAX`   | Global rate limit (per 15min)        | `1000`                             | No       |
 
-Both token lifetimes must match the grammar `<number><s|m|h|d>` (e.g. `15m`, `7d`) — the same string drives the JWT expiry, the `refresh_tokens` row, and the cookie `maxAge`, so broader formats such as `1w` are deliberately rejected. Boolean-style variables (`LOG_TO_FILE`, `CLEANUP_ENABLED`, `SWAGGER_ENABLED`) accept the literal strings `"true"` or `"false"`.
+Both token lifetimes must match the grammar `<number><s|m|h|d>` (e.g. `15m`, `7d`) — the same string drives the JWT expiry, the `refresh_tokens` row, and the cookie `maxAge`, so broader formats such as `1w` are deliberately rejected. Boolean-style variables (`CLEANUP_ENABLED`, `SWAGGER_ENABLED`) accept the literal strings `"true"` or `"false"`.
 
-\* `APP_BASE_URL` has a default, but the default is only correct for local development. It is the base of every invitation accept link (`<APP_BASE_URL>/invite/:invitation_id?token=…`), so leaving it unset in production produces links pointing at `localhost`. Set it to `https://app.<DOMAIN>` in production and `http://localhost` for the local Docker stack. See [`docs/invitation-flow.md`](../../docs/invitation-flow.md).
+\* `APP_BASE_URL` has a default, but the default is only correct for local development. It is the base of every invitation accept link (`<APP_BASE_URL>/invite/:invitation_id?token=…`), so leaving it unset in production produces links pointing at `localhost`. Set it to `https://app.<DOMAIN>` in production and `http://localhost` for the local Docker stack.
 
 **Example DATABASE_URL:**
 
@@ -179,6 +180,8 @@ Set the `LOG_LEVEL` environment variable to control logging verbosity:
 ## Pagination & Search
 
 List endpoints accept a list DTO (e.g. `ListTodosDto` under `src/todos/dto/`) with `page`, `limit`, `sort_by`, `sort_order`, and `search`. Services return `{ data, pagination }`, which the controller passes straight into the response envelope.
+
+Not every list is paginated, on purpose: roles, orgs, projects, and `GET /api/invitations` (your own pending invitations) return unbounded lists because they are naturally small per tenant, while org/project member and org invitation lists **are** paginated. Two documented scale ceilings — not shipped features: offset pagination degrades on deep pages (keyset/cursor pagination is the scale-up path), and `ILIKE` search will need a `pg_trgm` index once todo tables grow large.
 
 ### Query Parameters
 
@@ -220,39 +223,42 @@ GET /api/orgs/:org_id/projects/:project_id/todos?page=1&limit=20&sort_by=title&s
 ### Server
 
 ```bash
-npm run dev      # nest start --watch (dev server)
-npm start        # node dist/main (production runtime)
-npm run build    # nest build → dist/
+corepack pnpm run dev      # nest start --watch (dev server)
+corepack pnpm start        # node dist/main (production runtime)
+corepack pnpm run build    # nest build → dist/
 ```
 
 ### Testing
 
 ```bash
-npm test              # Jest e2e suite (real PostgreSQL, .env.test)
-npm run test:watch    # Jest in watch mode
-npm run test:cov      # Jest with coverage report
+corepack pnpm test              # Full suite: e2e + unit (real PostgreSQL, .env.test)
+corepack pnpm run test:unit     # Pure-unit specs only — no database needed, runs in seconds
+corepack pnpm run test:watch    # Jest in watch mode
+corepack pnpm run test:cov      # Jest with coverage report
 ```
+
+`test:unit` (`test/jest-unit.json`) runs the `.spec.ts` files with no `globalSetup`, so no migrations and no PostgreSQL. Seven DB-backed `.spec.ts` files (`membership`, `org-creation`, `cleanup`, `seed`, `users`, `refresh-token`, `password-reset`) are deliberately excluded from it by name — they are integration tests wearing unit names, and JSON configs cannot carry that rationale as a comment, so it lives here instead.
 
 Tests use a real PostgreSQL test database configured in `.env.test` — create it with `cp .env.test.example .env.test` and adjust `DATABASE_URL`. The setup (`test/setup-e2e.ts`) applies migrations, seeds the 17 permissions, and truncates tables between tests. Every module has an e2e spec — auth (including account lockout, cookie-based auth, token rotation, and password reset), health (live/ready), orgs, roles, members, projects, todos, permissions, invitations, and the generated OpenAPI document.
 
 ### Linting & Formatting
 
 ```bash
-npm run lint         # Run Oxlint (linter)
-npm run lint:fix     # Auto-fix issues with Oxlint
-npm run format       # Apply formatting with Prettier
+corepack pnpm run lint         # Run Oxlint (linter)
+corepack pnpm run lint:fix     # Auto-fix issues with Oxlint
+corepack pnpm run format       # Apply formatting with Prettier
 ```
 
-**Note**: Run `npm run lint:fix` and `npm run format` before committing.
+**Note**: Run `corepack pnpm run lint:fix` and `corepack pnpm run format` before committing.
 
 ### Database (Prisma)
 
 ```bash
-npm run db:migrate    # prisma migrate deploy (apply pending migrations)
-npm run migrate:dev   # prisma migrate dev (create a new migration in dev)
-npm run db:seed       # prisma db seed (17 canonical permissions, idempotent)
-npm run db:generate   # prisma generate (regenerate the client after schema edits)
-npm run prisma:pull   # prisma db pull (introspect the DB into schema.prisma)
+corepack pnpm run db:migrate    # prisma migrate deploy (apply pending migrations)
+corepack pnpm run migrate:dev   # prisma migrate dev (create a new migration in dev)
+corepack pnpm run db:seed       # prisma db seed (17 canonical permissions, idempotent)
+corepack pnpm run db:generate   # prisma generate (regenerate the client after schema edits)
+corepack pnpm run prisma:pull   # prisma db pull (introspect the DB into schema.prisma)
 ```
 
 Migrations never run automatically — apply them explicitly on every environment. The seed idempotently upserts the 17 canonical permissions; it does not populate demo data.
@@ -471,15 +477,23 @@ apps/api/
 Always run migrations before starting the production server:
 
 ```bash
-npm run db:migrate   # prisma migrate deploy
+corepack pnpm run db:migrate   # prisma migrate deploy
 ```
 
 ### Starting the Server
 
 ```bash
-npm run build
-npm start
+corepack pnpm run build
+corepack pnpm start
 ```
+
+### Dependency Placement
+
+Three dependency choices look wrong at first glance and are deliberate — do not "fix" them:
+
+- **`prisma` and `dotenv` are production dependencies** on purpose. The runtime Docker image runs `prisma migrate deploy` and `prisma db seed`, and `prisma.config.ts` imports `dotenv/config` at runtime — moving either to `devDependencies` breaks migrations and seeding in the deployed container.
+- **`express` is a direct dependency** because `bootstrap.ts` imports the `json`/`urlencoded` body parsers from it as values, rather than reaching them through `@nestjs/platform-express`.
+- The auto-generated banner in `prisma.config.ts` suggests installing `prisma` with `--save-dev`. That advice is wrong for this image; ignore it.
 
 ### Security Considerations
 
@@ -496,7 +510,7 @@ npm start
 - `SWAGGER_ENABLED` defaults to `false` when `NODE_ENV=production`, so the route and schema surface is not published unless you opt in
 - Cookies, `Authorization`, and `Set-Cookie` are redacted from logs
 - Configure database firewall rules
-- Keep dependencies updated with `npm audit`
+- Keep dependencies updated with `corepack pnpm audit`
 - Never commit `.env` file to version control
 
 ## Using This Template

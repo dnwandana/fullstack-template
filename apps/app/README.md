@@ -75,7 +75,7 @@ Both backends provide:
 1. **Install dependencies**
 
    ```bash
-   npm install
+   corepack pnpm install
    ```
 
 2. **Configure environment variables**
@@ -92,7 +92,7 @@ Both backends provide:
 
 3. **Start the development server**
    ```bash
-   npm run dev
+   corepack pnpm run dev
    ```
    The app will be available at `http://localhost:8080`
 
@@ -100,19 +100,19 @@ Both backends provide:
 
 ```bash
 # Start dev server (port 8080)
-npm run dev
+corepack pnpm run dev
 
 # Build for production
-npm run build
+corepack pnpm run build
 
 # Preview production build
-npm run preview
+corepack pnpm run preview
 
 # Run linters (oxlint + eslint with auto-fix)
-npm run lint
+corepack pnpm run lint
 
 # Format code with Prettier
-npm run format
+corepack pnpm run format
 ```
 
 ## Project Structure

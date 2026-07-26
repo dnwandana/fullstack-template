@@ -28,7 +28,7 @@ corepack pnpm test:app      # Vitest + jsdom + @vue/test-utils
 - **Multi-tenancy**: Shared database, tenant isolation via `org_id`/`project_id` columns
 - **RBAC**: `@RequirePermission(name)` decorator enforced by `PermissionsGuard`; resolved permissions live on `req.permissions`
 - **Request context**: `req.id` (request ID), `req.user`, `req.org`, `req.project`, `req.permissions`
-- **Error handling**: Controllers/services throw NestJS `HttpException`s, caught by the global `AllExceptionsFilter` → `{ message, data: null }`
+- **Error handling**: Controllers/services throw NestJS `HttpException`s, caught by the global `AllExceptionsFilter` → `{ message, data: null, request_id }`
 - **Env validation**: API fails fast at startup if required vars are missing (expected behavior)
 - **Health probes**: `/health/live` (process only), `/health/ready` (database probe), `/health` (combined) — all three sit outside the `/api` prefix, are public, and skip rate limiting
 - **API docs**: OpenAPI is generated at boot by `@nestjs/swagger` and served at `/api/docs`; gated by `SWAGGER_ENABLED`, which defaults to off in production. No spec file is checked in
@@ -40,7 +40,7 @@ See [`apps/api/CLAUDE.md`](apps/api/CLAUDE.md) and [`apps/app/CLAUDE.md`](apps/a
 
 ## Docker deployment
 
-Two compose files — production is a three-container topology (edge nginx + app + api), local dev stays two-container (app+nginx-in-one + api). PostgreSQL always external.
+Two compose files — production is a three-container topology (edge nginx + app + api) with PostgreSQL deliberately external (point `DATABASE_URL` at a managed instance); local dev is also three containers (app+nginx-in-one + api + postgres) with PostgreSQL shipped in the stack.
 
 ### Production (`docker-compose.yml`)
 
@@ -67,6 +67,8 @@ docker compose -f docker-compose.local.yml down
 
 - nginx on port 80 only, no TLS
 - Uses `nginx/local.conf` (HTTP-only)
+- Ships a `postgres` service (`postgres:17-alpine`, defaults `pg_user`/`pg_password`/`fullstack_template`); `api` waits on its healthcheck (`condition: service_healthy`). `DATABASE_URL` in `.env.local` must use hostname `postgres` (the compose service name), e.g. `postgresql://pg_user:pg_password@postgres:5432/fullstack_template`
+- Data persists in the named `postgres_data` volume — `docker compose -f docker-compose.local.yml down -v` wipes it
 - Env from `.env.local` (copy from `.env.example`; set `NODE_ENV=development`, `JWT_ISSUER/AUDIENCE=http://localhost`, `CORS_ALLOWED_ORIGINS=http://localhost`)
 - `NODE_ENV=development` is required locally — the API sets `Secure` cookies only in production, which browsers reject over plain HTTP
 

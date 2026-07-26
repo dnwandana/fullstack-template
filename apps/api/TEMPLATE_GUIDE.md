@@ -82,7 +82,7 @@ The **success** envelope:
 }
 ```
 
-The **error** envelope (from `AllExceptionsFilter`) is always `{ "message": "…", "data": null }` with the thrown `HttpException`'s status. `class-validator` failures (arrays of messages) are flattened to a single `"; "`-joined string.
+The **error** envelope (from `AllExceptionsFilter`) is always `{ "message": "…", "data": null, "request_id": "…" }` with the thrown `HttpException`'s status. `class-validator` failures (arrays of messages) are flattened to a single `"; "`-joined string.
 
 ### Prisma access
 
@@ -152,8 +152,8 @@ model Category {
 Add the back-relations on `Project` and `User` (`categories Category[]`), then create the migration and regenerate the client:
 
 ```bash
-npm run migrate:dev   # prisma migrate dev — prompts for a migration name, applies it
-npm run db:generate   # prisma generate — refresh the typed client
+corepack pnpm run migrate:dev   # prisma migrate dev — prompts for a migration name, applies it
+corepack pnpm run db:generate   # prisma generate — refresh the typed client
 ```
 
 ### Step 3: Create the DTOs
@@ -447,7 +447,7 @@ New permission names must be added in **two** places so they exist in the DB and
 Then re-seed (idempotent upsert):
 
 ```bash
-npm run db:seed
+corepack pnpm run db:seed
 ```
 
 ### Step 8: Add an e2e test
@@ -455,7 +455,7 @@ npm run db:seed
 Add a spec under `test/` that boots the app with Supertest and asserts both the envelope and each permission gate. Follow `test/todos.e2e-spec.ts` as the template — create an org (which seeds the four system roles), a project, then exercise create/read/list/update/delete and assert a `403` for a role lacking the permission.
 
 ```bash
-npm test   # jest --config test/jest-e2e.json (real PostgreSQL from .env.test)
+corepack pnpm test   # jest --config test/jest-e2e.json (real PostgreSQL from .env.test)
 ```
 
 ### Step 9: Try it with cURL
@@ -483,11 +483,11 @@ Prisma is the single source of truth for the schema and migrations.
 ### Workflow
 
 ```bash
-npm run migrate:dev    # prisma migrate dev — create + apply a migration in dev
-npm run db:migrate     # prisma migrate deploy — apply pending migrations (prod)
-npm run db:generate    # prisma generate — regenerate the typed client after schema edits
-npm run prisma:pull    # prisma db pull — introspect an existing DB into schema.prisma
-npm run db:seed        # prisma db seed — idempotent upsert of the 17 canonical permissions
+corepack pnpm run migrate:dev    # prisma migrate dev — create + apply a migration in dev
+corepack pnpm run db:migrate     # prisma migrate deploy — apply pending migrations (prod)
+corepack pnpm run db:generate    # prisma generate — regenerate the typed client after schema edits
+corepack pnpm run prisma:pull    # prisma db pull — introspect an existing DB into schema.prisma
+corepack pnpm run db:seed        # prisma db seed — idempotent upsert of the 17 canonical permissions
 ```
 
 **Best practices:**
@@ -579,7 +579,7 @@ throw new NotFoundException("Category not found")
 **Error envelope** (always):
 
 ```json
-{ "message": "Category not found", "data": null }
+{ "message": "Category not found", "data": null, "request_id": "…" }
 ```
 
 - The status code is taken from the thrown exception.
@@ -666,7 +666,7 @@ Fetch related rows with Prisma `select`/`include` rather than hand-written joins
 
 1. **Environment variables** — never commit `.env`; use strong, distinct JWT secrets (≥32 chars), validated at startup by `src/config/env.validation.ts` (fail-fast).
 2. **Database** — restrict the DB user's privileges, enable SSL for production connections, and keep `DATABASE_URL` out of source control.
-3. **API** — rate limiting is on by default (`@nestjs/throttler`); keep dependencies patched with `npm audit`; always serve over HTTPS in production.
+3. **API** — rate limiting is on by default (`@nestjs/throttler`); keep dependencies patched with `corepack pnpm audit`; always serve over HTTPS in production.
 
 ### Performance
 
@@ -693,13 +693,13 @@ Fetch related rows with Prisma `select`/`include` rather than hand-written joins
 
 - Almost always a tenant-scope mismatch — the id doesn't belong to the `projectId`/`orgId` in the URL. This is the isolation guarantee working as intended.
 
-**"Account is temporarily locked"**
+**Repeated `invalid credentials` even though the password is correct**
 
-- 5 failed signin attempts trigger a 15-minute lockout. Wait it out.
+- After 5 failed signin attempts the account is locked for 15 minutes — and during the lockout the API keeps answering `invalid credentials`, even for the right password. A locked account is deliberately indistinguishable from a wrong password (anti-enumeration; see `auth.service.ts`). Wait out the 15 minutes and sign in again.
 
 **Prisma client is out of date after a schema edit**
 
-- Run `npm run db:generate` (and `npm run migrate:dev` to create/apply the migration).
+- Run `corepack pnpm run db:generate` (and `corepack pnpm run migrate:dev` to create/apply the migration).
 
 **Database connection errors**
 
