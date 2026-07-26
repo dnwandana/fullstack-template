@@ -1,11 +1,13 @@
 import { Test } from "@nestjs/testing"
-import { INestApplication } from "@nestjs/common"
+import { BadRequestException, INestApplication } from "@nestjs/common"
+import { Prisma } from "@prisma/client"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { configureApp } from "../src/bootstrap"
 import { PrismaService } from "../src/prisma/prisma.service"
+import { RolesService } from "../src/roles/roles.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
-import { signupAndSignin, createOrg } from "./factory"
+import { signupAndSignin, createOrg, getRoleId } from "./factory"
 import { randomUUID } from "crypto"
 
 describe("Roles (e2e)", () => {
@@ -121,6 +123,85 @@ describe("Roles (e2e)", () => {
       .delete(`/api/orgs/${org.id}/roles/${created.body.data.id}`)
       .set("Cookie", cookies)
     expect(res.status).toBe(400)
+  })
+
+  it("returns 400 when deleting a role used only by a project member", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const invitee = await signupAndSignin(app)
+    const perm = await prisma.permission.findFirstOrThrow({ where: { name: "todos:read" } })
+
+    const created = await agent()
+      .post(`/api/orgs/${org.id}/roles`)
+      .set("Cookie", owner.cookies)
+      .send({
+        name: "project-only",
+        description: "held via project membership only",
+        permission_ids: [perm.id],
+      })
+    expect(created.status).toBe(201)
+    const roleId = created.body.data.id as string
+
+    const project = await agent()
+      .post(`/api/orgs/${org.id}/projects`)
+      .set("Cookie", owner.cookies)
+      .send({ name: "P1" })
+    expect(project.status).toBe(201)
+    const projectId = project.body.data.id as string
+
+    // Attach the role through project_members only — no org_members row uses it.
+    await prisma.orgMember.create({
+      data: {
+        orgId: org.id,
+        userId: invitee.userId,
+        roleId: await getRoleId(prisma, org.id, "viewer"),
+      },
+    })
+    await prisma.projectMember.create({ data: { projectId, userId: invitee.userId, roleId } })
+
+    const res = await agent()
+      .delete(`/api/orgs/${org.id}/roles/${roleId}`)
+      .set("Cookie", owner.cookies)
+
+    expect(res.status).toBe(400)
+    expect(res.body.message).toBe("Cannot delete a role that is in use")
+    expect(res.body.data).toBeNull()
+  })
+
+  // The RESTRICT FKs only fire for callers that skip the advisory lock, which the
+  // HTTP surface never does — so drive the service with a Prisma stub that throws
+  // the rejection the database would raise. P2003 is the raw Postgres 23503; P2014
+  // is the same condition when Prisma reports it as a required-relation violation.
+  it.each(["P2003", "P2014"])("maps a %s foreign-key rejection to the same 400", async (code) => {
+    const fkError = new Prisma.PrismaClientKnownRequestError("FK violation", {
+      code,
+      clientVersion: Prisma.prismaVersion.client,
+    })
+    const service = new RolesService({
+      $transaction: async () => {
+        throw fkError
+      },
+    } as unknown as PrismaService)
+
+    const err = await service.remove(randomUUID(), randomUUID()).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(BadRequestException)
+    expect((err as BadRequestException).getStatus()).toBe(400)
+    expect((err as BadRequestException).message).toBe("Cannot delete a role that is in use")
+  })
+
+  it("rethrows a non-foreign-key Prisma error from remove untouched", async () => {
+    const other = new Prisma.PrismaClientKnownRequestError("nope", {
+      code: "P2025",
+      clientVersion: Prisma.prismaVersion.client,
+    })
+    const service = new RolesService({
+      $transaction: async () => {
+        throw other
+      },
+    } as unknown as PrismaService)
+
+    const err = await service.remove(randomUUID(), randomUUID()).catch((e: unknown) => e)
+    expect(err).toBe(other)
   })
 
   it("deletes an unused custom role but blocks deleting a system role", async () => {

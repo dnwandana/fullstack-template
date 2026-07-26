@@ -39,6 +39,13 @@ const toSnake = (role: RoleRow) => ({
 const isUniqueViolation = (err: unknown): boolean =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
 
+// P2003 is the raw foreign-key rejection Postgres raises (SQLSTATE 23503) when a
+// RESTRICT/NO ACTION reference still points at the row being deleted. P2014 is the
+// same condition detected by Prisma itself as a required-relation violation.
+const isForeignKeyViolation = (err: unknown): boolean =>
+  err instanceof Prisma.PrismaClientKnownRequestError &&
+  (err.code === "P2003" || err.code === "P2014")
+
 @Injectable()
 export class RolesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -150,25 +157,36 @@ export class RolesService {
   }
 
   async remove(orgId: string, roleId: string): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      // Same org-level advisory lock the member-management paths take: member
-      // FKs cascade on role delete, so a role assignment racing this delete
-      // would silently erase membership rows. (A Restrict FK would close the
-      // remaining window against paths that don't take the lock.)
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${orgId}))::text`
-      const role = await tx.role.findFirst({
-        where: { id: roleId, orgId },
-        select: { id: true, isSystem: true },
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // Same org-level advisory lock the member-management paths take, so a role
+        // assignment racing this delete cannot slip past the in-use count below.
+        // The member role FKs are RESTRICT, which closes the remaining window
+        // against paths that never take the lock (see the catch below).
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${orgId}))::text`
+        const role = await tx.role.findFirst({
+          where: { id: roleId, orgId },
+          select: { id: true, isSystem: true },
+        })
+        if (!role) throw new NotFoundException("Role not found in this organization")
+        if (role.isSystem) throw new BadRequestException("System roles cannot be deleted")
+
+        const inUse = await tx.orgMember.count({ where: { roleId } })
+        const inUseProject = await tx.projectMember.count({ where: { roleId } })
+        if (inUse + inUseProject > 0)
+          throw new BadRequestException("Cannot delete a role that is in use")
+
+        await tx.role.delete({ where: { id: roleId } })
       })
-      if (!role) throw new NotFoundException("Role not found in this organization")
-      if (role.isSystem) throw new BadRequestException("System roles cannot be deleted")
-
-      const inUse = await tx.orgMember.count({ where: { roleId } })
-      const inUseProject = await tx.projectMember.count({ where: { roleId } })
-      if (inUse + inUseProject > 0)
+    } catch (err) {
+      // The advisory lock narrows the in-use race but does not close it for callers
+      // that never take the lock; the RESTRICT FKs do. Translate that DB-level
+      // rejection into the same 400 the fast-path count check produces, so both
+      // paths look identical to clients instead of leaking a 500.
+      if (isForeignKeyViolation(err)) {
         throw new BadRequestException("Cannot delete a role that is in use")
-
-      await tx.role.delete({ where: { id: roleId } })
-    })
+      }
+      throw err
+    }
   }
 }
