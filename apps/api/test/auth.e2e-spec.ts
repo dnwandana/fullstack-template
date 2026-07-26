@@ -4,6 +4,7 @@ import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { configureApp } from "../src/bootstrap"
 import { PrismaService } from "../src/prisma/prisma.service"
+import { signupAndSignin } from "./factory"
 import { truncateAll } from "./setup-e2e"
 
 const CREDS = {
@@ -79,6 +80,29 @@ describe("Auth (e2e)", () => {
     // Old refresh cookie is now revoked → reusing it fails.
     const reuse = await agent().post("/api/auth/refresh").set("Cookie", cookies)
     expect(reuse.status).toBe(401)
+  })
+
+  it("revokes every session when a rotated refresh token is replayed", async () => {
+    const user = await signupAndSignin(app)
+    const originalCookies = user.cookies
+
+    // Rotate: the original refresh token is now revoked, and we hold a fresh one.
+    const rotated = await agent().post("/api/auth/refresh").set("Cookie", originalCookies)
+    expect(rotated.status).toBe(200)
+    const rotatedCookies = rotated.headers["set-cookie"] as unknown as string[]
+
+    // Replay the old token — this is the signal that it leaked.
+    const replay = await agent().post("/api/auth/refresh").set("Cookie", originalCookies)
+    expect(replay.status).toBe(401)
+
+    // The token minted during rotation must now be dead too.
+    const afterBreach = await agent().post("/api/auth/refresh").set("Cookie", rotatedCookies)
+    expect(afterBreach.status).toBe(401)
+
+    const live = await prisma.refreshToken.count({
+      where: { userId: user.userId, revokedAt: null },
+    })
+    expect(live).toBe(0)
   })
 
   it("rejects /me without a cookie (401)", async () => {

@@ -92,16 +92,34 @@ export class AuthService {
   }
 
   async refresh(userId: string, rawRefreshToken: string, res: Response): Promise<null> {
-    const stored = await this.refreshTokens.findActive(rawRefreshToken)
+    const stored = await this.refreshTokens.findByToken(rawRefreshToken)
     if (!stored || stored.userId !== userId) {
       throw new UnauthorizedException("Invalid refresh token")
+    }
+    if (stored.revokedAt) {
+      // This token was already rotated, so the presenter is replaying a token that
+      // should no longer exist anywhere.
+      return this.handleReuse(stored.userId, res)
     }
     if (stored.expiresAt < new Date()) throw new UnauthorizedException("Refresh token has expired")
     const user = await this.users.findSafeById(userId)
     if (!user) throw new UnauthorizedException("invalid credentials")
-    await this.refreshTokens.revoke(stored.id)
+    // The claim is atomic (revokedAt set only if still null), so of two concurrent
+    // presenters of the same token exactly one rotates; the loser is a replay by
+    // definition, even though the revokedAt check above saw null.
+    const claimed = await this.refreshTokens.claimForRotation(stored.id)
+    if (!claimed) return this.handleReuse(stored.userId, res)
     await this.issueCookies(userId, res)
     return null
+  }
+
+  // Assume the replayed token leaked and kill every live session for the user —
+  // including the one minted by whoever rotated it.
+  private async handleReuse(userId: string, res: Response): Promise<never> {
+    await this.refreshTokens.revokeAllForUser(userId)
+    this.cookies.clear(res)
+    this.logger.warn(`Refresh token reuse detected for user ${userId}`)
+    throw new UnauthorizedException("Invalid refresh token")
   }
 
   async logout(rawRefreshToken: string | undefined, res: Response): Promise<null> {

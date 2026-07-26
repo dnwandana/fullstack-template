@@ -1,8 +1,7 @@
 import { Injectable } from "@nestjs/common"
 import { createHash, randomUUID } from "crypto"
 import { PrismaService } from "../prisma/prisma.service"
-
-const DURATION_MS: Record<string, number> = { s: 1000, m: 60000, h: 3600000, d: 86400000 }
+import { parseDuration } from "../common/duration"
 
 @Injectable()
 export class RefreshTokenService {
@@ -26,13 +25,44 @@ export class RefreshTokenService {
     return row
   }
 
+  // Unlike findActive, this does NOT filter on revokedAt: the caller needs to tell
+  // "never existed" (forgery) apart from "existed and was rotated" (replay).
+  async findByToken(
+    raw: string,
+  ): Promise<{ id: string; userId: string; expiresAt: Date; revokedAt: Date | null } | null> {
+    return this.prisma.refreshToken.findFirst({
+      where: { tokenHash: this.hashToken(raw) },
+      select: { id: true, userId: true, expiresAt: true, revokedAt: true },
+    })
+  }
+
   async revoke(id: string): Promise<void> {
     await this.prisma.refreshToken.update({ where: { id }, data: { revokedAt: new Date() } })
   }
 
+  // Atomic claim for rotation: revokedAt is set only if still null, so exactly one of
+  // N concurrent presenters of the same token wins. A read-check-revoke sequence here
+  // would let a racing replay slip past reuse detection entirely.
+  // Losers are treated as reuse and revoke the whole family, so clients must serialize
+  // their refreshes — the SPA does (single-flight queue in apps/app/src/utils/http.js).
+  async claimForRotation(id: string): Promise<boolean> {
+    const res = await this.prisma.refreshToken.updateMany({
+      where: { id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    })
+    return res.count === 1
+  }
+
+  async revokeAllForUser(userId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    })
+  }
+
   expiryFromDuration(duration: string): Date {
-    const match = duration.match(/^(\d+)([smhd])$/)
-    if (!match) return new Date(Date.now() + 7 * 86400000)
-    return new Date(Date.now() + parseInt(match[1], 10) * DURATION_MS[match[2]])
+    // parseDuration returns milliseconds and throws on a bad value — no silent 7-day
+    // fallback, which used to let the DB row disagree with the JWT.
+    return new Date(Date.now() + parseDuration(duration))
   }
 }
