@@ -5,55 +5,50 @@ import {
   NotFoundException,
 } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config"
+import { Prisma } from "@prisma/client"
 import { createHash, randomBytes, randomUUID } from "crypto"
 import { PrismaService } from "../prisma/prisma.service"
+import { toSnakeKeys } from "../common/to-snake-keys"
 import { InvitationNotifierService } from "./invitation-notifier.service"
 import { buildInvitationAcceptUrl } from "./invitation-url"
 import { CreateInvitationDto } from "./dto/create-invitation.dto"
+import { PaginationService } from "../common/pagination/pagination.service"
+import { ListQueryDto } from "../common/pagination/list-query.dto"
 
 const INVITATION_EXPIRY_DAYS = 7
+// Key order mirrors the response shape — Prisma returns columns in select
+// order and toSnakeKeys preserves it.
 const INVITE_SELECT = {
   id: true,
   orgId: true,
   projectId: true,
   inviterId: true,
-  roleId: true,
   inviteeEmail: true,
   inviteeId: true,
+  roleId: true,
   status: true,
   expiresAt: true,
   createdAt: true,
   updatedAt: true,
 } as const
 
+// Same pattern as roles.service.ts — replicated locally, not imported across modules.
+const isUniqueViolation = (err: unknown): boolean =>
+  err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
+
 type InviteRow = {
   id: string
   orgId: string
   projectId: string | null
   inviterId: string
-  roleId: string
   inviteeEmail: string | null
   inviteeId: string | null
+  roleId: string
   status: string
   expiresAt: Date
   createdAt: Date
   updatedAt: Date
 }
-
-// API responses keep the Express-era snake_case contract the SPA consumes.
-const toSnake = (row: InviteRow) => ({
-  id: row.id,
-  org_id: row.orgId,
-  project_id: row.projectId,
-  inviter_id: row.inviterId,
-  invitee_email: row.inviteeEmail,
-  invitee_id: row.inviteeId,
-  role_id: row.roleId,
-  status: row.status,
-  expires_at: row.expiresAt,
-  created_at: row.createdAt,
-  updated_at: row.updatedAt,
-})
 
 @Injectable()
 export class InvitationsService {
@@ -61,6 +56,7 @@ export class InvitationsService {
     private readonly prisma: PrismaService,
     private readonly notifier: InvitationNotifierService,
     private readonly config: ConfigService,
+    private readonly pagination: PaginationService,
   ) {}
 
   private hash(raw: string): string {
@@ -87,8 +83,17 @@ export class InvitationsService {
     })
     if (!role) throw new NotFoundException("Role not found in this organization")
 
+    // Friendly pre-check only — expired pending invites do not count as duplicates.
+    // The real backstop for concurrent creates is the partial unique index pair
+    // (invitations_pending_*_email_unique), mapped to the same 400 below.
     const duplicate = await this.prisma.invitation.findFirst({
-      where: { inviteeEmail: dto.email, orgId, projectId, status: "pending" },
+      where: {
+        inviteeEmail: dto.email,
+        orgId,
+        projectId,
+        status: "pending",
+        expiresAt: { gt: new Date() },
+      },
       select: { id: true },
     })
     if (duplicate) {
@@ -101,21 +106,42 @@ export class InvitationsService {
       where: { email: dto.email },
       select: { id: true },
     })
-    const invitation = await this.prisma.invitation.create({
-      data: {
-        id: randomUUID(),
-        orgId,
-        projectId,
-        inviterId,
-        inviteeEmail: dto.email,
-        roleId: dto.role_id,
-        inviteeId: invitee?.id ?? null,
-        tokenHash: this.hash(rawToken),
-        status: "pending",
-        expiresAt,
-      },
-      select: INVITE_SELECT,
-    })
+    let invitation: InviteRow
+    try {
+      invitation = await this.prisma.$transaction(async (tx) => {
+        // Clear expired pending rows for this scope first — they still match the
+        // partial unique index and would otherwise block a legitimate re-invite.
+        await tx.invitation.deleteMany({
+          where: {
+            orgId,
+            projectId,
+            inviteeEmail: dto.email,
+            status: "pending",
+            expiresAt: { lte: new Date() },
+          },
+        })
+        return tx.invitation.create({
+          data: {
+            id: randomUUID(),
+            orgId,
+            projectId,
+            inviterId,
+            inviteeEmail: dto.email,
+            roleId: dto.role_id,
+            inviteeId: invitee?.id ?? null,
+            tokenHash: this.hash(rawToken),
+            status: "pending",
+            expiresAt,
+          },
+          select: INVITE_SELECT,
+        })
+      })
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new BadRequestException("A pending invitation already exists for this email")
+      }
+      throw err
+    }
     this.notifier.sendInvitationEmail({
       email: dto.email,
       invitationId: invitation.id,
@@ -125,15 +151,17 @@ export class InvitationsService {
     // No mail provider ships with the template: the raw token and accept_url are
     // returned so the caller can deliver the link by hand.
     return {
-      ...toSnake(invitation),
+      ...toSnakeKeys<InviteRow>(invitation),
       token: rawToken,
       accept_url: this.acceptUrl(invitation.id, rawToken),
     }
   }
 
-  async listForOrg(orgId: string) {
+  async listForOrg(orgId: string, query: ListQueryDto) {
+    const where = { orgId }
+    const totalItems = await this.prisma.invitation.count({ where })
     const rows = await this.prisma.invitation.findMany({
-      where: { orgId },
+      where,
       select: {
         ...INVITE_SELECT,
         inviter: { select: { name: true } },
@@ -141,13 +169,20 @@ export class InvitationsService {
         role: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
     })
-    return rows.map((r) => ({
-      ...toSnake(r),
-      inviter_name: r.inviter.name,
-      invitee_name: r.invitee?.name ?? null,
-      role_name: r.role.name,
-    }))
+    return {
+      // Destructure the relations off before mapping — nested objects must not
+      // reach the shallow key mapper.
+      data: rows.map(({ inviter, invitee, role, ...cols }) => ({
+        ...toSnakeKeys<InviteRow>(cols),
+        inviter_name: inviter.name,
+        invitee_name: invitee?.name ?? null,
+        role_name: role.name,
+      })),
+      pagination: this.pagination.buildMeta(query.page, query.limit, totalItems),
+    }
   }
 
   async listMine(userId: string, email: string) {
@@ -166,12 +201,14 @@ export class InvitationsService {
       },
       orderBy: { createdAt: "desc" },
     })
-    return rows.map((r) => ({
-      ...toSnake(r),
-      org_name: r.organization.name,
-      project_name: r.project?.name ?? null,
-      inviter_name: r.inviter.name,
-      role_name: r.role.name,
+    // Destructure the relations off before mapping — nested objects must not
+    // reach the shallow key mapper.
+    return rows.map(({ organization, project, inviter, role, ...cols }) => ({
+      ...toSnakeKeys<InviteRow>(cols),
+      org_name: organization.name,
+      project_name: project?.name ?? null,
+      inviter_name: inviter.name,
+      role_name: role.name,
     }))
   }
 
@@ -213,7 +250,12 @@ export class InvitationsService {
     }
   }
 
-  async accept(invitationId: string, userId: string, userEmail: string, rawToken: string) {
+  async accept(
+    invitationId: string,
+    userId: string,
+    userEmail: string,
+    rawToken: string,
+  ): Promise<null> {
     return this.prisma.$transaction(async (tx) => {
       // Serialize concurrent accepts of the same invitation (parity with the
       // Express SELECT ... FOR UPDATE) so the status check below is race-free.
@@ -274,19 +316,21 @@ export class InvitationsService {
         where: { id: invitationId },
         data: { status: "accepted", inviteeId: userId },
       })
-      return { message: "OK", data: null }
+      return null
     })
   }
 
   async decline(invitationId: string, userId: string, userEmail: string): Promise<void> {
     const invitation = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
-      select: { id: true, inviteeId: true, inviteeEmail: true },
+      select: { id: true, inviteeId: true, inviteeEmail: true, status: true },
     })
     if (!invitation) throw new NotFoundException("Invitation not found")
     if (invitation.inviteeId !== userId && invitation.inviteeEmail !== userEmail) {
       throw new ForbiddenException("This invitation does not belong to you")
     }
+    if (invitation.status !== "pending")
+      throw new BadRequestException("Invitation is no longer pending")
     await this.prisma.invitation.update({
       where: { id: invitationId },
       data: { status: "declined" },
@@ -294,7 +338,10 @@ export class InvitationsService {
   }
 
   async remove(orgId: string, invitationId: string): Promise<void> {
-    await this.prisma.invitation.deleteMany({ where: { id: invitationId, orgId } })
+    const { count } = await this.prisma.invitation.deleteMany({
+      where: { id: invitationId, orgId },
+    })
+    if (count === 0) throw new NotFoundException("Invitation not found")
   }
 
   async resend(orgId: string, invitationId: string, orgName: string) {
@@ -320,12 +367,9 @@ export class InvitationsService {
       orgName,
     })
     return {
-      message: "OK",
-      data: {
-        ...toSnake(updated),
-        token: rawToken,
-        accept_url: this.acceptUrl(invitationId, rawToken),
-      },
+      ...toSnakeKeys<InviteRow>(updated),
+      token: rawToken,
+      accept_url: this.acceptUrl(invitationId, rawToken),
     }
   }
 

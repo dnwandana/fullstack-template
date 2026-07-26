@@ -3,11 +3,12 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
   Query,
-  UseGuards,
 } from "@nestjs/common"
 import { InvitationsService } from "./invitations.service"
 import { OrgsService } from "../orgs/orgs.service"
@@ -15,14 +16,12 @@ import { UsersService } from "../users/users.service"
 import { CreateInvitationDto } from "./dto/create-invitation.dto"
 import { PreviewQueryDto } from "./dto/preview-query.dto"
 import { AcceptInvitationDto } from "./dto/accept-invitation.dto"
+import { ListQueryDto } from "../common/pagination/list-query.dto"
 import { Public } from "../common/decorators/public.decorator"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { CurrentOrg } from "../common/decorators/current-org.decorator"
 import { CurrentProject } from "../common/decorators/current-project.decorator"
-import { RequirePermission } from "../common/decorators/require-permission.decorator"
-import { OrgGuard } from "../tenancy/org.guard"
-import { ProjectGuard } from "../tenancy/project.guard"
-import { PermissionsGuard } from "../tenancy/permissions.guard"
+import { OrgScoped, ProjectScoped } from "../tenancy/scoped.decorators"
 
 @Controller()
 export class InvitationsController {
@@ -38,8 +37,7 @@ export class InvitationsController {
   }
 
   @Post("orgs/:org_id/invitations")
-  @UseGuards(OrgGuard, PermissionsGuard)
-  @RequirePermission("invitations:create")
+  @OrgScoped("invitations:create")
   async createForOrg(
     @CurrentOrg() org: { id: string },
     @CurrentUser("id") userId: string,
@@ -52,8 +50,7 @@ export class InvitationsController {
   }
 
   @Post("orgs/:org_id/projects/:project_id/invitations")
-  @UseGuards(OrgGuard, ProjectGuard, PermissionsGuard)
-  @RequirePermission("invitations:create")
+  @ProjectScoped("invitations:create")
   async createForProject(
     @CurrentOrg() org: { id: string },
     @CurrentProject() project: { id: string },
@@ -73,15 +70,13 @@ export class InvitationsController {
   }
 
   @Get("orgs/:org_id/invitations")
-  @UseGuards(OrgGuard, PermissionsGuard)
-  @RequirePermission("invitations:manage")
-  async listForOrg(@CurrentOrg() org: { id: string }) {
-    return { message: "OK", data: await this.invitations.listForOrg(org.id) }
+  @OrgScoped("invitations:manage")
+  async listForOrg(@CurrentOrg() org: { id: string }, @Query() query: ListQueryDto) {
+    return { message: "OK", ...(await this.invitations.listForOrg(org.id, query)) }
   }
 
   @Delete("orgs/:org_id/invitations/:invitation_id")
-  @UseGuards(OrgGuard, PermissionsGuard)
-  @RequirePermission("invitations:manage")
+  @OrgScoped("invitations:manage")
   async remove(
     @CurrentOrg() org: { id: string },
     @Param("invitation_id", ParseUUIDPipe) invitationId: string,
@@ -91,13 +86,14 @@ export class InvitationsController {
   }
 
   @Post("orgs/:org_id/invitations/:invitation_id/resend")
-  @UseGuards(OrgGuard, PermissionsGuard)
-  @RequirePermission("invitations:manage")
+  @HttpCode(HttpStatus.OK)
+  @OrgScoped("invitations:manage")
   async resend(
     @CurrentOrg() org: { id: string },
     @Param("invitation_id", ParseUUIDPipe) invitationId: string,
   ) {
-    return this.invitations.resend(org.id, invitationId, await this.orgName(org.id))
+    const data = await this.invitations.resend(org.id, invitationId, await this.orgName(org.id))
+    return { message: "OK", data }
   }
 
   @Get("invitations")
@@ -116,16 +112,19 @@ export class InvitationsController {
   }
 
   @Post("invitations/:invitation_id/accept")
+  @HttpCode(HttpStatus.OK)
   async accept(
     @Param("invitation_id", ParseUUIDPipe) invitationId: string,
     @CurrentUser("id") userId: string,
     @Body() dto: AcceptInvitationDto,
   ) {
     const user = await this.users.findSafeById(userId)
-    return this.invitations.accept(invitationId, userId, user?.email ?? "", dto.token)
+    await this.invitations.accept(invitationId, userId, user?.email ?? "", dto.token)
+    return { message: "OK", data: null }
   }
 
   @Post("invitations/:invitation_id/decline")
+  @HttpCode(HttpStatus.OK)
   async decline(
     @Param("invitation_id", ParseUUIDPipe) invitationId: string,
     @CurrentUser("id") userId: string,

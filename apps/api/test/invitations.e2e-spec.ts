@@ -2,7 +2,7 @@ import { Test } from "@nestjs/testing"
 import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
-import { configureApp } from "../src/bootstrap"
+import { createTestApp } from "./create-test-app"
 import { PrismaService } from "../src/prisma/prisma.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
 import { signupAndSignin, createOrg, getRoleId } from "./factory"
@@ -12,9 +12,7 @@ describe("Invitations (e2e)", () => {
   let prisma: PrismaService
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
-    app = ref.createNestApplication({ bufferLogs: true })
-    configureApp(app)
-    await app.init()
+    app = await createTestApp(ref)
     prisma = app.get(PrismaService)
   })
   beforeEach(async () => {
@@ -56,7 +54,7 @@ describe("Invitations (e2e)", () => {
       .post(`/api/invitations/${invitationId}/accept`)
       .set("Cookie", invitee.cookies)
       .send({ token: created.body.data.token })
-    expect(accept.status).toBe(201)
+    expect(accept.status).toBe(200)
 
     // The invitee is now an org member (member role grants org:read).
     const readOrg = await agent().get(`/api/orgs/${org.id}`).set("Cookie", invitee.cookies)
@@ -108,10 +106,51 @@ describe("Invitations (e2e)", () => {
     const decline = await agent()
       .post(`/api/invitations/${invitationId}/decline`)
       .set("Cookie", invitee.cookies)
-    expect(decline.status).toBe(201)
+    expect(decline.status).toBe(200)
 
     const mine = await agent().get(`/api/invitations`).set("Cookie", invitee.cookies)
     expect(mine.body.data).toHaveLength(0)
+  })
+
+  it("refuses to decline an already-accepted invitation and keeps the membership", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+
+    const { body: created } = await agent()
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "invitee@x.io", role_id: memberRoleId })
+      .expect(201)
+
+    const invitee = await signupAndSignin(app, { email: "invitee@x.io" })
+    await agent()
+      .post(`/api/invitations/${created.data.id}/accept`)
+      .set("Cookie", invitee.cookies)
+      .send({ token: created.data.token })
+      .expect(200)
+
+    await agent()
+      .post(`/api/invitations/${created.data.id}/decline`)
+      .set("Cookie", invitee.cookies)
+      .expect(400)
+
+    const invitation = await prisma.invitation.findUnique({ where: { id: created.data.id } })
+    expect(invitation?.status).toBe("accepted")
+    const membership = await prisma.orgMember.findUnique({
+      where: { userId_orgId: { userId: invitee.userId, orgId: org.id } },
+    })
+    expect(membership).not.toBeNull()
+  })
+
+  it("returns 404 when revoking a nonexistent invitation", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+
+    await agent()
+      .delete(`/api/orgs/${org.id}/invitations/00000000-0000-4000-8000-000000000000`)
+      .set("Cookie", owner.cookies)
+      .expect(404)
   })
 
   it("guards the public preview endpoint by token shape and existence", async () => {
@@ -162,6 +201,7 @@ describe("Invitations (e2e)", () => {
     const resend = await agent()
       .post(`/api/orgs/${org.id}/invitations/${created.body.data.id}/resend`)
       .set("Cookie", owner.cookies)
+    expect(resend.status).toBe(200)
     expect(resend.body.data.token).toMatch(/^[0-9a-f]{64}$/)
     expect(resend.body.data.token).not.toBe(created.body.data.token)
     expect(resend.body.data.accept_url).toContain(`?token=${resend.body.data.token}`)
@@ -183,6 +223,60 @@ describe("Invitations (e2e)", () => {
     expect(second.status).toBe(400)
   })
 
+  it("rejects a duplicate pending invitation even when created concurrently", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+
+    // Sequential API calls only exercise the service pre-check; the raw insert
+    // below bypasses it and proves the DB index is the real backstop for the race.
+    await agent()
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "dup@example.com", role_id: memberRoleId })
+      .expect(201)
+    await agent()
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "dup@example.com", role_id: memberRoleId })
+      .expect(400)
+    // Prisma's raw-query error carries Postgres's DETAIL line (unique-violation
+    // key columns), not the constraint name, so match on those.
+    await expect(
+      prisma.$executeRaw`INSERT INTO invitations (id, org_id, inviter_id, invitee_email, role_id, status, expires_at, created_at, updated_at)
+        VALUES (gen_random_uuid(), ${org.id}::uuid, ${owner.userId}::uuid, 'dup@example.com', ${memberRoleId}::uuid, 'pending', now() + interval '7 days', now(), now())`,
+    ).rejects.toThrow(/Key \(org_id, invitee_email\).*already exists/)
+    // Both partial unique indexes back the race by name.
+    const indexes = await prisma.$queryRaw<{ indexname: string }[]>`
+      SELECT indexname FROM pg_indexes
+      WHERE tablename = 'invitations' AND indexname LIKE 'invitations_pending_%'`
+    expect(indexes.map((i) => i.indexname).toSorted()).toEqual([
+      "invitations_pending_org_email_unique",
+      "invitations_pending_project_email_unique",
+    ])
+  })
+
+  it("allows re-inviting after the pending invitation expired", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+
+    const { body } = await agent()
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "expired@example.com", role_id: memberRoleId })
+      .expect(201)
+    await prisma.invitation.update({
+      where: { id: body.data.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    })
+    await agent()
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "expired@example.com", role_id: memberRoleId })
+      .expect(201)
+  })
+
   it("returns 400 when accepting while already an org member", async () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
@@ -196,7 +290,7 @@ describe("Invitations (e2e)", () => {
       .post(`/api/invitations/${first.body.data.id}/accept`)
       .set("Cookie", invitee.cookies)
       .send({ token: first.body.data.token })
-    expect(firstAccept.status).toBe(201)
+    expect(firstAccept.status).toBe(200)
 
     // The first invitation is consumed, so a second one is legal to create…
     const second = await agent()
@@ -226,7 +320,7 @@ describe("Invitations (e2e)", () => {
       .post(`/api/invitations/${created.body.data.id}/accept`)
       .set("Cookie", invitee.cookies)
       .send({ token: created.body.data.token })
-    expect(accept.status).toBe(201)
+    expect(accept.status).toBe(200)
 
     const resend = await agent()
       .post(`/api/orgs/${org.id}/invitations/${created.body.data.id}/resend`)
@@ -267,6 +361,44 @@ describe("Invitations (e2e)", () => {
     })
   })
 
+  it("paginates the org invitations list", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+    await agent()
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "first@x.io", role_id: memberRoleId })
+      .expect(201)
+    await agent()
+      .post(`/api/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "second@x.io", role_id: memberRoleId })
+      .expect(201)
+
+    const { body } = await agent()
+      .get(`/api/orgs/${org.id}/invitations?page=1&limit=1`)
+      .set("Cookie", owner.cookies)
+      .expect(200)
+    expect(body.data).toHaveLength(1)
+    expect(body.pagination).toMatchObject({
+      current_page: 1,
+      items_per_page: 1,
+      total_items: 2,
+      total_pages: 2,
+    })
+  })
+
+  it("defaults the org invitations list to limit 50 when no query is sent", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const { body } = await agent()
+      .get(`/api/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .expect(200)
+    expect(body.pagination.items_per_page).toBe(50)
+  })
+
   it("does not backfill declined invitations at signup", async () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
@@ -303,7 +435,7 @@ describe("Invitations (e2e)", () => {
       .post(`/api/invitations/${invitationId}/accept`)
       .set("Cookie", member.cookies)
       .send({ token: created.body.data.token })
-    expect(accepted.status).toBe(201)
+    expect(accepted.status).toBe(200)
 
     const forbidden = await agent()
       .post(`/api/orgs/${org.id}/invitations`)
