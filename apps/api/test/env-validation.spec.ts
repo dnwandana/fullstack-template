@@ -13,7 +13,14 @@ describe("validate(env)", () => {
     const out = validate({ ...base })
     expect(out.PORT).toBe(3000)
     expect(out.NODE_ENV).toBe("development")
-    expect(out.RATE_LIMIT_GENERAL_MAX).toBe(100)
+    expect(out.RATE_LIMIT_GENERAL_MAX).toBe(1000)
+    expect(out.CLEANUP_ENABLED).toBe("true")
+  })
+
+  it("rejects a non-numeric general rate limit", () => {
+    expect(() => validate({ ...base, RATE_LIMIT_GENERAL_MAX: "abc" })).toThrow(
+      /RATE_LIMIT_GENERAL_MAX/,
+    )
   })
 
   it("throws when a required var is missing", () => {
@@ -23,6 +30,15 @@ describe("validate(env)", () => {
 
   it("throws when access and refresh secrets are equal", () => {
     expect(() => validate({ ...base, REFRESH_TOKEN_SECRET: "a".repeat(40) })).toThrow(/different/)
+  })
+
+  it("rejects a token lifetime that is not <number><s|m|h|d>", () => {
+    expect(() => validate({ ...base, ACCESS_TOKEN_EXPIRES_IN: "1w" })).toThrow(
+      /ACCESS_TOKEN_EXPIRES_IN/,
+    )
+    expect(() => validate({ ...base, REFRESH_TOKEN_EXPIRES_IN: "7days" })).toThrow(
+      /REFRESH_TOKEN_EXPIRES_IN/,
+    )
   })
 
   it("throws on a changeme placeholder secret", () => {
