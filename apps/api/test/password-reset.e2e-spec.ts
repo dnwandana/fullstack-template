@@ -3,7 +3,7 @@ import { INestApplication } from "@nestjs/common"
 import { createHash } from "crypto"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
-import { configureApp } from "../src/bootstrap"
+import { createTestApp } from "./create-test-app"
 import { PrismaService } from "../src/prisma/prisma.service"
 import { signupAndSignin } from "./factory"
 import { truncateAll } from "./setup-e2e"
@@ -15,9 +15,7 @@ describe("Password reset (e2e)", () => {
   let prisma: PrismaService
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
-    app = ref.createNestApplication({ bufferLogs: true })
-    configureApp(app)
-    await app.init()
+    app = await createTestApp(ref)
     prisma = app.get(PrismaService)
   })
   beforeEach(async () => truncateAll(prisma))
@@ -79,6 +77,10 @@ describe("Password reset (e2e)", () => {
         confirmation_password: "BrandNewP4ss!",
       })
     expect(res.status).toBe(400)
-    expect(res.body).toEqual({ message: "Invalid or expired reset token", data: null })
+    expect(res.body).toEqual({
+      message: "Invalid or expired reset token",
+      data: null,
+      request_id: expect.any(String),
+    })
   })
 })

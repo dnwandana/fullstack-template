@@ -6,12 +6,16 @@ import {
   HttpStatus,
   Logger,
 } from "@nestjs/common"
+import { ConfigService } from "@nestjs/config"
+import { Prisma } from "@prisma/client"
 import { Request, Response } from "express"
 import { STATUS_CODES } from "http"
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name)
+
+  constructor(private readonly config: ConfigService) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp()
@@ -25,25 +29,38 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (isHttp) {
       status = exception.getStatus()
       message = this.flatten(exception.getResponse())
+    } else if (
+      exception instanceof Prisma.PrismaClientKnownRequestError &&
+      exception.code === "P2025"
+    ) {
+      // Central net for bare .update()/.delete() on rows that vanished between a
+      // guard's existence check and the write. Services with better messages throw
+      // their own NotFoundException first; this stops the raw-500 fallthrough.
+      status = HttpStatus.NOT_FOUND
+      message = "Not found"
     } else if (exception instanceof Error) {
       message = exception.message
       status = this.statusFromError(exception) ?? status
     }
 
-    const isProduction = process.env.NODE_ENV === "production"
+    const isProduction = this.config.get<string>("NODE_ENV") === "production"
     if (isProduction && !isHttp) {
       message = STATUS_CODES[status] ?? "Internal Server Error"
     }
 
-    this.logger.error({
-      requestId: (req as unknown as { id?: string }).id,
-      status,
-      method: req.method,
-      url: req.url,
-      msg: exception instanceof Error ? exception.message : String(exception),
-    })
+    const requestId = (req as unknown as { id?: string }).id
+    this.logger.error(
+      {
+        requestId,
+        status,
+        method: req.method,
+        url: req.url,
+        msg: exception instanceof Error ? exception.message : String(exception),
+      },
+      !isHttp && exception instanceof Error ? exception.stack : undefined,
+    )
 
-    res.status(status).json({ message, data: null })
+    res.status(status).json({ message, data: null, request_id: requestId ?? null })
   }
 
   /**
