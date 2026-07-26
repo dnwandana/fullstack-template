@@ -2,8 +2,11 @@ import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from "@nes
 import { Throttle } from "@nestjs/throttler"
 import { Request, Response } from "express"
 import { AuthService } from "./auth.service"
+import { PasswordResetService } from "./password-reset.service"
 import { SignupDto } from "./dto/signup.dto"
 import { SigninDto } from "./dto/signin.dto"
+import { ForgotPasswordDto } from "./dto/forgot-password.dto"
+import { ResetPasswordDto } from "./dto/reset-password.dto"
 import { Public } from "../common/decorators/public.decorator"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { RefreshTokenGuard } from "./guards/refresh-token.guard"
@@ -15,7 +18,10 @@ import { RefreshTokenGuard } from "./guards/refresh-token.guard"
 })
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly passwordReset: PasswordResetService,
+  ) {}
 
   @Public()
   @Post("signup")
@@ -30,6 +36,27 @@ export class AuthController {
   async signin(@Body() dto: SigninDto, @Res({ passthrough: true }) res: Response) {
     const data = await this.auth.signin(dto, res)
     return { message: "OK", data }
+  }
+
+  @Public()
+  @Post("forgot-password")
+  @HttpCode(200)
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.passwordReset.issue(dto.email)
+    // Always the same reply. Branching on whether the address exists would turn this
+    // endpoint into an account-enumeration oracle.
+    return {
+      message: "If an account exists for that address, a reset link has been sent",
+      data: null,
+    }
+  }
+
+  @Public()
+  @Post("reset-password")
+  @HttpCode(200)
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.passwordReset.consume(dto.token, dto.password)
+    return { message: "OK", data: null }
   }
 
   @Public()

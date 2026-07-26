@@ -8,6 +8,8 @@ import { PasswordService } from "./password.service"
 import { TokenService } from "./token.service"
 import { RefreshTokenService } from "./refresh-token.service"
 import { CookieService } from "./cookie.service"
+import { PasswordResetService } from "./password-reset.service"
+import { PasswordResetNotifierService } from "./password-reset-notifier.service"
 import { RefreshTokenGuard } from "./guards/refresh-token.guard"
 
 @Module({
@@ -19,6 +21,8 @@ import { RefreshTokenGuard } from "./guards/refresh-token.guard"
     TokenService,
     RefreshTokenService,
     CookieService,
+    PasswordResetService,
+    PasswordResetNotifierService,
     RefreshTokenGuard,
   ],
   exports: [TokenService],
