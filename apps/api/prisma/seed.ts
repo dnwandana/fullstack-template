@@ -1,7 +1,7 @@
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "crypto"
 
-// The 16 canonical permissions. Single source of truth — also consumed by
+// The 17 canonical permissions. Single source of truth — also consumed by
 // test/setup-e2e.ts. MUST match the RBAC model documented in apps/api/CLAUDE.md.
 export const PERMISSION_NAMES = [
   "org:read",
@@ -11,6 +11,7 @@ export const PERMISSION_NAMES = [
   "org:manage_roles",
   "project:create",
   "project:read",
+  "project:read_all",
   "project:update",
   "project:delete",
   "project:manage_members",
@@ -34,6 +35,7 @@ const PERMISSION_DESCRIPTIONS: Record<PermissionName, string> = {
   "org:manage_roles": "Create, update, and delete custom roles within the organization",
   "project:create": "Create new projects within the organization",
   "project:read": "View project details, members, and settings",
+  "project:read_all": "View all projects in the organization, not only those you belong to",
   "project:update": "Update project name, description, and settings",
   "project:delete": "Permanently delete the project and all its todos",
   "project:manage_members": "Add, remove, and change roles of project members",
@@ -46,7 +48,7 @@ const PERMISSION_DESCRIPTIONS: Record<PermissionName, string> = {
 }
 
 /**
- * Idempotently inserts the 16 canonical permissions. Upserts on the unique
+ * Idempotently inserts the 17 canonical permissions. Upserts on the unique
  * `name` column, so repeated runs never raise a duplicate-key error. The
  * `resource`/`action` columns are required by the schema and derived from the
  * `resource:action` name convention.

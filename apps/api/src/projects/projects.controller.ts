@@ -3,13 +3,12 @@ import { ProjectsService } from "./projects.service"
 import { ProjectBodyDto } from "./dto/project-body.dto"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { CurrentOrg } from "../common/decorators/current-org.decorator"
+import { CurrentPermissions } from "../common/decorators/current-permissions.decorator"
 import { CurrentProject } from "../common/decorators/current-project.decorator"
 import { RequirePermission } from "../common/decorators/require-permission.decorator"
 import { OrgGuard } from "../tenancy/org.guard"
 import { ProjectGuard } from "../tenancy/project.guard"
 import { PermissionsGuard } from "../tenancy/permissions.guard"
-
-const ADMIN_ROLES = new Set(["owner", "admin"])
 
 @Controller("orgs/:org_id/projects")
 export class ProjectsController {
@@ -20,9 +19,12 @@ export class ProjectsController {
   @RequirePermission("project:read")
   async list(
     @CurrentUser("id") userId: string,
-    @CurrentOrg() org: { id: string; role_name: string },
+    @CurrentOrg() org: { id: string },
+    @CurrentPermissions() permissions: string[],
   ) {
-    const data = ADMIN_ROLES.has(org.role_name)
+    // Visibility keys off a permission, not a role name: a custom role granted
+    // project:read_all sees the whole org, exactly like owner/admin do.
+    const data = permissions.includes("project:read_all")
       ? await this.projects.findManyByOrgId(org.id)
       : await this.projects.findManyByUserId(org.id, userId)
     return { message: "OK", data }

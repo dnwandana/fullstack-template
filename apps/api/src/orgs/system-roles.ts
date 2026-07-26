@@ -6,6 +6,7 @@ const ALL_PERMISSIONS = [
   "org:manage_roles",
   "project:create",
   "project:read",
+  "project:read_all",
   "project:update",
   "project:delete",
   "project:manage_members",

@@ -1,11 +1,12 @@
 import { Test } from "@nestjs/testing"
 import { INestApplication } from "@nestjs/common"
+import { randomUUID } from "crypto"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { configureApp } from "../src/bootstrap"
 import { PrismaService } from "../src/prisma/prisma.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
-import { signupAndSignin, createOrg } from "./factory"
+import { signupAndSignin, createOrg, getRoleId } from "./factory"
 
 describe("Projects (e2e)", () => {
   let app: INestApplication
@@ -82,5 +83,61 @@ describe("Projects (e2e)", () => {
       .set("Cookie", cookies)
     expect(res.status).toBe(404)
     expect(res.body.message).toBe("Project not found")
+  })
+
+  it("grants org-wide visibility via project:read_all, not via role name", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    await agent()
+      .post(`/api/orgs/${org.id}/projects`)
+      .set("Cookie", owner.cookies)
+      .send({ name: "Owner-only project" })
+
+    // A CUSTOM (non-system) role is the case a role-name check gets wrong.
+    const auditor = await signupAndSignin(app)
+    const perms = await prisma.permission.findMany({
+      where: { name: { in: ["org:read", "project:read", "project:read_all"] } },
+      select: { id: true },
+    })
+    expect(perms).toHaveLength(3)
+    const role = await prisma.role.create({
+      data: {
+        id: randomUUID(),
+        orgId: org.id,
+        name: "auditor",
+        isSystem: false,
+        rolePermissions: { create: perms.map((p) => ({ permissionId: p.id })) },
+      },
+    })
+    await prisma.orgMember.create({
+      data: { orgId: org.id, userId: auditor.userId, roleId: role.id },
+    })
+
+    const res = await agent().get(`/api/orgs/${org.id}/projects`).set("Cookie", auditor.cookies)
+    expect(res.status).toBe(200)
+    expect(res.body.data).toHaveLength(1)
+  })
+
+  it("hides projects a plain member does not belong to", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    await agent()
+      .post(`/api/orgs/${org.id}/projects`)
+      .set("Cookie", owner.cookies)
+      .send({ name: "Owner-only project" })
+
+    // `member` holds project:read (so the guard passes) but not project:read_all.
+    const member = await signupAndSignin(app)
+    await prisma.orgMember.create({
+      data: {
+        orgId: org.id,
+        userId: member.userId,
+        roleId: await getRoleId(prisma, org.id, "member"),
+      },
+    })
+
+    const res = await agent().get(`/api/orgs/${org.id}/projects`).set("Cookie", member.cookies)
+    expect(res.status).toBe(200)
+    expect(res.body.data).toHaveLength(0)
   })
 })
