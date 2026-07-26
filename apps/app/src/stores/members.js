@@ -46,7 +46,7 @@ export const useMembersStore = defineStore("members", () => {
 
   /**
    * Update the role assigned to an organization member
-   * Refreshes the org members list after a successful update
+   * Applies the returned membership row in place — no list refetch
    * @param {string} orgId - Organization UUID
    * @param {string} userId - User UUID of the member to update
    * @param {string} roleId - New role UUID to assign
@@ -57,8 +57,11 @@ export const useMembersStore = defineStore("members", () => {
     try {
       const response = await apiUpdateOrgMemberRole(orgId, userId, roleId)
       message.success("Member role updated successfully!")
-      // Refresh the org members list to reflect the role change
-      await fetchOrgMembers(orgId)
+      // The API returns the updated membership row (same shape as the GET
+      // list), so splice it in place instead of refetching the whole list.
+      const updated = response.data.data
+      const idx = orgMembers.value.findIndex((m) => m.user_id === updated.user_id)
+      if (idx !== -1) orgMembers.value[idx] = updated
       // Only the affected member's own permission view can be stale — do not
       // invalidate every other signed-in member's session over someone else's
       // role change.
@@ -116,7 +119,7 @@ export const useMembersStore = defineStore("members", () => {
 
   /**
    * Update the role assigned to a project member
-   * Refreshes the project members list after a successful update
+   * Applies the returned membership row in place — no list refetch
    * @param {string} orgId - Organization UUID that owns the project
    * @param {string} projectId - Project UUID
    * @param {string} userId - User UUID of the member to update
@@ -128,8 +131,11 @@ export const useMembersStore = defineStore("members", () => {
     try {
       const response = await apiUpdateProjectMemberRole(orgId, projectId, userId, roleId)
       message.success("Member role updated successfully!")
-      // Refresh the project members list to reflect the role change
-      await fetchProjectMembers(orgId, projectId)
+      // The API returns the updated membership row (same shape as the GET
+      // list), so splice it in place instead of refetching the whole list.
+      const updated = response.data.data
+      const idx = projectMembers.value.findIndex((m) => m.user_id === updated.user_id)
+      if (idx !== -1) projectMembers.value[idx] = updated
       // Roles are org-scoped even when assigned to a project member (see
       // ProjectMembersView), so the invalidation target is still the org's
       // cached permissions — only when the affected member is the caller.
