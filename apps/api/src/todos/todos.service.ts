@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common"
 import { randomUUID } from "crypto"
 import { PrismaService } from "../prisma/prisma.service"
 import { PaginationService } from "../common/pagination/pagination.service"
+import { toSnakeKeys } from "../common/to-snake-keys"
 import { TodoBodyDto } from "./dto/todo-body.dto"
 import { ListTodosDto } from "./dto/list-todos.dto"
 
@@ -31,18 +32,6 @@ type TodoRow = {
   updatedAt: Date
 }
 
-// API responses keep the Express-era snake_case contract the SPA consumes.
-const toSnake = (todo: TodoRow) => ({
-  id: todo.id,
-  project_id: todo.projectId,
-  user_id: todo.userId,
-  title: todo.title,
-  description: todo.description,
-  is_completed: todo.isCompleted,
-  created_at: todo.createdAt,
-  updated_at: todo.updatedAt,
-})
-
 // Prisma's `contains` passes `%` and `_` through as live ILIKE wildcards;
 // escape them (and the escape char itself) so search terms match literally.
 const escapeLike = (term: string) => term.replace(/[\\%_]/g, "\\$&")
@@ -71,7 +60,7 @@ export class TodosService {
       take: query.limit,
     })
     return {
-      data: rows.map(toSnake),
+      data: rows.map((row) => toSnakeKeys<TodoRow>(row)),
       pagination: this.pagination.buildMeta(query.page, query.limit, totalItems),
     }
   }
@@ -82,7 +71,7 @@ export class TodosService {
       select: TODO_SELECT,
     })
     if (!todo) throw new NotFoundException("Todo not found")
-    return toSnake(todo)
+    return toSnakeKeys<TodoRow>(todo)
   }
 
   async create(projectId: string, userId: string, dto: TodoBodyDto) {
@@ -97,10 +86,12 @@ export class TodosService {
       },
       select: TODO_SELECT,
     })
-    return toSnake(todo)
+    return toSnakeKeys<TodoRow>(todo)
   }
 
   async update(projectId: string, todoId: string, dto: TodoBodyDto) {
+    // PUT is full-replace: omitted optional fields reset to their creation
+    // defaults (the same `?? null` / `?? false` fallbacks as `create()`).
     // Scope by projectId as well as id: ProjectGuard confirms the project belongs
     // to the org, but nothing upstream ties this todo to that project, so scoping
     // here is what prevents a cross-project (cross-tenant) update via a foreign id.
@@ -109,7 +100,7 @@ export class TodosService {
       data: {
         title: dto.title,
         description: dto.description ?? null,
-        isCompleted: dto.is_completed ?? undefined,
+        isCompleted: dto.is_completed ?? false,
       },
     })
     if (result.count === 0) throw new NotFoundException("Todo not found")
@@ -117,7 +108,7 @@ export class TodosService {
       where: { id: todoId },
       select: TODO_SELECT,
     })
-    return toSnake(todo)
+    return toSnakeKeys<TodoRow>(todo)
   }
 
   async removeMany(projectId: string, ids: string[]): Promise<void> {

@@ -2,10 +2,10 @@ import { Test } from "@nestjs/testing"
 import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
-import { configureApp } from "../src/bootstrap"
+import { createTestApp } from "./create-test-app"
 import { PrismaService } from "../src/prisma/prisma.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
-import { signupAndSignin, createOrg } from "./factory"
+import { signupAndSignin, createOrg, getRoleId } from "./factory"
 
 describe("Todos (e2e)", () => {
   let app: INestApplication
@@ -14,9 +14,7 @@ describe("Todos (e2e)", () => {
   let projectId: string
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
-    app = ref.createNestApplication({ bufferLogs: true })
-    configureApp(app)
-    await app.init()
+    app = await createTestApp(ref)
     prisma = app.get(PrismaService)
   })
   afterAll(async () => app.close())
@@ -47,6 +45,20 @@ describe("Todos (e2e)", () => {
     const ok = await agent().post(base()).set("Cookie", cookies).send({ title: "Buy milk" })
     expect(ok.status).toBe(201)
     expect(ok.body.data.title).toBe("Buy milk")
+  })
+
+  it("denies a viewer creating a todo with 403", async () => {
+    const orgId = (globalThis as Record<string, unknown>).__orgId as string
+    const viewer = await signupAndSignin(app)
+    const viewerRoleId = await getRoleId(prisma, orgId, "viewer")
+    await prisma.orgMember.create({
+      data: { orgId, userId: viewer.userId, roleId: viewerRoleId },
+    })
+    await prisma.projectMember.create({
+      data: { projectId, userId: viewer.userId, roleId: viewerRoleId },
+    })
+    const res = await agent().post(base()).set("Cookie", viewer.cookies).send({ title: "Nope" })
+    expect(res.status).toBe(403)
   })
 
   it("lists todos with a pagination envelope", async () => {
@@ -144,6 +156,24 @@ describe("Todos (e2e)", () => {
       .delete(`${base()}/11111111-1111-1111-1111-111111111111`)
       .set("Cookie", cookies)
     expect(single.status).toBe(200)
+  })
+
+  it("PUT is full-replace: omitted optional fields reset to defaults", async () => {
+    const created = await agent()
+      .post(base())
+      .set("Cookie", cookies)
+      .send({ title: "t", description: "keep?", is_completed: true })
+    expect(created.status).toBe(201)
+    const updated = await agent()
+      .put(`${base()}/${created.body.data.id}`)
+      .set("Cookie", cookies)
+      .send({ title: "t2" })
+    expect(updated.status).toBe(200)
+    expect(updated.body.data).toMatchObject({
+      title: "t2",
+      description: null,
+      is_completed: false,
+    })
   })
 
   it("bumps updated_at on edit and reorders the default list", async () => {
