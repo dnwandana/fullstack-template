@@ -8,17 +8,19 @@ RUN corepack enable
 # Workspace manifests first for a cached install layer.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/api/package.json apps/api/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
 RUN corepack pnpm install --filter @fullstack/api... --frozen-lockfile
 # API source + prisma schema, then generate the client and build dist/.
 # `prisma generate` runs INSIDE alpine, so the emitted query engine is the
 # linux-musl target the runtime stage needs.
 COPY apps/api apps/api
+COPY packages packages
 # `prisma.config.ts` eagerly validates DATABASE_URL via env(); `prisma generate`
 # never connects, so a throwaway build-only value is enough. It is NOT baked into
 # the runtime image (this stage is discarded).
 RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" \
       corepack pnpm --filter @fullstack/api exec prisma generate \
- && corepack pnpm --filter @fullstack/api build
+ && corepack pnpm --filter @fullstack/api... build
 # Produce a self-contained, production-only deployment (no devDeps) at /prod.
 # `pnpm deploy` flattens the workspace symlinks into a real node_modules and
 # copies the project files (dist/, prisma/, prisma.config.ts, package.json).
