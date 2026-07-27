@@ -20,11 +20,13 @@ import { CurrentProject } from "@shared/decorators/current-project.decorator"
 import { RequirePermission } from "@shared/decorators/require-permission.decorator"
 import { ProjectScoped } from "@tenancy/scoped.decorators"
 
+/** Project-scoped todo routes; `@ProjectScoped()` is bare, so each handler names a permission. */
 @Controller("orgs/:org_id/projects/:project_id/todos")
 @ProjectScoped()
 export class TodosController {
   constructor(private readonly todos: TodosService) {}
 
+  // `limit` defaults to 10 (`ListTodosDto`), and `sort_by` accepts only `updated_at`/`title`.
   @Get()
   @RequirePermission("todos:read")
   async list(
@@ -64,6 +66,7 @@ export class TodosController {
     return { message: "OK", data: await this.todos.update(project.id, todoId, dto) }
   }
 
+  // Ids arrive as a comma-separated `ids` query param, 1-50 UUIDs; unmatched ids are ignored.
   @Delete()
   @RequirePermission("todos:delete")
   async bulkRemove(

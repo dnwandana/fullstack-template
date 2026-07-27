@@ -28,6 +28,11 @@ const INVITATION_EXPIRY_DAYS = 7
 const isUniqueViolation = (err: unknown): boolean =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
 
+/**
+ * Invitation lifecycle: create, list, preview, accept, decline, revoke, resend. Only a token's
+ * SHA-256 hash is stored, so the raw token is returned exactly twice — at create and at resend.
+ * Expiry is derived, never written: every read compares `expiresAt` against now.
+ */
 @Injectable()
 export class InvitationsService {
   constructor(
@@ -46,6 +51,11 @@ export class InvitationsService {
     return buildInvitationAcceptUrl(base, invitationId, rawToken)
   }
 
+  /**
+   * Creates an invitation and enqueues its email. 404 for a role outside `orgId`; 400 for a
+   * pending unexpired invitation on the same (email, org, project) scope. The returned raw token
+   * is not stored and can never be retrieved again.
+   */
   async create(
     orgId: string,
     projectId: string | null,
@@ -53,17 +63,17 @@ export class InvitationsService {
     dto: CreateInvitationDto,
     orgName: string,
   ): Promise<InvitationWithTokenResponse> {
-    // The role must belong to this org — a foreign role id would smuggle another
-    // tenant's permission set into this org's membership on accept.
+    // The role must belong to this org — a foreign role id would smuggle another tenant's
+    // permission set into this org's membership on accept.
     const role = await this.prisma.role.findFirst({
       where: { id: dto.role_id, orgId },
       select: { id: true },
     })
     if (!role) throw new NotFoundException("Role not found in this organization")
 
-    // Friendly pre-check only — expired pending invites do not count as duplicates.
-    // The real backstop for concurrent creates is the partial unique index pair
-    // (invitations_pending_*_email_unique), mapped to the same 400 below.
+    // Friendly pre-check only — expired pending invites are not duplicates. The real backstop for
+    // concurrent creates is the partial unique index pair (invitations_pending_*_email_unique),
+    // mapped to the same 400 below.
     const duplicate = await this.prisma.invitation.findFirst({
       where: {
         inviteeEmail: dto.email,
@@ -87,8 +97,8 @@ export class InvitationsService {
     let invitation: InviteRow
     try {
       invitation = await this.prisma.$transaction(async (tx) => {
-        // Clear expired pending rows for this scope first — they still match the
-        // partial unique index and would otherwise block a legitimate re-invite.
+        // Clear expired pending rows for this scope first — they still match the partial unique
+        // index and would otherwise block a legitimate re-invite.
         await tx.invitation.deleteMany({
           where: {
             orgId,
@@ -120,16 +130,16 @@ export class InvitationsService {
       }
       throw err
     }
-    // Awaited, not fire-and-forget: an unawaited rejection here is an invitee who
-    // never receives the link and a request that reported success.
+    // Awaited, not fire-and-forget: an unawaited rejection is an invitee who never gets the link
+    // and a request that reported success.
     await this.notifier.sendInvitationEmail({
       email: dto.email,
       invitationId: invitation.id,
       rawToken,
       orgName,
     })
-    // No mail provider ships with the template: the raw token and accept_url are
-    // returned so the caller can deliver the link by hand.
+    // No mail provider ships with the template, so the raw token and accept_url are returned for
+    // the caller to deliver by hand — wire contract, not debugging leftovers.
     return {
       ...toInvitationResponse(invitation),
       token: rawToken,
@@ -137,6 +147,7 @@ export class InvitationsService {
     }
   }
 
+  /** Every invitation in the org, any status — paginated, newest first. */
   async listForOrg(orgId: string, query: ListQueryDto): Promise<InvitationListResponse> {
     const where = { orgId }
     const totalItems = await this.prisma.invitation.count({ where })
@@ -153,8 +164,7 @@ export class InvitationsService {
       take: query.limit,
     })
     return {
-      // Destructure the relations off before mapping — nested objects must not
-      // reach the shallow key mapper.
+      // Destructure the relations off before mapping — the key mapper is shallow.
       data: rows.map(({ inviter, invitee, role, ...cols }) => ({
         ...toInvitationResponse(cols),
         inviter_name: inviter.name,
@@ -165,6 +175,10 @@ export class InvitationsService {
     }
   }
 
+  /**
+   * The caller's own pending, unexpired invitations, matched by user id **or** email so an invite
+   * sent before signup still appears. Deliberately unpaginated — returns a bare array.
+   */
   async listMine(userId: string, email: string): Promise<MyInvitationResponse[]> {
     const rows = await this.prisma.invitation.findMany({
       where: {
@@ -181,8 +195,7 @@ export class InvitationsService {
       },
       orderBy: { createdAt: "desc" },
     })
-    // Destructure the relations off before mapping — nested objects must not
-    // reach the shallow key mapper.
+    // Destructure the relations off before mapping — the key mapper is shallow.
     return rows.map(({ organization, project, inviter, role, ...cols }) => ({
       ...toInvitationResponse(cols),
       org_name: organization.name,
@@ -192,6 +205,11 @@ export class InvitationsService {
     }))
   }
 
+  /**
+   * Unauthenticated read for a logged-out invitee; possession of `rawToken` is the only
+   * credential. Throws 404 for both an unknown id and a wrong token, so neither enumerates.
+   * Projects its own narrow selection — the caller must not see org_id, inviter_id or role_id.
+   */
   async preview(invitationId: string, rawToken: string): Promise<InvitationPreviewResponse> {
     const invitation = await this.prisma.invitation.findFirst({
       where: { id: invitationId, tokenHash: this.hash(rawToken) },
@@ -230,6 +248,11 @@ export class InvitationsService {
     }
   }
 
+  /**
+   * Redeems an invitation into a membership row. Two gates apply **in order**: 404 when id and
+   * token hash do not both match, then 403 on ownership — so a wrong token cannot probe which
+   * invitation ids exist. A project invite also adds the user to the parent org as `viewer`.
+   */
   async accept(
     invitationId: string,
     userId: string,
@@ -237,17 +260,18 @@ export class InvitationsService {
     rawToken: string,
   ): Promise<null> {
     return this.prisma.$transaction(async (tx) => {
-      // Serialize concurrent accepts of the same invitation (parity with the
-      // Express SELECT ... FOR UPDATE) so the status check below is race-free.
+      // Serialize concurrent accepts (parity with the Express SELECT ... FOR UPDATE) so the
+      // status check below is race-free.
       await tx.$queryRaw`SELECT id FROM invitations WHERE id = ${invitationId}::uuid FOR UPDATE`
-      // Match on the token hash as well as the id — mirrors preview(). Possession of
-      // the emailed secret is required, and a wrong token is reported as "not found"
-      // so callers cannot probe which invitation ids exist.
+      // Gate 1, and it must precede the ownership check below: match on the token hash as well as
+      // the id (as preview() does) and report either half wrong as 404, so a caller holding a bad
+      // token cannot probe which invitation ids exist.
       const invitation = await tx.invitation.findFirst({
         where: { id: invitationId, tokenHash: this.hash(rawToken) },
         select: INVITE_SELECT,
       })
       if (!invitation) throw new NotFoundException("Invitation not found")
+      // Gate 2: being the invitee is not sufficient on its own — the raw link is required too.
       if (invitation.inviteeId !== userId && invitation.inviteeEmail !== userEmail) {
         throw new ForbiddenException("This invitation does not belong to you")
       }
@@ -300,6 +324,10 @@ export class InvitationsService {
     })
   }
 
+  /**
+   * Invitee-side refusal. No raw token needed — unlike accept, this grants nothing, so id plus
+   * ownership is enough. 404 unknown, 403 not yours, 400 once no longer pending.
+   */
   async decline(invitationId: string, userId: string, userEmail: string): Promise<void> {
     const invitation = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
@@ -317,6 +345,7 @@ export class InvitationsService {
     })
   }
 
+  /** Admin revoke: hard-deletes the row, scoped to `orgId`. 404 when the pair matches nothing. */
   async remove(orgId: string, invitationId: string): Promise<void> {
     const { count } = await this.prisma.invitation.deleteMany({
       where: { id: invitationId, orgId },
@@ -324,6 +353,10 @@ export class InvitationsService {
     if (count === 0) throw new NotFoundException("Invitation not found")
   }
 
+  /**
+   * Re-issues the token and restarts the 7-day clock, invalidating any link already sent. 404
+   * outside `orgId`, 400 once no longer pending. Second and last place a raw token is returned.
+   */
   async resend(
     orgId: string,
     invitationId: string,
@@ -357,6 +390,10 @@ export class InvitationsService {
     }
   }
 
+  /**
+   * Signup backfill: stamps `inviteeId` onto pending, unexpired invitations already addressed to
+   * `email`, so they surface in listMine(). Silent no-op when there are none.
+   */
   async linkInviteeByEmail(email: string, userId: string): Promise<void> {
     await this.prisma.invitation.updateMany({
       where: {

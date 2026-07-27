@@ -5,6 +5,7 @@ import { PrismaService } from "@core/database/prisma.service"
 export class HealthService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Probes the database with `SELECT 1`. Never throws: a failure comes back as dbStatus. */
   async check(): Promise<{ healthy: boolean; dbStatus: "ok" | "error" }> {
     try {
       await this.prisma.$queryRaw`SELECT 1`

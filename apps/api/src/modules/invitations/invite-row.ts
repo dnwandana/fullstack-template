@@ -1,5 +1,8 @@
-// Key order mirrors the response shape — Prisma returns columns in select
-// order and toSnakeKeys preserves it.
+/**
+ * Prisma projection for an invitation row; key order mirrors the response, which `toSnakeKeys`
+ * preserves. Not shared with roles.service.ts's own select on purpose — one projection across two
+ * features couples their response contracts, so widening it for one silently widens the other.
+ */
 export const INVITE_SELECT = {
   id: true,
   orgId: true,
@@ -14,6 +17,7 @@ export const INVITE_SELECT = {
   updatedAt: true,
 } as const
 
+/** Hand-written mirror of `INVITE_SELECT`; nothing derives one from the other, so edit both. */
 export type InviteRow = {
   id: string
   orgId: string

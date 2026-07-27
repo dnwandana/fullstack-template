@@ -30,6 +30,11 @@ import { CurrentOrg } from "@shared/decorators/current-org.decorator"
 import { CurrentProject } from "@shared/decorators/current-project.decorator"
 import { OrgScoped, ProjectScoped } from "@tenancy/scoped.decorators"
 
+/**
+ * Two route families on one controller, which is why `@Controller()` carries no path: admin routes
+ * under `orgs/:org_id/...` guarded by `@OrgScoped`/`@ProjectScoped`, and invitee routes at
+ * `invitations/...` authorized by the invitation row itself — or, for preview, the raw token alone.
+ */
 @Controller()
 export class InvitationsController {
   constructor(
@@ -56,6 +61,7 @@ export class InvitationsController {
     }
   }
 
+  // Project-scoped invite; accepting it also joins the parent org as `viewer` if needed.
   @Post("orgs/:org_id/projects/:project_id/invitations")
   @ProjectScoped("invitations:create")
   async createForProject(
@@ -95,6 +101,7 @@ export class InvitationsController {
     return { message: "OK", data: null }
   }
 
+  // Re-issues the token, so any link already delivered stops working.
   @Post("orgs/:org_id/invitations/:invitation_id/resend")
   @HttpCode(HttpStatus.OK)
   @OrgScoped("invitations:manage")
@@ -112,6 +119,8 @@ export class InvitationsController {
     return { message: "OK", data: await this.invitations.listMine(userId, user?.email ?? "") }
   }
 
+  // Public: a logged-out invitee reads this before signing up. The raw `token` query param is the
+  // only credential, and an unknown id and a wrong token are both 404 so neither enumerates.
   @Public()
   @Get("invitations/:invitation_id/preview")
   async preview(
@@ -121,6 +130,7 @@ export class InvitationsController {
     return { message: "OK", data: await this.invitations.preview(invitationId, query.token) }
   }
 
+  // Authenticated *and* token-gated: being the invitee is not enough without the raw link.
   @Post("invitations/:invitation_id/accept")
   @HttpCode(HttpStatus.OK)
   async accept(

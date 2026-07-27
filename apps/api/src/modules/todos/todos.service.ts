@@ -8,10 +8,11 @@ import { SORT_COLUMN, DEFAULT_TODO_SORT } from "./todo-sort"
 import { TODO_SELECT } from "./todo-row"
 import { TodoListResponse, TodoResponse, toTodoResponse } from "./dto/todo.response"
 
-// Prisma's `contains` passes `%` and `_` through as live ILIKE wildcards;
-// escape them (and the escape char itself) so search terms match literally.
+// Prisma's `contains` passes `%` and `_` through as live ILIKE wildcards; escape them
+// (and the escape char itself) so a search term matches literally.
 const escapeLike = (term: string) => term.replace(/[\\%_]/g, "\\$&")
 
+/** Project-scoped todo CRUD — every query filters on `projectId`, which is the tenant boundary. */
 @Injectable()
 export class TodosService {
   constructor(
@@ -19,6 +20,10 @@ export class TodosService {
     private readonly pagination: PaginationService,
   ) {}
 
+  /**
+   * Resolves its own sort: `sort_by` has no DTO-layer default, so it falls back to `updated_at`.
+   * `search` matches `title` case-insensitively, with ILIKE wildcards escaped to literals.
+   */
   async list(projectId: string, query: ListTodosDto): Promise<TodoListResponse> {
     const sortBy = query.sort_by ?? DEFAULT_TODO_SORT
     const where = {
@@ -41,6 +46,7 @@ export class TodosService {
     }
   }
 
+  /** Throws 404 when the id does not exist *in this project* — a sibling project's id misses. */
   async findOne(projectId: string, todoId: string): Promise<TodoResponse> {
     const todo = await this.prisma.todo.findFirst({
       where: { id: todoId, projectId },
@@ -50,6 +56,7 @@ export class TodosService {
     return toTodoResponse(todo)
   }
 
+  /** Omitted body fields take creation defaults: `description` null, `is_completed` false. */
   async create(projectId: string, userId: string, dto: TodoBodyDto): Promise<TodoResponse> {
     const todo = await this.prisma.todo.create({
       data: {
@@ -65,12 +72,14 @@ export class TodosService {
     return toTodoResponse(todo)
   }
 
+  /**
+   * Full replace: optional fields omitted from the body reset to their creation defaults, the
+   * same `?? null` / `?? false` fallbacks `create()` uses. Throws 404 when no todo with that id
+   * exists inside this project.
+   */
   async update(projectId: string, todoId: string, dto: TodoBodyDto): Promise<TodoResponse> {
-    // PUT is full-replace: omitted optional fields reset to their creation
-    // defaults (the same `?? null` / `?? false` fallbacks as `create()`).
-    // Scope by projectId as well as id: ProjectGuard confirms the project belongs
-    // to the org, but nothing upstream ties this todo to that project, so scoping
-    // here is what prevents a cross-project (cross-tenant) update via a foreign id.
+    // Scoped by projectId as well as id: ProjectGuard ties the project to the org, but nothing
+    // ties this todo to that project, so this is what blocks a cross-tenant update by foreign id.
     const result = await this.prisma.todo.updateMany({
       where: { id: todoId, projectId },
       data: {
@@ -87,10 +96,12 @@ export class TodosService {
     return toTodoResponse(todo)
   }
 
+  /** Silent: ids outside this project are simply not deleted, never a 404. */
   async removeMany(projectId: string, ids: string[]): Promise<void> {
     await this.prisma.todo.deleteMany({ where: { projectId, id: { in: ids } } })
   }
 
+  /** Idempotent: deleting a missing or foreign-project todo is a no-op, not a 404. */
   async removeOne(projectId: string, todoId: string): Promise<void> {
     await this.prisma.todo.deleteMany({ where: { projectId, id: todoId } })
   }

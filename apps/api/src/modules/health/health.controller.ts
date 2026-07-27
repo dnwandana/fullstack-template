@@ -5,11 +5,14 @@ import { Response as ExResponse } from "express"
 import { HealthService } from "./health.service"
 import { Public } from "@shared/decorators/public.decorator"
 
-// VERSION_NEUTRAL keeps these three probes off the /v1 prefix. enableVersioning is
-// independent of setGlobalPrefix's `exclude`, so without this they would move to
-// /v1/health* — silently breaking the container healthchecks and the nginx locations,
-// none of which fail at boot. The version must ride on @Controller's options object:
-// @Version is typed MethodDecorator in Nest 11 and does not compile at class level.
+// VERSION_NEUTRAL keeps these probes off /v1 — enableVersioning ignores setGlobalPrefix's
+// `exclude`, so without it /v1/health* silently breaks the container healthchecks and nginx
+// locations. It must sit in @Controller's options; @Version is MethodDecorator-only in Nest 11.
+
+/**
+ * Container and orchestrator probes. The class-level @Public() and @SkipThrottle are
+ * load-bearing: these routes must answer while unauthenticated and must never be rate-limited.
+ */
 @Controller({ path: "health", version: VERSION_NEUTRAL })
 @SkipThrottle({ general: true })
 @Public()
@@ -19,9 +22,9 @@ export class HealthController {
     private readonly config: ConfigService,
   ) {}
 
-  // Liveness: is the process running and able to answer? Deliberately does NOT touch
-  // the database — an unreachable DB is a reason to stop routing traffic here, not a
-  // reason for the orchestrator to kill and restart the container.
+  // Liveness: is the process running and able to answer? Deliberately touches NO dependency —
+  // an unreachable database is a reason to stop routing traffic here, not a reason for the
+  // orchestrator to kill and restart a healthy process.
   @Get("live")
   @HttpCode(200)
   live() {
@@ -31,8 +34,9 @@ export class HealthController {
     }
   }
 
-  // Readiness: should this instance receive traffic? Consults the database, so a DB
-  // outage drops the instance from the load-balancer pool without restarting it.
+  // Readiness: should this instance receive traffic? Probes the database only — a DB outage
+  // drops the instance from the load-balancer pool without restarting it, while an instance
+  // whose Redis is unreachable still reports ready. Uptime and db detail are dev-only.
   @Get("ready")
   async ready(@Res({ passthrough: true }) res: ExResponse) {
     const { healthy, dbStatus } = await this.health.check()
@@ -48,6 +52,7 @@ export class HealthController {
     return { message: healthy ? "ready" : "not_ready", data }
   }
 
+  // Aggregate probe: the same database check as `ready`, reported as healthy/unhealthy.
   @Get()
   @HttpCode(200)
   async get(@Res({ passthrough: true }) res: ExResponse) {
