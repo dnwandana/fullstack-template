@@ -24,14 +24,19 @@ them, and a stale one that lands on plausible code misleads instead of announcin
   `packageManager` field — always invoke as `corepack pnpm <script>`, never `npm`, never `yarn`,
   and never with a `run` in the middle.
 - **Build orchestration**: Turborepo (`turbo.json`; version in the root `devDependencies`)
-- **Packages**: `apps/api` (`@fullstack/api` — NestJS 11 + Prisma, TypeScript → `dist/`),
-  `apps/app` (`@fullstack/app` — Vue 3 + Vite)
+- **Packages** (`pnpm-workspace.yaml` globs `apps/*` and `packages/*`): `apps/api`
+  (`@fullstack/api` — NestJS 11 + Prisma, TypeScript → `dist/`), `apps/app` (`@fullstack/app` —
+  Vue 3 + Vite), and `packages/contracts` (`@fullstack/contracts` — dependency-free, **type-only**
+  response contracts, built with plain `tsc`, consumed by `apps/api` via `implements`). `apps/app`
+  does not consume it: it is plain JavaScript, so it would need `checkJs` plus JSDoc annotations or
+  a TypeScript migration first.
 
 ### Turborepo strips undeclared environment variables
 
 `turbo.json` declares `globalEnv: ["NODE_ENV"]` plus an explicit `env` allowlist on the `build` and
-`test` tasks. The two arrays must stay identical — read both before adding a variable. Turborepo 2.x
-runs tasks in strict env mode by default, which has two consequences:
+`test` tasks — currently **17 entries each, identical including order**, matching the 17 keys in the
+API's Joi schema one for one. The two arrays must stay identical — read both before adding a
+variable. Turborepo 2.x runs tasks in strict env mode by default, which has two consequences:
 
 - **A shell-exported variable that is not on the list is invisible inside the task.**
   `FOO=bar corepack pnpm test` does not set `FOO` for Jest. It is not "set but wrong" — it is
@@ -46,7 +51,7 @@ This usually does not bite, because the API reads `.env` files off disk rather t
 
 Adding a new environment variable therefore touches **three or four** places:
 
-1. `apps/api/src/config/env.validation.ts` — the Joi schema the API validates against at boot
+1. `apps/api/src/core/config/env.validation.ts` — the Joi schema the API validates against at boot
 2. `apps/api/.env.example` — and `/.env.example` too if the Docker stack needs it
 3. both `env` arrays in `turbo.json` (`build` and `test`)
 4. the table in [`apps/api/README.md`](apps/api/README.md#configuration), which is canonical
@@ -65,21 +70,36 @@ wired into the root scripts.
 
 Caveats that have cost time:
 
-- **`lint` rewrites files.** `apps/app`'s `lint` is `run-s lint:*`, which runs `eslint . --fix --cache`
-  and `oxlint . --fix` (the glob expands alphabetically, so eslint goes first). `apps/api`'s `lint` is
-  a read-only `oxlint .` (its fixing variant is the package-local `lint:fix`). A root
-  `corepack pnpm lint` therefore mutates `apps/app` but not `apps/api`. Do not run it on a tree you
-  need to keep pristine for review.
+- **`lint` rewrites files.** `apps/app`'s `lint` is `run-s lint:*`, which runs `oxlint . --fix`
+  and then `eslint . --fix --cache`. `run-s` expands the glob in **`package.json` key order**, not
+  alphabetically, and `lint:oxlint` is declared before `lint:eslint` — so oxlint goes first.
+  Reordering the two keys reorders the run. `apps/api`'s `lint` is a read-only `oxlint .` (its
+  fixing variant is the package-local `lint:fix`). A root `corepack pnpm lint` therefore mutates
+  `apps/app` but not `apps/api`. Do not run it on a tree you need to keep pristine for review.
 - **`format` coverage is asymmetric.** `apps/api`'s `format` is `prettier --write .`, so it *does*
   reformat `apps/api/*.md`. `apps/app`'s is `prettier --write --experimental-cli src/`, scoped to
   source. The root has no Prettier dependency at all, so root markdown and `apps/app/*.md` have no
   Prettier owner — edit them by hand, and do not "fix" them with Prettier, which only produces
   unrelated reformatting noise.
-- **`test:api` runs the whole suite, not just e2e.** `apps/api`'s `test` is
-  `jest --config test/jest-e2e.json --runInBand`, and that config's `testRegex` is
-  `(\.e2e-spec|\.spec)\.ts$` — unit specs included. It needs a reachable PostgreSQL and an
-  `apps/api/.env.test`. The unit-only config (`test/jest-unit.json`) is not exposed at the root; run
-  it as `cd apps/api && corepack pnpm test:unit`.
+- **`test:api` is one of three tiers, and the root exposes only two of them.** `apps/api` sorts
+  specs by filename suffix, and the two Jest configs select on that suffix alone — there is no
+  hand-maintained exclusion list:
+
+  | Tier        | Suffix         | Config                | `testRegex`                     | Needs              |
+  | ----------- | -------------- | --------------------- | ------------------------------- | ------------------ |
+  | Unit        | `.spec.ts`     | `test/jest-unit.json` | `\.spec\.ts$`                   | nothing external   |
+  | Integration | `.int-spec.ts` | `test/jest-e2e.json`  | `(\.e2e-spec\|\.int-spec)\.ts$` | PostgreSQL + Redis |
+  | End-to-end  | `.e2e-spec.ts` | `test/jest-e2e.json`  | `(\.e2e-spec\|\.int-spec)\.ts$` | PostgreSQL + Redis |
+
+  `corepack pnpm test:api` runs `jest --config test/jest-e2e.json --runInBand`, i.e. the
+  integration **and** e2e tiers — it needs a reachable PostgreSQL, a reachable **Redis**, and an
+  `apps/api/.env.test`. The unit-only config is not exposed at the root; run it as
+  `cd apps/api && corepack pnpm test:unit`.
+
+  Because `.int-spec.ts` and `.e2e-spec.ts` do not end in `.spec.ts`, the two configs select
+  **disjoint** sets: no file runs twice and the two tiers' counts may be added. This was not always
+  true — the e2e `testRegex` used to be `(\.e2e-spec|\.spec)\.ts$`, which re-ran every unit spec, so
+  historical totals from before the split overlap and must not be summed.
 
 Beyond those five task names, package-local scripts have no root equivalent: `apps/api` adds eleven
 (database, unit test, watch/coverage, `lint:fix`, `start`), `apps/app` four (`preview`,
@@ -94,9 +114,25 @@ production, [Local Docker](README.md#local-docker) for the local stack, and
 only the facts those commands assume.
 
 Two compose files. Production (`docker-compose.yml`) is a three-container topology — edge nginx +
-app + api, with nginx the only one publishing host ports — and PostgreSQL deliberately **external**:
-point `DATABASE_URL` at a managed instance. Local (`docker-compose.local.yml`) is app (nginx built
-in) + api + postgres, and ships PostgreSQL in the stack.
+app + api, with nginx the only one publishing host ports — and it declares no volumes at all. Local
+(`docker-compose.local.yml`) is app (nginx built in) + api + postgres + redis, and ships both
+datastores in the stack.
+
+**Neither datastore is in the production stack; both are in the local one.** Production points
+`DATABASE_URL` and `REDIS_URL` at managed instances — Redis is as required as PostgreSQL (BullMQ has
+no in-memory driver; see
+[`apps/api/AGENTS.md`](apps/api/AGENTS.md#redis-and-the-notification-queue)), so it gets a managed
+dependency of its own rather than a container whose loss silently drops in-flight jobs. Consequences
+worth knowing:
+
+- **Nothing orders `api` startup in production** — it has no `depends_on`, boots immediately, and
+  ioredis retries `REDIS_URL` with backoff indefinitely. An unreachable managed Redis therefore
+  yields a container that passes `/health/live`, reports healthy, and serves traffic while every
+  queue and rate-limit write fails.
+- **Hostname `redis` is a local-stack fact only.** In `docker-compose.local.yml` it is the compose
+  service name and is mandatory (inside the `api` container `localhost` is the API process itself);
+  in production the host is whatever the managed provider gives you, and `rediss://` is the expected
+  scheme there.
 
 ### Production (`docker-compose.yml`)
 
@@ -119,20 +155,29 @@ in) + api + postgres, and ships PostgreSQL in the stack.
 
 ### Local (`docker-compose.local.yml`)
 
-Ships a `postgres` service (`postgres:17-alpine`, literal defaults `pg_user` / `pg_password` /
-`fullstack_template`). Env comes from `.env.local`; the values to set are listed in
-[`README.md` → Local Docker](README.md#local-docker). Three constraints, each with the consequence
-of violating it:
+Ships a `postgres` service (`postgres:18-alpine`, literal defaults `pg_user` / `pg_password` /
+`fullstack_template`) and a `redis` service (`redis:8.8-alpine`, `redis-cli ping` healthcheck,
+`redis_data` volume, `api` `depends_on` it with `condition: service_healthy`). Env comes from
+`.env.local`; the values to set are listed in
+[`README.md` → Local Docker](README.md#local-docker). Four constraints, each with the consequence of
+violating it:
 
-- **`DATABASE_URL` must use hostname `postgres`** — the compose service name. Inside the `api`
-  container `localhost` is the API process itself, so a `localhost` host gives connection-refused at
-  boot, not a helpful DNS error.
+- **`DATABASE_URL` must use hostname `postgres`, and `REDIS_URL` hostname `redis`** — the compose
+  service names. Inside the `api` container `localhost` is the API process itself, so a `localhost`
+  host gives connection-refused at boot, not a helpful DNS error.
 - **`NODE_ENV=development` is required locally.** The API sets `Secure` on auth cookies only in
   production; browsers silently drop `Secure` cookies over plain HTTP, so with `NODE_ENV=production`
   login appears to succeed and every following request is unauthenticated.
-- **`down -v` wipes the `postgres_data` named volume.** Data otherwise persists across restarts.
-  Conversely, PostgreSQL credentials are baked into that volume on first boot — changing
-  `POSTGRES_*` later has no effect until the volume is dropped and re-initialized.
+- **`down -v` wipes the `postgres_data` and `redis_data` named volumes.** Data otherwise persists
+  across restarts. Conversely, PostgreSQL credentials are baked into `postgres_data` on first boot —
+  changing `POSTGRES_*` later has no effect until the volume is dropped and re-initialized.
+- **`postgres_data` mounts at `/var/lib/postgresql`, not `/var/lib/postgresql/data`.** PostgreSQL 18
+  moved `PGDATA` to `/var/lib/postgresql/<major>/docker` and the image's `VOLUME` up one level with
+  it. Mounting the pre-18 path would put the named volume on a directory the server never writes to
+  and leave the real cluster on an anonymous volume that Docker discards on every container
+  recreate — data loss with no error. A `postgres_data` volume initialized by 17 or earlier is also
+  unreadable by 18: `initdb` runs fresh alongside the stale `data/` directory and the old rows are
+  simply not there. Drop the volume and re-seed.
 
 One more trap: Compose resolves `${POSTGRES_USER}` / `${POSTGRES_PASSWORD}` / `${POSTGRES_DB}` from
 the shell or from a `.env` file **at the compose root** — *not* from `.env.local`, which is only
@@ -146,24 +191,38 @@ derive from them, so the two must be kept in sync by hand.
   built Vue static files **only** — it does no `/api` proxying, because the edge nginx routes
   `api.<DOMAIN>` straight to the `api` container. In local dev `nginx/local.conf` is mounted over
   that file and *does* proxy `/api` and `/health`, since the local stack is single-origin.
-- In production the edge nginx strips the `/api` prefix from both the proxied path
-  (`proxy_pass http://api:3000/api/`) and from `Set-Cookie` paths (`proxy_cookie_path /api/auth /auth`
-  then `proxy_cookie_path /api /` — most specific first, because nginx applies the first matching
-  rule). So `api.<DOMAIN>` presents clean URLs while the API still mounts routes at `/api`
-  unmodified via the `setGlobalPrefix("api", { exclude: [...] })` call in `configureApp`
-  (`apps/api/src/bootstrap.ts`). Each `exclude` entry is an **exact** path, not a prefix —
-  `"health"` alone would not cover `health/live`.
+- **Routes are versioned: the API mounts everything at `/api/v1`.** In production the edge nginx
+  strips only the `/api` prefix — never the `/v1` — from both the proxied path
+  (`proxy_pass http://api:3000/api/`) and from `Set-Cookie` paths
+  (`proxy_cookie_path /api/v1/auth /v1/auth` then `proxy_cookie_path /api/v1 /v1` — most specific
+  first, because nginx applies the first matching rule). So `api.<DOMAIN>` presents `/v1/...` URLs
+  while the API still mounts `/api/v1/...` unmodified, via `setGlobalPrefix(API_PREFIX, { exclude: [...] })`
+  followed by `enableVersioning({ type: VersioningType.URI, defaultVersion: API_VERSION })` in
+  `configureApp` (`apps/api/src/bootstrap.ts`). Each `exclude` entry is an **exact** path, not a
+  prefix — `"health"` alone would not cover `health/live` — and `exclude` does **not** exempt a route
+  from the version segment; the health controller opts out of that separately with
+  `@Controller({ path: "health", version: VERSION_NEUTRAL })`.
+- **`apps/api/src/core/config/api-version.ts` and `nginx/templates/api.conf.template` must change
+  together.** The first defines `API_PREFIX`, `API_VERSION`, `ACCESS_COOKIE_PATH` and
+  `REFRESH_COOKIE_PATH`; nginx cannot import TypeScript, so it repeats the same two cookie paths by
+  hand. Cookie paths match by whole path segments, so a version bump that misses either side logs
+  every user out at their next refresh with no error raised anywhere.
 - **Only `/health` is exposed through the production edge.** `nginx/templates/api.conf.template`
   uses `location = /health`, an exact match, so `api.<DOMAIN>/health/live` and `/health/ready` fall
-  through to `location /` and get rewritten to `/api/health/live`, which does not exist. All three
-  probes work in the local stack, where `nginx/local.conf` uses a prefix `location /health`. Point
-  external orchestrator probes at the container, or add exact-match locations to the template.
+  through to `location /`, whose `proxy_pass http://api:3000/api/` turns them into
+  `/api/health/live` and `/api/health/ready` — paths that exist under neither the version prefix nor
+  the prefix exclusion, so they 404. All three probes work in the local stack, where
+  `nginx/local.conf` uses a prefix `location /health`. Point external orchestrator probes at the
+  container, or add exact-match locations to the template.
 - The edge also sets `proxy_hide_header Strict-Transport-Security` on the api vhost, so the HSTS
   header the API emits is suppressed and the edge's own `add_header` is the only copy the client
   sees. Two HSTS headers would otherwise be sent.
 - Container healthchecks in both compose files are identical and probe
   `wget -qO- http://localhost:3000/health/live` from *inside* the `api` container, so they never
   traverse nginx. `/health/live` is deliberate: it is liveness, not readiness, so a database outage
-  drops the instance from the traffic pool instead of making Docker restart a healthy process.
+  drops the instance from the traffic pool instead of making Docker restart a healthy process. Note
+  the consequence for Redis: `/health/live` touches no dependency and `/health/ready` probes only
+  the database, so an instance whose Redis is unreachable boots, reports healthy, and serves
+  traffic — see [`apps/api/AGENTS.md`](apps/api/AGENTS.md#redis-and-the-notification-queue).
 - **Migrations never run automatically** in either stack. Apply them explicitly on every
   environment; the commands are in [`README.md` → Useful commands](README.md#useful-commands).

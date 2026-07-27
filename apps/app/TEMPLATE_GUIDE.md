@@ -161,6 +161,11 @@ Two details that are easy to get wrong:
 - **Query and body keys are snake_case**, matching the API contract verbatim —
   `page`, `limit`, `sort_by`, `sort_order`, `search`. The client performs no
   case conversion in either direction.
+- **Paths here are bare — no `/api`, no `/v1`.** Both segments live in
+  `baseURL` in `src/utils/http.js`, which is `` `${VITE_API_BASE_URL}/v1` ``.
+  Writing the version at a call site produces a doubled `/v1` *and* silently
+  stops matching `NO_RETRY_ENDPOINTS` / `NO_REDIRECT_ENDPOINTS`, which compare
+  the bare `url` with `.includes()`.
 
 `src/api/todos.js` is the shipped file this example mirrors; diff against it if
 something does not line up.

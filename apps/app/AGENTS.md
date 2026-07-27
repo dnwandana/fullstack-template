@@ -43,7 +43,8 @@ URLs redirect to the matching route via a `beforeEnter` guard (`redirectLegacyTa
 
 Custom fetch-based client (NOT Axios). Key behaviors:
 
-- **Base URL**: `VITE_API_BASE_URL`, read once at module load in `utils/http.js` (`export const baseURL = import.meta.env.VITE_API_BASE_URL`). There is **no code-level default** — if the variable is unset, `baseURL` is `undefined` and every request URL becomes `"undefined/orgs"`. The `http://localhost:3000/api` value lives only in `.env.example`, so a fresh clone that skips `cp .env.example .env` fails this way.
+- **Base URL**: `VITE_API_BASE_URL` **plus the API version segment**, read once at module load in `utils/http.js` (``export const baseURL = `${import.meta.env.VITE_API_BASE_URL}/v1` ``). There is **no code-level default** for the env var — if it is unset, `baseURL` is `"undefined/v1"` and every request URL becomes `"undefined/v1/orgs"`. The `http://localhost:3000/api` value lives only in `.env.example`, so a fresh clone that skips `cp .env.example .env` fails this way. Note that `VITE_API_BASE_URL` stops at `/api`: the `/v1` is appended here and **nowhere else**.
+- **The version belongs in `baseURL` only — never at a call site.** Every request URL is `` `${baseURL}${url}` ``, and `NO_RETRY_ENDPOINTS` / `NO_REDIRECT_ENDPOINTS` match the **bare** `url` argument with `.includes()`. Writing `/v1/auth/refresh` at a call site would produce `/api/v1/v1/auth/refresh` *and* silently stop matching those lists, disabling the refresh-retry and redirect suppression that break the reload loop described below. `http.version.test.js` pins the invariant.
 - **Timeout**: 10 seconds via `AbortController` (`DEFAULT_TIMEOUT`, overridable per request)
 - **Auth cookies**: `credentials: 'include'` on all fetch calls, cookies set by server
 - **Token refresh flow**: On 401 responses:
