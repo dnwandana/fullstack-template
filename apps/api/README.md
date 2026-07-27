@@ -249,7 +249,7 @@ corepack pnpm test:cov          # Jest with coverage report
 
 `test:unit` (`test/jest-unit.json`) runs the `.spec.ts` files with no `globalSetup`, so no migrations and no PostgreSQL. Seven DB-backed `.spec.ts` files (`membership`, `org-creation`, `cleanup`, `seed`, `users`, `refresh-token`, `password-reset`) are deliberately excluded from it by name — they are integration tests wearing unit names, and JSON configs cannot carry that rationale as a comment, so it lives here instead.
 
-Tests use a real PostgreSQL test database configured in `.env.test` — create it with `cp .env.test.example .env.test` and adjust `DATABASE_URL`. The setup (`test/setup-e2e.ts`) applies migrations, seeds the 17 permissions, and truncates tables between tests. Every module has an e2e spec — auth (including account lockout, cookie-based auth, token rotation, and password reset), health (live/ready), orgs, roles, members, projects, todos, permissions, invitations, and the generated OpenAPI document.
+Tests use a real PostgreSQL test database configured in `.env.test` — create it with `cp .env.test.example .env.test` and adjust `DATABASE_URL`. The setup (`test/setup-e2e.ts`) is a Jest `globalSetup`: it applies migrations and seeds the canonical permissions **once per run**. It also exports `truncateAll`, but nothing calls it automatically — each spec invokes it itself, so a spec that omits the call leaks state into the next one. Every module has an e2e spec — auth (including account lockout, cookie-based auth, token rotation, and password reset), health (live/ready), orgs, roles, members, projects, todos, permissions, invitations, and the generated OpenAPI document.
 
 ### Linting & Formatting
 
@@ -428,8 +428,54 @@ each endpoint requires is the **Permission** column of [API Endpoints](#api-endp
 
 ## Project Structure
 
-The annotated `src/` tree, and the per-module responsibilities that go with it, live in
-[`AGENTS.md`](AGENTS.md#project-structure).
+Per-module responsibilities are tabulated in [`AGENTS.md`](AGENTS.md#nestjs-module-layout); the
+`src/` subdirectories below are exactly the modules in that table.
+
+```
+apps/api/
+├── src/
+│   ├── main.ts               # Entry point — creates the Nest app, calls configureApp, listens
+│   ├── bootstrap.ts          # helmet/cors/cookie-parser, setGlobalPrefix("api"), pino logger, Swagger
+│   ├── app.module.ts         # Root module: global pipe/filter/interceptor/guards + feature modules
+│   ├── prisma/               # PrismaService (Prisma client lifecycle)
+│   ├── auth/                 # Signup/signin/refresh/logout, password reset, JWT, cookies, token rotation
+│   ├── users/                # User lookups shared by other modules
+│   ├── permissions/          # GET /api/permissions reference list
+│   ├── orgs/                 # Org CRUD + system-roles.ts (per-org system roles)
+│   ├── roles/                # Custom role CRUD, permission assignment
+│   ├── members/              # Org + project membership listing / role changes / removal
+│   ├── projects/             # Project CRUD, org-scoped
+│   ├── todos/                # Example project-scoped resource, paginated
+│   ├── invitations/          # Invite/preview/accept/decline/revoke/resend + notifier seam
+│   ├── health/               # GET /health, /health/live, /health/ready — outside the prefix, throttle-skipped
+│   ├── maintenance/          # CleanupService — nightly cron pruning expired auth/invitation rows
+│   ├── tenancy/              # OrgGuard, ProjectGuard, PermissionsGuard, MembershipService
+│   ├── common/               # interceptors/, filters/, decorators, pagination/, duration/DTO helpers
+│   └── config/               # env.validation.ts (Joi, fail-fast at startup), pino.config.ts, auth-throttle.ts
+├── prisma/
+│   ├── schema.prisma         # Domain models (@map/@@map keep the DB snake_case)
+│   ├── migrations/           # Prisma migrations (single 0_init baseline)
+│   └── seed.ts               # Idempotent seed of the canonical permissions
+├── test/                     # Jest e2e + unit suites (Supertest against real PostgreSQL)
+├── .editorconfig             # Editor configuration
+├── .env.example              # Environment variable template
+├── .env.test.example         # Test environment template (valid dummy secrets — copy to .env.test)
+├── .gitignore
+├── .nvmrc                    # Node.js version (24)
+├── .oxlintrc.json            # Oxlint configuration
+├── .prettierignore           # Excludes generated output and vendored files
+├── .prettierrc.json          # Prettier configuration
+├── AGENTS.md                 # Facts and invariants for agents (CLAUDE.md symlinks to it)
+├── CLAUDE.md                 # Symlink → AGENTS.md
+├── Dockerfile                # Runtime image — runs node dist/main
+├── README.md                 # This file
+├── TEMPLATE_GUIDE.md         # Guide for extending this template
+├── nest-cli.json             # Nest CLI configuration (incl. the @nestjs/swagger plugin)
+├── prisma.config.ts          # Prisma CLI config — imports dotenv/config, points db seed at seed.ts
+├── tsconfig.json             # TypeScript configuration
+├── tsconfig.build.json       # Build-only overrides (excludes tests from dist/)
+└── package.json
+```
 
 ## Production Deployment
 
