@@ -4,6 +4,10 @@ import { PrismaService } from "@core/database/prisma.service"
 
 let counter = 0
 
+/**
+ * Signs a new user up and straight back in. Omitted credentials get a per-call unique email, so
+ * repeated calls in one run never collide; the returned cookies are the signin response's.
+ */
 export async function signupAndSignin(
   app: INestApplication,
   creds?: { name?: string; email?: string; password?: string },
@@ -21,6 +25,7 @@ export async function signupAndSignin(
   return { userId, cookies, email }
 }
 
+/** Creates an org as the cookie holder. The response status is not asserted on. */
 export async function createOrg(
   app: INestApplication,
   cookies: string[],
@@ -33,6 +38,7 @@ export async function createOrg(
   return { id: res.body.data.id as string }
 }
 
+/** Resolves a role id by org and role name, throwing if the org has no such role. */
 export async function getRoleId(
   prisma: PrismaService,
   orgId: string,

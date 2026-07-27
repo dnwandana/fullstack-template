@@ -1,8 +1,11 @@
 import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "crypto"
 
-// The 17 canonical permissions. Single source of truth — also consumed by
-// test/setup-e2e.ts. MUST match the RBAC model documented in apps/api/CLAUDE.md.
+/**
+ * The canonical permission set, also consumed by test/setup-e2e.ts. Must hold exactly the same
+ * names as ALL_PERMISSIONS in src/modules/orgs/system-roles.ts: nothing enforces it, and a name
+ * in one but not the other compiles and seeds cleanly while silently failing to grant.
+ */
 export const PERMISSION_NAMES = [
   "org:read",
   "org:update",
@@ -25,8 +28,7 @@ export const PERMISSION_NAMES = [
 
 export type PermissionName = (typeof PERMISSION_NAMES)[number]
 
-// Descriptions copied verbatim from the original pre-Prisma Knex seed
-// (since removed) to preserve the exact wording.
+// Copied verbatim from the original pre-Prisma Knex seed (since removed) to keep the wording.
 const PERMISSION_DESCRIPTIONS: Record<PermissionName, string> = {
   "org:read": "View organization details and settings",
   "org:update": "Update organization name, description, and settings",
@@ -48,10 +50,9 @@ const PERMISSION_DESCRIPTIONS: Record<PermissionName, string> = {
 }
 
 /**
- * Idempotently inserts the 17 canonical permissions. Upserts on the unique
- * `name` column, so repeated runs never raise a duplicate-key error. The
- * `resource`/`action` columns are required by the schema and derived from the
- * `resource:action` name convention.
+ * Idempotently inserts the canonical permissions, upserting on the unique `name` column so
+ * repeated runs never raise a duplicate-key error. `resource`/`action` are required by the
+ * schema and derived from the `resource:action` name convention.
  */
 export async function seedPermissions(prisma: PrismaClient): Promise<void> {
   for (const name of PERMISSION_NAMES) {
