@@ -98,7 +98,7 @@ The schema (`prisma/schema.prisma`) is **snake_case in the DB** but **camelCase 
 
 ```
 req.id          // Request ID (pino genReqId, from x-request-id or a fresh UUID)
-req.user        // { id } from the verified access_token JWT (JwtAuthGuard)
+req.user        // { id } — set by JwtAuthGuard (access_token) or RefreshTokenGuard (refresh_token)
 req.org         // { id, role_name } from OrgGuard
 req.project     // { id } from ProjectGuard
 req.permissions // ["todos:create", ...] merged org + project permissions
@@ -724,4 +724,6 @@ Fetch related rows with Prisma `select`/`include` rather than hand-written joins
 
 See [`README.md`](README.md) for quick start, setup, and the canonical environment-variable reference.
 
-See [`AGENTS.md`](AGENTS.md) (symlinked as `CLAUDE.md`) for the full architecture, endpoint table, and command reference.
+See [`AGENTS.md`](AGENTS.md) (symlinked as `CLAUDE.md`) for the architecture facts and the invariants
+you must not violate. The endpoint table and the command reference live in
+[`README.md`](README.md#api-endpoints), not in `AGENTS.md`.
