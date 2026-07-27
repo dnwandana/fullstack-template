@@ -98,7 +98,7 @@ corepack pnpm dev:app   # http://localhost:8080
 ## Scripts
 
 Every root script — the full list, the `:api` / `:app` suffix rule, and the Turborepo caveats that
-come with them — is documented in [`AGENTS.md`](AGENTS.md#root-commands).
+come with them — is documented in [`AGENTS.md`](AGENTS.md#commands).
 
 ## API overview
 
@@ -137,9 +137,10 @@ The OpenAPI document is generated from the controllers and DTOs at boot by `@nes
 
 ### Response format
 
-Every response is `{ message, data, request_id }`, with `pagination` added on list endpoints and
-`data: null` on errors. The envelope's fields, and how the transform interceptor and the exception
-filter produce it, are documented in
+Success responses are `{ message, data }`, with `pagination` added on list endpoints. Errors are
+`{ message, data: null, request_id }` — `request_id` appears on errors only, so a failure can always
+be correlated to a log line. The envelope's fields, and how the transform interceptor and the
+exception filter produce them, are documented in
 [`apps/api/AGENTS.md`](apps/api/AGENTS.md#response-envelope).
 
 ### Authentication cookies
@@ -351,7 +352,7 @@ fullstack-template/
 │   │   │   ├── schema.prisma       # 12 domain models (@map/@@map keep the DB snake_case)
 │   │   │   ├── migrations/         # Prisma migrations (single 0_init baseline)
 │   │   │   └── seed.ts             # Idempotent seed of the 17 canonical permissions
-│   │   └── test/                   # Jest e2e suite (Supertest against real PostgreSQL)
+│   │   └── test/                   # Jest e2e *and* unit suites (Supertest against real PostgreSQL)
 │   │
 │   └── app/
 │       └── src/
@@ -373,13 +374,22 @@ fullstack-template/
 ## Adding a new resource
 
 The recipe — module, Prisma model, tenant-scoped service, guarded controller, seeded permissions —
-is in [`apps/api/AGENTS.md`](apps/api/AGENTS.md#adding-a-new-resource). The worked walkthrough is
-[`apps/api/TEMPLATE_GUIDE.md`](apps/api/TEMPLATE_GUIDE.md); the SPA-side counterpart is
-[`apps/app/TEMPLATE_GUIDE.md`](apps/app/TEMPLATE_GUIDE.md).
+is a worked walkthrough in
+[`apps/api/TEMPLATE_GUIDE.md`](apps/api/TEMPLATE_GUIDE.md#adding-a-new-resource-step-by-step-tutorial);
+the SPA-side counterpart is [`apps/app/TEMPLATE_GUIDE.md`](apps/app/TEMPLATE_GUIDE.md#adding-new-features).
 
 ## Code style
 
-Prettier and Oxlint, configured per package. Run `corepack pnpm lint` and `corepack pnpm format`
-from the root. Conventions are documented in
+Prettier and Oxlint, configured per package — the config files are authoritative and neither
+convention is worth restating by hand.
+
+Two things to know before running either from the root. `corepack pnpm lint` **rewrites files**: in
+`apps/app` it is `run-s lint:*`, which auto-fixes with eslint and oxlint, while in `apps/api` it is
+a read-only `oxlint .` (the fixing variant there is the package-local `lint:fix`). And `format`
+coverage is asymmetric: `apps/api` runs `prettier --write .`, which reformats its markdown too,
+whereas `apps/app` scopes Prettier to `src/`. The root has no Prettier dependency of its own, so
+root markdown and `apps/app/*.md` have no formatter — edit them by hand.
+
+The conventions that are *not* mechanically enforced are noted in
 [`apps/api/AGENTS.md`](apps/api/AGENTS.md#code-style) and
-[`apps/app/AGENTS.md`](apps/app/AGENTS.md#code-style).
+[`apps/app/AGENTS.md`](apps/app/AGENTS.md#file-naming).

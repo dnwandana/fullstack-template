@@ -4,29 +4,34 @@ Monorepo root guidance — workspace and infrastructure only. This file records 
 invariants**: things that are true about the workspace and that you must not violate.
 
 - Runnable procedures (install, configure, migrate, deploy) live in [`README.md`](README.md).
-- Per-app architecture lives in [`apps/api/AGENTS.md`](apps/api/AGENTS.md) and
-  [`apps/app/AGENTS.md`](apps/app/AGENTS.md).
+- Per-app architecture lives in [`apps/api/AGENTS.md`](apps/api/AGENTS.md#architecture) (modules,
+  guards, response envelope, permissions) and
+  [`apps/app/AGENTS.md`](apps/app/AGENTS.md#architecture-overview) (stores, composables, HTTP
+  client).
+- [`apps/api/README.md`](apps/api/README.md#configuration) is the canonical environment-variable
+  reference; [`apps/api/README.md`](apps/api/README.md#api-endpoints) is the canonical endpoint
+  table.
 
 `CLAUDE.md` at every level is a symlink to the `AGENTS.md` beside it. Edit `AGENTS.md`; never
 create a real `CLAUDE.md`.
 
+Cite code by symbol and file, never `file.ts:NN` — line numbers break silently on any edit above
+them, and a stale one that lands on plausible code misleads instead of announcing itself.
+
 ## Workspace
 
-- **Package manager**: pnpm via Corepack. Pinned by the root `package.json`'s
-  `packageManager: "pnpm@11.15.1"` — always invoke as `corepack pnpm <script>`, never `npm`,
-  never `yarn`, and never with a `run` in the middle.
-- **Build orchestration**: Turborepo (`turbo.json`, `turbo@^2.10.5`)
+- **Package manager**: pnpm via Corepack, version pinned by the root `package.json`'s
+  `packageManager` field — always invoke as `corepack pnpm <script>`, never `npm`, never `yarn`,
+  and never with a `run` in the middle.
+- **Build orchestration**: Turborepo (`turbo.json`; version in the root `devDependencies`)
 - **Packages**: `apps/api` (`@fullstack/api` — NestJS 11 + Prisma, TypeScript → `dist/`),
   `apps/app` (`@fullstack/app` — Vue 3 + Vite)
 
 ### Turborepo strips undeclared environment variables
 
 `turbo.json` declares `globalEnv: ["NODE_ENV"]` plus an explicit `env` allowlist on the `build` and
-`test` tasks — the same 14 variables on each: `DATABASE_URL`, `ACCESS_TOKEN_SECRET`,
-`REFRESH_TOKEN_SECRET`, `ACCESS_TOKEN_EXPIRES_IN`, `REFRESH_TOKEN_EXPIRES_IN`, `JWT_ISSUER`,
-`JWT_AUDIENCE`, `NODE_ENV`, `PORT`, `LOG_LEVEL`, `CORS_ALLOWED_ORIGINS`, `APP_BASE_URL`,
-`RATE_LIMIT_AUTH_MAX`, `RATE_LIMIT_GENERAL_MAX`. Turborepo 2.x runs tasks in strict env mode by
-default, which has two consequences:
+`test` tasks. The two arrays must stay identical — read both before adding a variable. Turborepo 2.x
+runs tasks in strict env mode by default, which has two consequences:
 
 - **A shell-exported variable that is not on the list is invisible inside the task.**
   `FOO=bar corepack pnpm test` does not set `FOO` for Jest. It is not "set but wrong" — it is
@@ -44,74 +49,41 @@ Adding a new environment variable therefore touches **three or four** places:
 1. `apps/api/src/config/env.validation.ts` — the Joi schema the API validates against at boot
 2. `apps/api/.env.example` — and `/.env.example` too if the Docker stack needs it
 3. both `env` arrays in `turbo.json` (`build` and `test`)
+4. the table in [`apps/api/README.md`](apps/api/README.md#configuration), which is canonical
 
 `lint` and `format` declare no `env` at all; `dev` is `cache: false` and `persistent: true`, so it is
 never cached.
 
-## Root commands
+## Commands
 
-```bash
-corepack pnpm dev           # Start both apps (nest --watch + Vite)
-corepack pnpm dev:api       # API only  (http://localhost:3000)
-corepack pnpm dev:app       # App only  (http://localhost:8080)
-corepack pnpm build         # Build both
-corepack pnpm build:api     # API only
-corepack pnpm build:app     # App only
-corepack pnpm lint          # Lint both — see the caveat below, this rewrites files
-corepack pnpm lint:api      # API only
-corepack pnpm lint:app      # App only
-corepack pnpm test          # Test both apps
-corepack pnpm test:api      # Jest against a real PostgreSQL
-corepack pnpm test:app      # Vitest + jsdom + @vue/test-utils
-corepack pnpm format        # Prettier — see the caveat below, coverage is asymmetric
-corepack pnpm format:api    # API only
-corepack pnpm format:app    # App only
-```
-
-**The `:api` / `:app` suffix rule.** Every root script exists in three forms. The bare form runs
-`turbo run <task>` across both packages; the suffixed forms are the same command plus
-`--filter=@fullstack/api` or `--filter=@fullstack/app`. All three go **through** Turborepo, so the
-suffixed variants keep caching and the task graph — they only narrow the package set. There is no
-raw `pnpm --filter` escape hatch wired into the root scripts.
+The script list is in `package.json` and in [`README.md`](README.md#scripts). **The `:api` / `:app`
+suffix rule**: every root task exists in three forms — the bare form runs `turbo run <task>` across
+both packages, the suffixed forms are the same command plus `--filter=@fullstack/api` or
+`--filter=@fullstack/app`. All three go **through** Turborepo, so the suffixed variants keep caching
+and the task graph — they only narrow the package set. There is no raw `pnpm --filter` escape hatch
+wired into the root scripts.
 
 Caveats that have cost time:
 
-- **`lint` rewrites files.** `apps/app`'s `lint` is `run-s lint:*`, which runs `oxlint . --fix` and
-  then `eslint . --fix --cache`. `apps/api`'s `lint` is a read-only `oxlint .` (its fixing variant is
-  the package-local `lint:fix`). A root `corepack pnpm lint` therefore mutates `apps/app` but not
-  `apps/api`. Do not run it on a tree you need to keep pristine for review.
+- **`lint` rewrites files.** `apps/app`'s `lint` is `run-s lint:*`, which runs `eslint . --fix --cache`
+  and `oxlint . --fix` (the glob expands alphabetically, so eslint goes first). `apps/api`'s `lint` is
+  a read-only `oxlint .` (its fixing variant is the package-local `lint:fix`). A root
+  `corepack pnpm lint` therefore mutates `apps/app` but not `apps/api`. Do not run it on a tree you
+  need to keep pristine for review.
 - **`format` coverage is asymmetric.** `apps/api`'s `format` is `prettier --write .`, so it *does*
   reformat `apps/api/*.md`. `apps/app`'s is `prettier --write --experimental-cli src/`, scoped to
-  source. Root markdown and `apps/app/*.md` have no Prettier owner — edit them by hand, and do not
-  "fix" them with Prettier, which only produces unrelated reformatting noise.
+  source. The root has no Prettier dependency at all, so root markdown and `apps/app/*.md` have no
+  Prettier owner — edit them by hand, and do not "fix" them with Prettier, which only produces
+  unrelated reformatting noise.
 - **`test:api` runs the whole suite, not just e2e.** `apps/api`'s `test` is
   `jest --config test/jest-e2e.json --runInBand`, and that config's `testRegex` is
   `(\.e2e-spec|\.spec)\.ts$` — unit specs included. It needs a reachable PostgreSQL and an
   `apps/api/.env.test`. The unit-only config (`test/jest-unit.json`) is not exposed at the root; run
   it as `cd apps/api && corepack pnpm test:unit`.
 
-Package-local scripts that have no root equivalent — `db:migrate`, `db:seed`, `db:generate`,
-`test:unit`, `lint:fix` — are documented in
-[`apps/api/AGENTS.md`](apps/api/AGENTS.md#commands).
-
-## Key architectural facts
-
-- **Auth cookies**: `access_token` and `refresh_token` — httpOnly, Secure, SameSite=Strict cookies set by the server
-- **Multi-tenancy**: Shared database, tenant isolation via `org_id`/`project_id` columns
-- **RBAC**: `@RequirePermission(name)` decorator enforced by `PermissionsGuard`; resolved permissions live on `req.permissions`
-- **Request context**: `req.id` (request ID), `req.user`, `req.org`, `req.project`, `req.permissions`
-- **Error handling**: Controllers/services throw NestJS `HttpException`s, caught by the global `AllExceptionsFilter` → `{ message, data: null, request_id }`
-- **Env validation**: API fails fast at startup if required vars are missing (expected behavior)
-- **Health probes**: `/health/live` (process only), `/health/ready` (database probe), `/health` (combined) — all three sit outside the `/api` prefix, are public, and skip rate limiting
-- **API docs**: OpenAPI is generated at boot by `@nestjs/swagger` and served at `/api/docs`; gated by `SWAGGER_ENABLED`, which defaults to off in production. No spec file is checked in
-- **Scheduled work**: `@nestjs/schedule` cron in `apps/api/src/maintenance/` prunes expired auth and invitation rows nightly, in bounded batches, each guarded by a Postgres advisory lock so replicas never duplicate work (`CLEANUP_ENABLED`)
-
-## App-specific details
-
-- [`apps/api/AGENTS.md`](apps/api/AGENTS.md#architecture) — modules, guards, response envelope, permissions
-- [`apps/app/AGENTS.md`](apps/app/AGENTS.md#architecture-overview) — stores, composables, HTTP client
-- [`apps/api/README.md`](apps/api/README.md#configuration) — the canonical environment-variable reference
-- [`apps/api/README.md`](apps/api/README.md#api-endpoints) — the canonical endpoint tables
+Beyond those five task names, package-local scripts have no root equivalent: `apps/api` adds eleven
+(database, unit test, watch/coverage, `lint:fix`, `start`), `apps/app` four (`preview`,
+`test:watch`, `lint:oxlint`, `lint:eslint`). Each package's README lists them.
 
 ## Docker facts and invariants
 
@@ -122,17 +94,12 @@ production, [Local Docker](README.md#local-docker) for the local stack, and
 only the facts those commands assume.
 
 Two compose files. Production (`docker-compose.yml`) is a three-container topology — edge nginx +
-app + api — with PostgreSQL deliberately **external**: point `DATABASE_URL` at a managed instance.
-Local (`docker-compose.local.yml`) is also three containers — app (with nginx built in) + api +
-postgres — and ships PostgreSQL in the stack.
+app + api, with nginx the only one publishing host ports — and PostgreSQL deliberately **external**:
+point `DATABASE_URL` at a managed instance. Local (`docker-compose.local.yml`) is app (nginx built
+in) + api + postgres, and ships PostgreSQL in the stack.
 
 ### Production (`docker-compose.yml`)
 
-- Three services: `nginx` (edge, the only one publishing host ports — `80:80` and `443:443`), `app`
-  and `api` (no `ports:` key at all, reachable only inside the compose network).
-- `nginx` is a name-based virtual host router built from `nginx/Dockerfile`, which does nothing but
-  delete the stock `default.conf`. It builds no application code. `app.<DOMAIN>` proxies to
-  `http://app:80`, `api.<DOMAIN>` proxies to `http://api:3000/api/`.
 - TLS uses a **single wildcard cert pair** in `certs/` (gitignored, bind-mounted read-only at
   `/etc/nginx/certs`) with these exact filenames: `<DOMAIN>.fullchain.pem` and
   `<DOMAIN>.privkey.pem`. Both vhosts reference the same pair, so one `*.<domain>` cert covers the
@@ -149,19 +116,13 @@ postgres — and ships PostgreSQL in the stack.
 - The `app` image bakes its API base URL at **build time**: `VITE_API_BASE_URL` is a Docker build
   arg (`https://api.${DOMAIN}` in production, `${VITE_API_BASE_URL:-/api}` locally) baked into the
   Vite bundle. Changing it requires a rebuild — restarting the container changes nothing.
-- Startup ordering: `nginx` waits for `api` to be `service_healthy` and for `app` to be
-  `service_started`.
-- Env from `.env`, supplied to the `api` service only (`env_file: .env`).
 
 ### Local (`docker-compose.local.yml`)
 
-- No separate edge container. The `app` service publishes `80:80` and bind-mounts `nginx/local.conf`
-  over `/etc/nginx/conf.d/default.conf`, so the stack stays single-origin on plain HTTP with no TLS.
-- Ships a `postgres` service (`postgres:17-alpine`, literal defaults `pg_user` / `pg_password` /
-  `fullstack_template`). `api` waits on its healthcheck (`condition: service_healthy`), and `app`
-  waits on `api`'s.
-
-Three constraints, each with the consequence of violating it:
+Ships a `postgres` service (`postgres:17-alpine`, literal defaults `pg_user` / `pg_password` /
+`fullstack_template`). Env comes from `.env.local`; the values to set are listed in
+[`README.md` → Local Docker](README.md#local-docker). Three constraints, each with the consequence
+of violating it:
 
 - **`DATABASE_URL` must use hostname `postgres`** — the compose service name. Inside the `api`
   container `localhost` is the API process itself, so a `localhost` host gives connection-refused at
@@ -179,23 +140,18 @@ handed to the `api` container via `env_file`. Setting them in `.env.local` chang
 literal defaults stay in force. `DATABASE_URL` is a separate opaque string that Compose does not
 derive from them, so the two must be kept in sync by hand.
 
-Env comes from `.env.local` (copy from `.env.example`). Alongside `NODE_ENV=development`, set
-`JWT_ISSUER` / `JWT_AUDIENCE` / `CORS_ALLOWED_ORIGINS` / `APP_BASE_URL` to `http://localhost`.
-
 ### Common facts
 
 - `app` container: in production its nginx (`apps/app/nginx.conf`, baked into the image) serves the
   built Vue static files **only** — it does no `/api` proxying, because the edge nginx routes
   `api.<DOMAIN>` straight to the `api` container. In local dev `nginx/local.conf` is mounted over
   that file and *does* proxy `/api` and `/health`, since the local stack is single-origin.
-- `api` container: NestJS on Node, runs `node dist/main`. No host port is published in either
-  compose file; it is reachable only as `http://api:3000` inside the Docker network.
 - In production the edge nginx strips the `/api` prefix from both the proxied path
   (`proxy_pass http://api:3000/api/`) and from `Set-Cookie` paths (`proxy_cookie_path /api/auth /auth`
   then `proxy_cookie_path /api /` — most specific first, because nginx applies the first matching
   rule). So `api.<DOMAIN>` presents clean URLs while the API still mounts routes at `/api`
-  unmodified via `setGlobalPrefix("api", { exclude: ["health", "health/live", "health/ready"] })` in
-  `apps/api/src/bootstrap.ts:47`. Each `exclude` entry is an **exact** path, not a prefix —
+  unmodified via the `setGlobalPrefix("api", { exclude: [...] })` call in `configureApp`
+  (`apps/api/src/bootstrap.ts`). Each `exclude` entry is an **exact** path, not a prefix —
   `"health"` alone would not cover `health/live`.
 - **Only `/health` is exposed through the production edge.** `nginx/templates/api.conf.template`
   uses `location = /health`, an exact match, so `api.<DOMAIN>/health/live` and `/health/ready` fall
