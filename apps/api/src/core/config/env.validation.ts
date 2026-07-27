@@ -29,21 +29,24 @@ const schema = Joi.object({
   JWT_ISSUER: Joi.string().required(),
   JWT_AUDIENCE: Joi.string().required(),
   // Required with no default, in every environment. BullMQ has no in-memory driver, so an
-  // optional Redis with a fallback would mean the queue accepts jobs nothing ever runs —
-  // mail silently never sends while /health/ready still reports healthy. Missing Redis
-  // must stop the boot instead.
+  // optional Redis with a fallback would mean the queue accepts jobs nothing ever runs — mail
+  // silently never sends while /health/ready reports healthy. Missing Redis must stop the boot.
   REDIS_URL: Joi.string()
     .uri({ scheme: ["redis", "rediss"] })
     .required(),
-  // Off in production by default, on everywhere else. Publishing the full route and schema
-  // surface of a fresh deployment should be a deliberate act. Joi evaluates function
-  // defaults with sibling values on `parent`, and keys resolve in declaration order — so
-  // NODE_ENV already carries its own default by the time this runs. Keep it declared last.
+  // Off in production by default: publishing a fresh deployment's full route and schema surface
+  // should be deliberate. Keep this declared LAST — Joi resolves keys in declaration order and
+  // reads siblings off `parent`, so NODE_ENV must already carry its default when this runs.
   SWAGGER_ENABLED: Joi.string()
     .valid("true", "false")
     .default((parent) => (parent.NODE_ENV === "production" ? "false" : "true")),
 }).unknown(true)
 
+/**
+ * ConfigModule's validate hook: applies the defaults above and throws before the app boots,
+ * reporting every offending variable at once. Also rejects JWT secrets that are equal to each
+ * other or start with `changeme`, neither of which Joi can express here.
+ */
 export function validate(config: Record<string, unknown>): Record<string, unknown> {
   const { error, value } = schema.validate(config, { abortEarly: false, convert: true })
   if (error) {

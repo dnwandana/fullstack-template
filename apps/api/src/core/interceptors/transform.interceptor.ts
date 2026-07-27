@@ -13,6 +13,11 @@ function isPayload(value: unknown): value is Payload<unknown> {
 
 @Injectable()
 export class TransformInterceptor<T> implements NestInterceptor<T, Envelope<T>> {
+  /**
+   * Normalizes a handler's return value into `{ message, data, pagination? }`. An object already
+   * carrying `data`, `message` or `pagination` is treated as the payload; anything else becomes
+   * `data`. `message` defaults to "OK" and `data` to null, and `request_id` is never added here.
+   */
   intercept(_context: ExecutionContext, next: CallHandler<T>): Observable<Envelope<T>> {
     return next.handle().pipe(
       map((value): Envelope<T> => {

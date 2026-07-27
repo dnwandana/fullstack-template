@@ -1,6 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common"
 import { PrismaClient } from "@prisma/client"
 
+/** PrismaClient whose connection is opened and closed with the Nest module lifecycle. */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   async onModuleInit(): Promise<void> {

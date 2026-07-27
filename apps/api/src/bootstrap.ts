@@ -20,6 +20,11 @@ import {
   MyInvitationResponse,
 } from "@modules/invitations/dto/invitation.response"
 
+/**
+ * Applies every global HTTP concern to an already-created Nest app, in place.
+ * Callers must create the app with `bodyParser: false` — the 100kb json/urlencoded parsers
+ * registered here have to be the only ones, or that limit is dead configuration.
+ */
 export function configureApp(app: INestApplication): void {
   app.useLogger(app.get(Logger))
 
@@ -36,18 +41,16 @@ export function configureApp(app: INestApplication): void {
 
   const config = app.get(ConfigService)
 
+  // Origins via ConfigService: Joi's default is the single source of truth, a literal diverges.
+  // `methods` is a whitelist — a PATCH route is rejected at preflight even if a controller defines
+  // it. X-Request-Id is exposed so SPA JS can read the correlation id back into a bug report.
   app.enableCors({
-    // Through ConfigService, not process.env: the Joi default is the single source of
-    // truth for the fallback. A literal `?? "http://localhost:8080"` here duplicates it,
-    // and the two silently diverge the day someone edits one of them.
     origin: config
       .getOrThrow<string>("CORS_ALLOWED_ORIGINS")
       .split(",")
       .map((s) => s.trim()),
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "X-Request-Id"],
-    // Browser JS cannot read a response header that is not exposed, so without this a
-    // SPA has no way to surface the correlation id in a bug report.
     exposedHeaders: ["X-Request-Id"],
     credentials: true,
   })
@@ -56,26 +59,18 @@ export function configureApp(app: INestApplication): void {
   app.use(urlencoded({ extended: true, limit: "100kb" }))
   app.use(cookieParser())
 
-  // Each entry matches an exact route path, not a prefix — "health" alone does NOT
-  // cover "health/live". Container healthchecks hit these unprefixed.
+  // Each entry is an exact route path, not a prefix — "health" alone does NOT cover "health/live".
+  // nginx and the container healthchecks hardcode these unprefixed paths.
   app.setGlobalPrefix(API_PREFIX, { exclude: ["health", "health/live", "health/ready"] })
 
-  // URI versioning: every controller without an explicit @Version lands on v1.
-  // This is independent of setGlobalPrefix's `exclude` — a route excluded from the
-  // "api" prefix is still versioned unless it is VERSION_NEUTRAL. The health probes
-  // are, because nginx and the container healthchecks hardcode their paths.
-  //
-  // defaultVersion takes the bare "1"; Nest adds the "v". The cookie constants in
-  // @core/config/api-version add it explicitly — that asymmetry is why they share
-  // API_VERSION rather than a pre-formatted string.
+  // `exclude` above does not exempt a route from the version segment — the health controller opts
+  // out separately with VERSION_NEUTRAL. defaultVersion is bare "1"; Nest prepends the "v", the
+  // cookie constants in @core/config/api-version do not — which is why both share API_VERSION.
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: API_VERSION })
 
-  // Read through ConfigService, never process.env. Joi's NODE_ENV-derived default is applied
-  // to the validated config object that backs ConfigService, and @nestjs/config does not
-  // write defaults for absent keys back into process.env — so a production deploy with
-  // SWAGGER_ENABLED unset would evaluate `undefined !== "false"` and publish the whole spec.
-  // The comparison is fail-closed (=== "true") so an unexpected undefined also stays off.
-  // configureApp runs after NestFactory.create, so the container is available here.
+  // Via ConfigService, never process.env: @nestjs/config never writes Joi's NODE_ENV-derived
+  // default back there, so a production deploy with SWAGGER_ENABLED unset would publish the whole
+  // spec. The === "true" test is fail-closed, so an unexpected undefined also stays off.
   if (config.get<string>("SWAGGER_ENABLED") === "true") {
     const docs = new DocumentBuilder()
       .setTitle("Fullstack Template API")
@@ -84,25 +79,14 @@ export function configureApp(app: INestApplication): void {
       // This API authenticates with the access_token httpOnly cookie, not a bearer header.
       .addCookieAuth("access_token")
       .build()
-    // Mounted after setGlobalPrefix so the documented paths carry the /api prefix the
-    // client actually calls.
-    // extraModels is what makes these classes appear in components.schemas, and every
-    // response contract needs an entry here — not just the ones no controller mentions.
-    // createDocument emits a schema only for a model it can name in a controller's
-    // signature, and handlers return Payload<T>: a generic interface, which erases at
-    // compile time. So `Promise<Payload<OrgResponse>>` leaves nothing nameable behind
-    // and OrgResponse goes undocumented despite being referenced. Verified by dumping
-    // the document with the annotations in place and this array untouched — the schema
-    // set was byte-identical to before them.
-    //
-    // Without an entry the schema is silently absent: the document still generates and
-    // every endpoint still works, which is exactly the failure mode this plumbing
-    // exists to prevent. Absence is not something the document announces, so a new
-    // response class must be added here in the same change that declares it.
+    // Mounted after setGlobalPrefix so the documented paths carry the /api/v1 prefix clients call.
     SwaggerModule.setup(
       "api/docs",
       app,
       SwaggerModule.createDocument(app, docs, {
+        // A response class reaches components.schemas only if listed here — handlers return
+        // Payload<T>, a generic interface that erases at compile time, so the scanner has nothing
+        // to name. Omission is silent: the document generates fine, so add every new class here.
         extraModels: [
           PaginationMetaResponse,
           TodoResponse,

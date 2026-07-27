@@ -17,6 +17,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   constructor(private readonly config: ConfigService) {}
 
+  /**
+   * Writes the error envelope `{ message, data: null, request_id }`. Prisma P2025 becomes 404
+   * before the generic non-HttpException path, class-validator message arrays are joined with
+   * "; ", and in production non-HttpException messages are replaced by generic status text.
+   */
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp()
     const res = ctx.getResponse<Response>()
@@ -33,9 +38,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
       exception instanceof Prisma.PrismaClientKnownRequestError &&
       exception.code === "P2025"
     ) {
-      // Central net for bare .update()/.delete() on rows that vanished between a
-      // guard's existence check and the write. Services with better messages throw
-      // their own NotFoundException first; this stops the raw-500 fallthrough.
+      // Central net for bare .update()/.delete() on rows that vanished between a guard's
+      // existence check and the write. Services with better messages throw their own
+      // NotFoundException first; this only stops the raw-500 fallthrough.
       status = HttpStatus.NOT_FOUND
       message = "Not found"
     } else if (exception instanceof Error) {
@@ -64,10 +69,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   /**
-   * Middleware installed via app.use() (e.g. Express's body-parser, which
-   * throws PayloadTooLargeError for oversized bodies) raises plain Errors
-   * carrying an http-errors-style `status`/`statusCode`, not HttpException.
-   * Surface that real status instead of collapsing every non-Nest error to 500.
+   * Middleware installed via app.use() (e.g. body-parser's PayloadTooLargeError) raises plain
+   * Errors carrying an http-errors-style `status`/`statusCode`, not HttpException. Surface that
+   * real status instead of collapsing every non-Nest error to 500.
    */
   private statusFromError(error: Error): number | undefined {
     const candidate =
