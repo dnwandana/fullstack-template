@@ -39,8 +39,9 @@ Organization
 
 ## Prerequisites
 
-- Node.js `>=24.0.0` — declared in `apps/api/package.json` and `apps/app/package.json`; the root
-  package declares no `engines`, so a version check run at the repo root enforces nothing.
+- Node.js `>=24.0.0` — declared as `engines.node` in all four workspace `package.json`s and pinned
+  by `.nvmrc`. It is enforced, not advisory: `engineStrict: true` in `pnpm-workspace.yaml` makes
+  `corepack pnpm install` exit non-zero on an older Node instead of warning and installing anyway.
 - Corepack (bundled with Node 24+)
 - PostgreSQL (for the API)
 - Redis (for the API) — required, not optional: it backs both the rate-limit counters and the
@@ -399,8 +400,9 @@ fullstack-template/
 │   └── contracts/                  # @fullstack/contracts — dependency-free response-shape types
 │                                   #   the API `implements`; import type only, no runtime presence
 │
+├── .nvmrc                          # Node version pin (24) — mirrors engines.node everywhere
 ├── package.json                    # Monorepo root
-├── pnpm-workspace.yaml
+├── pnpm-workspace.yaml             # Workspace globs, engineStrict, allowBuilds
 └── turbo.json
 ```
 

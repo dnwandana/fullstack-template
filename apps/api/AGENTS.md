@@ -6,7 +6,7 @@ live in [`README.md`](README.md).
 
 ## Project Overview
 
-Multi-tenant **NestJS 11** RESTful API with an Organization → Project → Resource hierarchy, PostgreSQL via **Prisma**, JWT authentication over httpOnly cookies, and RBAC permissions. TypeScript compiled to CommonJS (`nest build` → `dist/`), Node.js v24+ — pinned in `.nvmrc`, `engines.node` in both `package.json`s, and the `node:24-alpine` base in both Dockerfiles. All four must move together.
+Multi-tenant **NestJS 11** RESTful API with an Organization → Project → Resource hierarchy, PostgreSQL via **Prisma**, JWT authentication over httpOnly cookies, and RBAC permissions. TypeScript compiled to CommonJS (`nest build` → `dist/`), Node.js v24+ — pinned in the repo-root `.nvmrc` (there is deliberately no per-package copy; version managers search upward), `engines.node` in all four workspace `package.json`s, and the `node:24-alpine` base in both Dockerfiles. All of those must move together, and `engineStrict: true` in `pnpm-workspace.yaml` makes the `engines` fields a hard install-time gate rather than a warning.
 
 ## Commands
 

@@ -517,7 +517,6 @@ apps/api/
 ├── .env.example              # Environment variable template
 ├── .env.test.example         # Test environment template (valid dummy secrets — copy to .env.test)
 ├── .gitignore
-├── .nvmrc                    # Node.js version (24)
 ├── .oxlintrc.json            # Oxlint configuration
 ├── .prettierignore           # Excludes generated output and vendored files
 ├── .prettierrc.json          # Prettier configuration

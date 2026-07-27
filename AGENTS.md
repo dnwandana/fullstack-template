@@ -23,6 +23,15 @@ them, and a stale one that lands on plausible code misleads instead of announcin
 - **Package manager**: pnpm via Corepack, version pinned by the root `package.json`'s
   `packageManager` field — always invoke as `corepack pnpm <script>`, never `npm`, never `yarn`,
   and never with a `run` in the middle.
+- **Node version**: `>=24.0.0`, declared as `engines.node` in all four `package.json`s, pinned by
+  a single repo-root `.nvmrc`, and matched by the `node:24-alpine` base in both Dockerfiles — all of
+  which must move together. Do not add per-package `.nvmrc` files: nvm/fnm/asdf search **upward**
+  from the cwd, so the root file already covers every directory, and a second copy is one more place
+  to drift with nothing to detect the drift. `engineStrict: true` in `pnpm-workspace.yaml` makes it a hard install-time gate rather
+  than a warning, so an older Node fails `corepack pnpm install` outright. pnpm reads that setting
+  from `pnpm-workspace.yaml` **only**: the npm-era `engine-strict` key in an `.npmrc` is silently
+  ignored, and `corepack pnpm config get engine-strict` reports `undefined` even when it is set
+  there.
 - **Build orchestration**: Turborepo (`turbo.json`; version in the root `devDependencies`)
 - **Packages** (`pnpm-workspace.yaml` globs `apps/*` and `packages/*`): `apps/api`
   (`@fullstack/api` — NestJS 11 + Prisma, TypeScript → `dist/`), `apps/app` (`@fullstack/app` —
