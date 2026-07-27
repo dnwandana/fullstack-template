@@ -15,7 +15,7 @@ corepack pnpm lint:api
 corepack pnpm test:api
 ```
 
-You can still run package-local commands from `apps/api` with `pnpm`.
+You can still run package-local commands from `apps/api` with `corepack pnpm`.
 
 ## Features
 
@@ -106,37 +106,39 @@ cp .env.example .env
 # Edit .env with your database credentials and secrets
 
 # 3. Set up the database
-corepack pnpm run db:migrate   # prisma migrate deploy
-corepack pnpm run db:seed      # prisma db seed — 17 canonical permissions (idempotent)
+corepack pnpm db:migrate       # prisma migrate deploy
+corepack pnpm db:seed          # prisma db seed — 17 canonical permissions (idempotent)
 
 # 4. Start development server
-corepack pnpm run dev
+corepack pnpm dev
 ```
 
 The API will be available at `http://localhost:3000/api`
 
 ## Configuration
 
+This table is the canonical environment reference for the monorepo. The root `README.md` lists only the variables required to boot and links here; `AGENTS.md` does not restate it. Validation lives in `src/config/env.validation.ts` and runs at startup with `abortEarly: false`, so a bad `.env` fails fast with every problem listed at once.
+
 Create a `.env` file in the project root with the following variables:
 
-| Variable                   | Description                          | Default                            | Required |
-| -------------------------- | ------------------------------------ | ---------------------------------- | -------- |
-| `NODE_ENV`                 | Environment mode                     | `development`                      | No       |
-| `PORT`                     | Server port                          | `3000`                             | No       |
-| `DATABASE_URL`             | PostgreSQL connection string         | -                                  | Yes      |
-| `ACCESS_TOKEN_SECRET`      | Secret for access tokens             | -                                  | Yes      |
-| `ACCESS_TOKEN_EXPIRES_IN`  | Access token lifetime                | `15m`                              | No       |
-| `REFRESH_TOKEN_SECRET`     | Secret for refresh tokens            | -                                  | Yes      |
-| `REFRESH_TOKEN_EXPIRES_IN` | Refresh token lifetime               | `7d`                               | No       |
-| `JWT_ISSUER`               | JWT issuer claim (iss)               | -                                  | Yes      |
-| `JWT_AUDIENCE`             | JWT audience claim (aud)             | -                                  | Yes      |
-| `LOG_LEVEL`                | Logging level                        | `info`                             | No       |
-| `CLEANUP_ENABLED`          | Run the nightly cleanup cron job     | `true`                             | No       |
-| `SWAGGER_ENABLED`          | Serve Swagger UI at `/api/docs`      | `false` in production, else `true` | No       |
-| `CORS_ALLOWED_ORIGINS`     | Comma-separated allowed origins      | `http://localhost:8080`            | No       |
-| `APP_BASE_URL`             | Public SPA origin for invite links   | `http://localhost:8080`            | No\*     |
-| `RATE_LIMIT_AUTH_MAX`      | Auth endpoint rate limit (per 15min) | `10` (max 50)                      | No       |
-| `RATE_LIMIT_GENERAL_MAX`   | Global rate limit (per 15min)        | `1000`                             | No       |
+| Variable                   | Description                                                                     | Default                            | Required |
+| -------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- | -------- |
+| `NODE_ENV`                 | Environment mode — one of `development`, `production`, `test`                   | `development`                      | No       |
+| `PORT`                     | Server port — integer, 1–65535                                                  | `3000`                             | No       |
+| `DATABASE_URL`             | PostgreSQL connection string — URI with scheme `postgresql://` or `postgres://` | -                                  | Yes      |
+| `ACCESS_TOKEN_SECRET`      | Secret for access tokens                                                        | -                                  | Yes      |
+| `ACCESS_TOKEN_EXPIRES_IN`  | Access token lifetime                                                           | `15m`                              | No       |
+| `REFRESH_TOKEN_SECRET`     | Secret for refresh tokens                                                       | -                                  | Yes      |
+| `REFRESH_TOKEN_EXPIRES_IN` | Refresh token lifetime                                                          | `7d`                               | No       |
+| `JWT_ISSUER`               | JWT issuer claim (iss)                                                          | -                                  | Yes      |
+| `JWT_AUDIENCE`             | JWT audience claim (aud)                                                        | -                                  | Yes      |
+| `LOG_LEVEL`                | Logging level                                                                   | `info`                             | No       |
+| `CLEANUP_ENABLED`          | Run the nightly cleanup cron job                                                | `true`                             | No       |
+| `SWAGGER_ENABLED`          | Serve Swagger UI at `/api/docs`                                                 | `false` in production, else `true` | No       |
+| `CORS_ALLOWED_ORIGINS`     | Comma-separated allowed origins                                                 | `http://localhost:8080`            | No       |
+| `APP_BASE_URL`             | Public SPA origin for invite links                                              | `http://localhost:8080`            | No\*     |
+| `RATE_LIMIT_AUTH_MAX`      | Auth endpoint rate limit (per 15min)                                            | `10` (max 50)                      | No       |
+| `RATE_LIMIT_GENERAL_MAX`   | Global rate limit (per 15min, per process) — integer ≥ 1                        | `1000`                             | No       |
 
 Both token lifetimes must match the grammar `<number><s|m|h|d>` (e.g. `15m`, `7d`) — the same string drives the JWT expiry, the `refresh_tokens` row, and the cookie `maxAge`, so broader formats such as `1w` are deliberately rejected. Boolean-style variables (`CLEANUP_ENABLED`, `SWAGGER_ENABLED`) accept the literal strings `"true"` or `"false"`.
 
@@ -185,13 +187,15 @@ Not every list is paginated, on purpose: roles, orgs, projects, and `GET /api/in
 
 ### Query Parameters
 
-| Parameter    | Type    | Default      | Description                                   |
-| ------------ | ------- | ------------ | --------------------------------------------- |
-| `page`       | integer | `1`          | Page number (1-indexed)                       |
-| `limit`      | integer | `10`         | Items per page (max 100)                      |
-| `sort_by`    | string  | first column | Column to sort by (configurable per resource) |
-| `sort_order` | string  | `desc`       | Sort direction (`asc` or `desc`)              |
-| `search`     | string  | `""`         | Case-insensitive search term (max 255 chars)  |
+| Parameter    | Type    | Default      | Description                                                                                                                                         |
+| ------------ | ------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page`       | integer | `1`          | Page number (1-indexed)                                                                                                                             |
+| `limit`      | integer | `10` or `50` | Items per page, max 100. `PaginationQueryDto` (todos) defaults to 10; `ListQueryDto` (org members, project members, org invitations) defaults to 50 |
+| `sort_by`    | string  | per resource | No DTO-level default; each service picks its own (todos resolves to `updated_at`)                                                                   |
+| `sort_order` | string  | `desc`       | Sort direction (`asc` or `desc`)                                                                                                                    |
+| `search`     | string  | `""`         | Case-insensitive search term (max 255 chars)                                                                                                        |
+
+`sort_by`, `sort_order`, and `search` are only honoured by the todos list. The member and org-invitation lists take `ListQueryDto` for `page`/`limit` but sort on a fixed, deterministic column (`joined_at asc` for members, `created_at desc` for invitations) and do not filter on `search`. Todos narrows `sort_by` further with its own `ListTodosDto`, which accepts only `updated_at` or `title`.
 
 ### Example Request
 
@@ -218,23 +222,29 @@ GET /api/orgs/:org_id/projects/:project_id/todos?page=1&limit=20&sort_by=title&s
 }
 ```
 
+Every success response is `{ message, data }`, with `pagination` added on paginated lists. Errors
+use `{ message, data: null, request_id }` — `request_id` appears on errors only, so a failure can
+always be correlated to a log line. How the interceptor and the exception filter produce these
+shapes, including the status mapping and the flattening of validation errors, is documented in
+[`AGENTS.md`](AGENTS.md#response-envelope).
+
 ## Development Commands
 
 ### Server
 
 ```bash
-corepack pnpm run dev      # nest start --watch (dev server)
+corepack pnpm dev          # nest start --watch (dev server)
 corepack pnpm start        # node dist/main (production runtime)
-corepack pnpm run build    # nest build → dist/
+corepack pnpm build        # nest build → dist/
 ```
 
 ### Testing
 
 ```bash
 corepack pnpm test              # Full suite: e2e + unit (real PostgreSQL, .env.test)
-corepack pnpm run test:unit     # Pure-unit specs only — no database needed, runs in seconds
-corepack pnpm run test:watch    # Jest in watch mode
-corepack pnpm run test:cov      # Jest with coverage report
+corepack pnpm test:unit         # Pure-unit specs only — no database needed, runs in seconds
+corepack pnpm test:watch        # Jest in watch mode
+corepack pnpm test:cov          # Jest with coverage report
 ```
 
 `test:unit` (`test/jest-unit.json`) runs the `.spec.ts` files with no `globalSetup`, so no migrations and no PostgreSQL. Seven DB-backed `.spec.ts` files (`membership`, `org-creation`, `cleanup`, `seed`, `users`, `refresh-token`, `password-reset`) are deliberately excluded from it by name — they are integration tests wearing unit names, and JSON configs cannot carry that rationale as a comment, so it lives here instead.
@@ -244,21 +254,21 @@ Tests use a real PostgreSQL test database configured in `.env.test` — create i
 ### Linting & Formatting
 
 ```bash
-corepack pnpm run lint         # Run Oxlint (linter)
-corepack pnpm run lint:fix     # Auto-fix issues with Oxlint
-corepack pnpm run format       # Apply formatting with Prettier
+corepack pnpm lint             # Run Oxlint (linter)
+corepack pnpm lint:fix         # Auto-fix issues with Oxlint
+corepack pnpm format           # Apply formatting with Prettier
 ```
 
-**Note**: Run `corepack pnpm run lint:fix` and `corepack pnpm run format` before committing.
+**Note**: Run `corepack pnpm lint:fix` and `corepack pnpm format` before committing.
 
 ### Database (Prisma)
 
 ```bash
-corepack pnpm run db:migrate    # prisma migrate deploy (apply pending migrations)
-corepack pnpm run migrate:dev   # prisma migrate dev (create a new migration in dev)
-corepack pnpm run db:seed       # prisma db seed (17 canonical permissions, idempotent)
-corepack pnpm run db:generate   # prisma generate (regenerate the client after schema edits)
-corepack pnpm run prisma:pull   # prisma db pull (introspect the DB into schema.prisma)
+corepack pnpm db:migrate        # prisma migrate deploy (apply pending migrations)
+corepack pnpm migrate:dev       # prisma migrate dev (create a new migration in dev)
+corepack pnpm db:seed           # prisma db seed (17 canonical permissions, idempotent)
+corepack pnpm db:generate       # prisma generate (regenerate the client after schema edits)
+corepack pnpm prisma:pull       # prisma db pull (introspect the DB into schema.prisma)
 ```
 
 Migrations never run automatically — apply them explicitly on every environment. The seed idempotently upserts the 17 canonical permissions; it does not populate demo data.
@@ -279,6 +289,16 @@ http://localhost:3000/api/docs
 - **Paths** carry the `/api` prefix because the document is built after `setGlobalPrefix`, matching what clients actually call.
 
 Set `SWAGGER_ENABLED=true` explicitly if you want the spec exposed on a production deployment.
+
+## API Endpoints
+
+This section is the canonical route list for the monorepo — the root `README.md` and
+`AGENTS.md` link here instead of restating it. The **Permission** column is the name checked by
+`PermissionsGuard` (`@RequirePermission`, usually supplied by `@OrgScoped`/`@ProjectScoped`); `—`
+means the route has no permission gate beyond authentication. Tables without an **Auth Required**
+column are entirely `access_token`-authenticated; where the column is present, it is authoritative.
+Why the guards run in that order, and why health sits outside the `/api` prefix, is explained in
+[`AGENTS.md`](AGENTS.md#endpoints).
 
 ### Health Check
 
@@ -310,80 +330,82 @@ Health routes live outside the `/api` prefix, are public, and skip the rate limi
 
 ### Organization Endpoints
 
-| Method | Endpoint            | Description      | Auth Required |
-| ------ | ------------------- | ---------------- | ------------- |
-| POST   | `/api/orgs`         | Create org       | Access Token  |
-| GET    | `/api/orgs`         | List user's orgs | Access Token  |
-| GET    | `/api/orgs/:org_id` | Get org details  | Access Token  |
-| PUT    | `/api/orgs/:org_id` | Update org       | Access Token  |
-| DELETE | `/api/orgs/:org_id` | Delete org       | Access Token  |
+| Method | Endpoint            | Description      | Permission   |
+| ------ | ------------------- | ---------------- | ------------ |
+| POST   | `/api/orgs`         | Create org       | —            |
+| GET    | `/api/orgs`         | List user's orgs | —            |
+| GET    | `/api/orgs/:org_id` | Get org details  | `org:read`   |
+| PUT    | `/api/orgs/:org_id` | Update org       | `org:update` |
+| DELETE | `/api/orgs/:org_id` | Delete org       | `org:delete` |
 
 ### Project Endpoints (nested under org)
 
-| Method | Endpoint                                 | Description    | Auth Required |
-| ------ | ---------------------------------------- | -------------- | ------------- |
-| POST   | `/api/orgs/:org_id/projects`             | Create project | Access Token  |
-| GET    | `/api/orgs/:org_id/projects`             | List projects  | Access Token  |
-| GET    | `/api/orgs/:org_id/projects/:project_id` | Get project    | Access Token  |
-| PUT    | `/api/orgs/:org_id/projects/:project_id` | Update project | Access Token  |
-| DELETE | `/api/orgs/:org_id/projects/:project_id` | Delete project | Access Token  |
+| Method | Endpoint                                 | Description    | Permission                                                                            |
+| ------ | ---------------------------------------- | -------------- | ------------------------------------------------------------------------------------- |
+| POST   | `/api/orgs/:org_id/projects`             | Create project | `project:create`                                                                      |
+| GET    | `/api/orgs/:org_id/projects`             | List projects  | `project:read` (returns all org projects when the caller also has `project:read_all`) |
+| GET    | `/api/orgs/:org_id/projects/:project_id` | Get project    | `project:read`                                                                        |
+| PUT    | `/api/orgs/:org_id/projects/:project_id` | Update project | `project:update`                                                                      |
+| DELETE | `/api/orgs/:org_id/projects/:project_id` | Delete project | `project:delete`                                                                      |
 
 ### Todo Endpoints (nested under project)
 
-| Method | Endpoint                                                | Description                        | Auth Required |
-| ------ | ------------------------------------------------------- | ---------------------------------- | ------------- |
-| POST   | `/api/orgs/:org_id/projects/:project_id/todos`          | Create todo                        | Access Token  |
-| GET    | `/api/orgs/:org_id/projects/:project_id/todos`          | List todos (paginated, searchable) | Access Token  |
-| GET    | `/api/orgs/:org_id/projects/:project_id/todos/:todo_id` | Get todo                           | Access Token  |
-| PUT    | `/api/orgs/:org_id/projects/:project_id/todos/:todo_id` | Update todo                        | Access Token  |
-| DELETE | `/api/orgs/:org_id/projects/:project_id/todos/:todo_id` | Delete todo                        | Access Token  |
-| DELETE | `/api/orgs/:org_id/projects/:project_id/todos?ids=...`  | Bulk delete todos                  | Access Token  |
+| Method | Endpoint                                                | Description                        | Permission     |
+| ------ | ------------------------------------------------------- | ---------------------------------- | -------------- |
+| POST   | `/api/orgs/:org_id/projects/:project_id/todos`          | Create todo                        | `todos:create` |
+| GET    | `/api/orgs/:org_id/projects/:project_id/todos`          | List todos (paginated, searchable) | `todos:read`   |
+| GET    | `/api/orgs/:org_id/projects/:project_id/todos/:todo_id` | Get todo                           | `todos:read`   |
+| PUT    | `/api/orgs/:org_id/projects/:project_id/todos/:todo_id` | Update todo                        | `todos:update` |
+| DELETE | `/api/orgs/:org_id/projects/:project_id/todos/:todo_id` | Delete todo                        | `todos:delete` |
+| DELETE | `/api/orgs/:org_id/projects/:project_id/todos?ids=...`  | Bulk delete todos                  | `todos:delete` |
 
 ### Role Endpoints (nested under org)
 
-| Method | Endpoint                           | Description        | Auth Required |
-| ------ | ---------------------------------- | ------------------ | ------------- |
-| POST   | `/api/orgs/:org_id/roles`          | Create custom role | Access Token  |
-| GET    | `/api/orgs/:org_id/roles`          | List roles         | Access Token  |
-| GET    | `/api/orgs/:org_id/roles/:role_id` | Get role details   | Access Token  |
-| PUT    | `/api/orgs/:org_id/roles/:role_id` | Update role        | Access Token  |
-| DELETE | `/api/orgs/:org_id/roles/:role_id` | Delete custom role | Access Token  |
+Create and update bodies take `permission_ids: string[]`.
+
+| Method | Endpoint                           | Description        | Permission         |
+| ------ | ---------------------------------- | ------------------ | ------------------ |
+| POST   | `/api/orgs/:org_id/roles`          | Create custom role | `org:manage_roles` |
+| GET    | `/api/orgs/:org_id/roles`          | List roles         | `org:read`         |
+| GET    | `/api/orgs/:org_id/roles/:role_id` | Get role details   | `org:read`         |
+| PUT    | `/api/orgs/:org_id/roles/:role_id` | Update role        | `org:manage_roles` |
+| DELETE | `/api/orgs/:org_id/roles/:role_id` | Delete custom role | `org:manage_roles` |
 
 ### Organization Member Endpoints
 
-| Method | Endpoint                             | Description        | Auth Required |
-| ------ | ------------------------------------ | ------------------ | ------------- |
-| GET    | `/api/orgs/:org_id/members`          | List org members   | Access Token  |
-| PUT    | `/api/orgs/:org_id/members/:user_id` | Update member role | Access Token  |
-| DELETE | `/api/orgs/:org_id/members/:user_id` | Remove member      | Access Token  |
+| Method | Endpoint                             | Description        | Permission           |
+| ------ | ------------------------------------ | ------------------ | -------------------- |
+| GET    | `/api/orgs/:org_id/members`          | List org members   | `org:read`           |
+| PUT    | `/api/orgs/:org_id/members/:user_id` | Update member role | `org:manage_members` |
+| DELETE | `/api/orgs/:org_id/members/:user_id` | Remove member      | `org:manage_members` |
 
 ### Project Member Endpoints
 
-| Method | Endpoint                                                  | Description          | Auth Required |
-| ------ | --------------------------------------------------------- | -------------------- | ------------- |
-| GET    | `/api/orgs/:org_id/projects/:project_id/members`          | List project members | Access Token  |
-| PUT    | `/api/orgs/:org_id/projects/:project_id/members/:user_id` | Update member role   | Access Token  |
-| DELETE | `/api/orgs/:org_id/projects/:project_id/members/:user_id` | Remove member        | Access Token  |
+| Method | Endpoint                                                  | Description          | Permission               |
+| ------ | --------------------------------------------------------- | -------------------- | ------------------------ |
+| GET    | `/api/orgs/:org_id/projects/:project_id/members`          | List project members | `project:read`           |
+| PUT    | `/api/orgs/:org_id/projects/:project_id/members/:user_id` | Update member role   | `project:manage_members` |
+| DELETE | `/api/orgs/:org_id/projects/:project_id/members/:user_id` | Remove member        | `project:manage_members` |
 
 ### Invitation Endpoints
 
-| Method | Endpoint                                              | Description                          | Auth Required       |
-| ------ | ----------------------------------------------------- | ------------------------------------ | ------------------- |
-| POST   | `/api/orgs/:org_id/invitations`                       | Create org invitation                | Access Token        |
-| GET    | `/api/orgs/:org_id/invitations`                       | List org invitations                 | Access Token        |
-| DELETE | `/api/orgs/:org_id/invitations/:invitation_id`        | Revoke invitation                    | Access Token        |
-| POST   | `/api/orgs/:org_id/invitations/:invitation_id/resend` | Reissue invitation (new token/link)  | Access Token        |
-| POST   | `/api/orgs/:org_id/projects/:project_id/invitations`  | Create project invitation            | Access Token        |
-| GET    | `/api/invitations`                                    | List my pending invitations          | Access Token        |
-| GET    | `/api/invitations/:invitation_id/preview?token=…`     | Preview an invitation (public)       | No — token in query |
-| POST   | `/api/invitations/:invitation_id/accept`              | Accept invitation — body `{ token }` | Access Token        |
-| POST   | `/api/invitations/:invitation_id/decline`             | Decline invitation                   | Access Token        |
+| Method | Endpoint                                              | Description                          | Auth Required       | Permission           |
+| ------ | ----------------------------------------------------- | ------------------------------------ | ------------------- | -------------------- |
+| POST   | `/api/orgs/:org_id/invitations`                       | Create org invitation                | Access Token        | `invitations:create` |
+| GET    | `/api/orgs/:org_id/invitations`                       | List org invitations                 | Access Token        | `invitations:manage` |
+| DELETE | `/api/orgs/:org_id/invitations/:invitation_id`        | Revoke invitation                    | Access Token        | `invitations:manage` |
+| POST   | `/api/orgs/:org_id/invitations/:invitation_id/resend` | Reissue invitation (new token/link)  | Access Token        | `invitations:manage` |
+| POST   | `/api/orgs/:org_id/projects/:project_id/invitations`  | Create project invitation            | Access Token        | `invitations:create` |
+| GET    | `/api/invitations`                                    | List my pending invitations          | Access Token        | —                    |
+| GET    | `/api/invitations/:invitation_id/preview?token=…`     | Preview an invitation (public)       | No — token in query | —                    |
+| POST   | `/api/invitations/:invitation_id/accept`              | Accept invitation — body `{ token }` | Access Token        | —                    |
+| POST   | `/api/invitations/:invitation_id/decline`             | Decline invitation                   | Access Token        | —                    |
 
 ### Permissions Endpoint
 
-| Method | Endpoint           | Description                 | Auth Required |
-| ------ | ------------------ | --------------------------- | ------------- |
-| GET    | `/api/permissions` | List all system permissions | Access Token  |
+| Method | Endpoint           | Description                 | Auth Required | Permission |
+| ------ | ------------------ | --------------------------- | ------------- | ---------- |
+| GET    | `/api/permissions` | List all system permissions | Access Token  | —          |
 
 ### Authentication Format
 
@@ -398,70 +420,16 @@ Authentication uses **httpOnly cookies** set by the server. Tokens are never exp
 
 ## System Roles & Permissions
 
-There are 4 built-in system roles per organization. Custom roles can be created with any combination of the 17 system permissions.
-
-| Permission               | Owner | Admin | Member | Viewer |
-| ------------------------ | ----- | ----- | ------ | ------ |
-| `org:read`               | Yes   | Yes   | Yes    | Yes    |
-| `org:update`             | Yes   | Yes   |        |        |
-| `org:delete`             | Yes   |       |        |        |
-| `org:manage_members`     | Yes   | Yes   |        |        |
-| `org:manage_roles`       | Yes   |       |        |        |
-| `project:create`         | Yes   | Yes   |        |        |
-| `project:read`           | Yes   | Yes   | Yes    | Yes    |
-| `project:read_all`       | Yes   | Yes   |        |        |
-| `project:update`         | Yes   | Yes   |        |        |
-| `project:delete`         | Yes   | Yes   |        |        |
-| `project:manage_members` | Yes   | Yes   |        |        |
-| `invitations:create`     | Yes   | Yes   |        |        |
-| `invitations:manage`     | Yes   | Yes   |        |        |
-| `todos:create`           | Yes   | Yes   | Yes    |        |
-| `todos:read`             | Yes   | Yes   | Yes    | Yes    |
-| `todos:update`           | Yes   | Yes   | Yes    |        |
-| `todos:delete`           | Yes   | Yes   | Yes    |        |
-
-`project:read_all` widens `GET /api/orgs/:org_id/projects` from "projects I am a member of" to "every project in the org". Project listing checks that permission rather than the caller's role name, so granting it to a custom role gives that role org-wide visibility without making it an admin.
-
-The canonical permission list and the system-role → permission map live in `src/orgs/system-roles.ts`; the same 17 names (with descriptions) are seeded by `prisma/seed.ts`.
+There are 4 built-in system roles per organization — `owner`, `admin`, `member`, `viewer` — and
+custom roles can be created with any combination of the 17 system permissions. Which permission
+each role holds is documented in [`AGENTS.md`](AGENTS.md#permissions), derived from
+`src/orgs/system-roles.ts` and seeded (with descriptions) by `prisma/seed.ts`. Which permission
+each endpoint requires is the **Permission** column of [API Endpoints](#api-endpoints) above.
 
 ## Project Structure
 
-```
-apps/api/
-├── src/
-│   ├── main.ts               # Entry point — creates the Nest app, calls configureApp, listens
-│   ├── bootstrap.ts          # helmet/cors/cookie-parser, setGlobalPrefix("api"), pino logger, Swagger
-│   ├── app.module.ts         # Root module: global pipe/filter/interceptor/guards + feature modules
-│   ├── prisma/               # PrismaService (Prisma client lifecycle)
-│   ├── auth/                 # Signup/signin/refresh/logout, password reset, JWT, cookies, token rotation
-│   ├── users/                # User lookups shared by other modules
-│   ├── permissions/          # GET /api/permissions reference list
-│   ├── orgs/                 # Org CRUD + system-roles.ts (per-org system roles)
-│   ├── roles/                # Custom role CRUD, permission assignment
-│   ├── members/              # Org + project membership listing / role changes / removal
-│   ├── projects/             # Project CRUD, org-scoped
-│   ├── todos/                # Example project-scoped resource, paginated
-│   ├── invitations/          # Invite/preview/accept/decline/revoke/resend + notifier seam
-│   ├── health/               # GET /health, /health/live, /health/ready — outside the prefix, throttle-skipped
-│   ├── maintenance/          # CleanupService — nightly cron pruning expired auth/invitation rows
-│   ├── tenancy/              # OrgGuard, ProjectGuard, PermissionsGuard, MembershipService
-│   ├── common/               # Envelope interceptor, exception filter, decorators, duration/DTO helpers
-│   └── config/               # env.validation.ts (Joi, fail-fast at startup), pino.config.ts
-├── prisma/
-│   ├── schema.prisma         # 12 domain models (@map/@@map keep the DB snake_case)
-│   ├── migrations/           # Prisma migrations (0_init baseline + subsequent)
-│   └── seed.ts               # Idempotent seed of the 17 canonical permissions
-├── test/                     # Jest e2e + unit suites (Supertest against real PostgreSQL)
-├── .editorconfig             # Editor configuration
-├── .env.example              # Environment variable template
-├── .env.test.example         # Test environment template (valid dummy secrets — copy to .env.test)
-├── .nvmrc                    # Node.js version (24)
-├── AGENTS.md                 # AI assistant reference (CLAUDE.md symlinks to it)
-├── TEMPLATE_GUIDE.md         # Guide for extending this template
-├── nest-cli.json             # Nest CLI configuration (incl. the @nestjs/swagger plugin)
-├── tsconfig.json             # TypeScript configuration
-└── package.json
-```
+The annotated `src/` tree, and the per-module responsibilities that go with it, live in
+[`AGENTS.md`](AGENTS.md#project-structure).
 
 ## Production Deployment
 
@@ -477,13 +445,13 @@ apps/api/
 Always run migrations before starting the production server:
 
 ```bash
-corepack pnpm run db:migrate   # prisma migrate deploy
+corepack pnpm db:migrate       # prisma migrate deploy
 ```
 
 ### Starting the Server
 
 ```bash
-corepack pnpm run build
+corepack pnpm build
 corepack pnpm start
 ```
 
