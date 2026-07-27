@@ -23,6 +23,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       # Liveness, not readiness: a DB outage should drop this instance out of the
       # traffic pool, not make Docker keep restarting a healthy process.
@@ -38,13 +40,17 @@ services:
   # via environment or an .env file at the compose root if needed.
   # DATABASE_URL in .env.local must use hostname "postgres" (the service name).
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-pg_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pg_password}
       POSTGRES_DB: ${POSTGRES_DB:-fullstack_template}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # PostgreSQL 18+ moved PGDATA to /var/lib/postgresql/<major>/docker and the
+      # image's VOLUME to /var/lib/postgresql. Mounting the old
+      # /var/lib/postgresql/data would leave the real data dir on an anonymous
+      # volume that Docker discards whenever the container is recreated.
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test:
         [
@@ -56,5 +62,22 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # Queue and rate-limit state for the local stack. No ${...} interpolation on purpose:
+  # Compose resolves those from the shell or a compose-root .env file, never from
+  # .env.local, so an interpolation here would silently expand to empty.
+  # REDIS_URL in .env.local must use hostname "redis" (the service name) — inside the
+  # api container localhost is the API process itself.
+  redis:
+    image: redis:8.8-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
 volumes:
   postgres_data:
+  redis_data:
