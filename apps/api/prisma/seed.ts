@@ -56,6 +56,12 @@ const PERMISSION_DESCRIPTIONS: Record<PermissionName, string> = {
 export async function seedPermissions(prisma: PrismaClient): Promise<void> {
   for (const name of PERMISSION_NAMES) {
     const [resource, action] = name.split(":")
+    // `resource`/`action` are non-null columns. A name missing its `:` would otherwise
+    // reach Prisma as `undefined` and fail as an opaque driver error naming the column,
+    // not the permission — throw here so the malformed entry identifies itself.
+    if (resource === undefined || action === undefined) {
+      throw new Error(`Malformed permission name "${name}" — expected "<resource>:<action>"`)
+    }
     await prisma.permission.upsert({
       where: { name },
       update: {},
