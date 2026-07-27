@@ -47,11 +47,11 @@ Guards run in order: **global guards first, then controller-level `@UseGuards`, 
 
 1. **`ThrottlerGuard`** (global) — rate limiting.
 2. **`JwtAuthGuard`** (global) — verifies the `access_token` cookie, sets `req.user = { id }`. Routes marked `@Public()` bypass it.
-3. **`OrgGuard`** (controller `@UseGuards`) — validates `org_id` is a UUID, loads the org, verifies membership, sets `req.org` + `req.permissions`. `400` invalid id, `404` unknown org, `403` non-member.
-4. **`ProjectGuard`** (nested controllers) — validates `project_id`, loads the project scoped to the org, **merges project-level permissions into the org permissions**, sets `req.project`.
+3. **`OrgGuard`** (applied by `@OrgScoped`/`@ProjectScoped`) — validates `org_id` is a UUID, loads the org, verifies membership, sets `req.org` + `req.permissions`. `400` invalid id, `404` unknown org, `403` non-member.
+4. **`ProjectGuard`** (added by `@ProjectScoped` on nested controllers) — validates `project_id`, loads the project scoped to the org, **merges project-level permissions into the org permissions**, sets `req.project`.
 5. **`PermissionsGuard`** — reads the `@RequirePermission("<name>")` metadata for the handler and throws `403` unless `req.permissions.includes(name)`.
 
-Authorize a handler by composing `@UseGuards(OrgGuard[, ProjectGuard], PermissionsGuard)` on the controller and `@RequirePermission("<name>")` per method. Read request context with the `@CurrentUser`, `@CurrentOrg`, `@CurrentProject` param decorators.
+Authorize a handler with the composite decorators from `src/tenancy/scoped.decorators.ts`: `@OrgScoped(permission?)` on `/orgs/:org_id/...` controllers, `@ProjectScoped(permission?)` on nested `/:project_id/...` controllers. Pass the permission when the whole controller shares one; otherwise apply `@RequirePermission("<name>")` per method. Read request context with the `@CurrentUser`, `@CurrentOrg`, `@CurrentProject`, and `@CurrentPermissions` param decorators.
 
 ### Response envelope
 
@@ -92,7 +92,7 @@ The **error** envelope (from `AllExceptionsFilter`) is always `{ "message": "…
 constructor(private readonly prisma: PrismaService) {}
 ```
 
-The schema (`prisma/schema.prisma`) is **snake_case in the DB** but **camelCase in the client** (`@map`/`@@map`). Services translate the Prisma camelCase rows back to the **snake_case API contract** the SPA consumes — see the `toSnake` helpers in `todos.service.ts` / `invitations.service.ts`.
+The schema (`prisma/schema.prisma`) is **snake_case in the DB** but **camelCase in the client** (`@map`/`@@map`). Services translate the Prisma camelCase rows back to the **snake_case API contract** the SPA consumes via the shared `toSnakeKeys` generic in `src/common/to-snake-keys.ts` — imported by the `invitations`, `members`, `orgs`, `permissions`, `projects`, `roles`, and `todos` services. It is shallow by design: shape the row explicitly with a Prisma `select` (flattening any relations) before mapping, and `Date` values pass through untouched.
 
 ### Request context
 
@@ -152,8 +152,8 @@ model Category {
 Add the back-relations on `Project` and `User` (`categories Category[]`), then create the migration and regenerate the client:
 
 ```bash
-corepack pnpm run migrate:dev   # prisma migrate dev — prompts for a migration name, applies it
-corepack pnpm run db:generate   # prisma generate — refresh the typed client
+corepack pnpm migrate:dev   # prisma migrate dev — prompts for a migration name, applies it
+corepack pnpm db:generate   # prisma generate — refresh the typed client
 ```
 
 ### Step 3: Create the DTOs
@@ -196,7 +196,7 @@ export class ListCategoriesDto extends PaginationQueryDto {
 
 ### Step 4: Create the service
 
-Inject `PrismaService` and `PaginationService`. **Scope every query by `projectId`** — that is what enforces tenant isolation. Translate Prisma's camelCase rows back to the snake_case API contract.
+Inject `PrismaService` and `PaginationService`. **Scope every query by `projectId`** — that is what enforces tenant isolation. Translate Prisma's camelCase rows back to the snake_case API contract with the shared `toSnakeKeys` helper — do not hand-roll a per-module converter.
 
 `src/categories/categories.service.ts`:
 
@@ -205,6 +205,7 @@ import { Injectable, NotFoundException } from "@nestjs/common"
 import { randomUUID } from "crypto"
 import { PrismaService } from "../prisma/prisma.service"
 import { PaginationService } from "../common/pagination/pagination.service"
+import { toSnakeKeys } from "../common/to-snake-keys"
 import { CategoryBodyDto } from "./dto/category-body.dto"
 import { ListCategoriesDto } from "./dto/list-categories.dto"
 
@@ -232,16 +233,6 @@ type CategoryRow = {
   createdAt: Date
   updatedAt: Date
 }
-
-const toSnake = (c: CategoryRow) => ({
-  id: c.id,
-  project_id: c.projectId,
-  user_id: c.userId,
-  name: c.name,
-  color: c.color,
-  created_at: c.createdAt,
-  updated_at: c.updatedAt,
-})
 
 // Prisma's `contains` passes `%`/`_` through as live ILIKE wildcards; escape them
 // (and the escape char) so search terms match literally.
@@ -271,7 +262,7 @@ export class CategoriesService {
       take: query.limit,
     })
     return {
-      data: rows.map(toSnake),
+      data: rows.map((row) => toSnakeKeys<CategoryRow>(row)),
       pagination: this.pagination.buildMeta(query.page, query.limit, totalItems),
     }
   }
@@ -282,7 +273,7 @@ export class CategoriesService {
       select: CATEGORY_SELECT,
     })
     if (!category) throw new NotFoundException("Category not found")
-    return toSnake(category)
+    return toSnakeKeys<CategoryRow>(category)
   }
 
   async create(projectId: string, userId: string, dto: CategoryBodyDto) {
@@ -296,7 +287,7 @@ export class CategoriesService {
       },
       select: CATEGORY_SELECT,
     })
-    return toSnake(category)
+    return toSnakeKeys<CategoryRow>(category)
   }
 
   async update(projectId: string, categoryId: string, dto: CategoryBodyDto) {
@@ -311,7 +302,7 @@ export class CategoriesService {
       where: { id: categoryId },
       select: CATEGORY_SELECT,
     })
-    return toSnake(category)
+    return toSnakeKeys<CategoryRow>(category)
   }
 
   async remove(projectId: string, categoryId: string): Promise<void> {
@@ -322,7 +313,7 @@ export class CategoriesService {
 
 ### Step 5: Create the controller
 
-The controller applies the guard stack, declares the required permission per handler, and reads context with param decorators. Validate UUID path params with `ParseUUIDPipe`.
+The controller applies the guard stack via `@ProjectScoped()`, declares the required permission per handler, and reads context with param decorators. Validate UUID path params with `ParseUUIDPipe`.
 
 `src/categories/categories.controller.ts`:
 
@@ -337,7 +328,6 @@ import {
   Post,
   Put,
   Query,
-  UseGuards,
 } from "@nestjs/common"
 import { CategoriesService } from "./categories.service"
 import { CategoryBodyDto } from "./dto/category-body.dto"
@@ -345,12 +335,10 @@ import { ListCategoriesDto } from "./dto/list-categories.dto"
 import { CurrentUser } from "../common/decorators/current-user.decorator"
 import { CurrentProject } from "../common/decorators/current-project.decorator"
 import { RequirePermission } from "../common/decorators/require-permission.decorator"
-import { OrgGuard } from "../tenancy/org.guard"
-import { ProjectGuard } from "../tenancy/project.guard"
-import { PermissionsGuard } from "../tenancy/permissions.guard"
+import { ProjectScoped } from "../tenancy/scoped.decorators"
 
 @Controller("orgs/:org_id/projects/:project_id/categories")
-@UseGuards(OrgGuard, ProjectGuard, PermissionsGuard)
+@ProjectScoped()
 export class CategoriesController {
   constructor(private readonly categories: CategoriesService) {}
 
@@ -447,12 +435,49 @@ New permission names must be added in **two** places so they exist in the DB and
 Then re-seed (idempotent upsert):
 
 ```bash
-corepack pnpm run db:seed
+corepack pnpm db:seed
 ```
 
 ### Step 8: Add an e2e test
 
 Add a spec under `test/` that boots the app with Supertest and asserts both the envelope and each permission gate. Follow `test/todos.e2e-spec.ts` as the template — create an org (which seeds the four system roles), a project, then exercise create/read/list/update/delete and assert a `403` for a role lacking the permission.
+
+Specs do **not** call `Test.createTestingModule(...).createNestApplication()` directly. Boot through `test/create-test-app.ts`, which applies `configureApp` from `src/bootstrap.ts` and passes `bodyParser: false` exactly as `src/main.ts` does — that flag is what makes the 100kb body limit real, so a hand-rolled app under-tests the production configuration.
+
+Database state is the spec's responsibility. `test/setup-e2e.ts` is a Jest `globalSetup`: it applies migrations and seeds the 17 permissions **once** per run. There is no automatic per-test truncation — call the `truncateAll` it exports (and re-seed, since the truncate is `CASCADE`) from your own `beforeEach`.
+
+The import block a new spec needs:
+
+```typescript
+import { Test } from "@nestjs/testing"
+import { INestApplication } from "@nestjs/common"
+import request from "supertest"
+import { AppModule } from "../src/app.module"
+import { createTestApp } from "./create-test-app"
+import { PrismaService } from "../src/prisma/prisma.service"
+import { truncateAll, seedPermissions } from "./setup-e2e"
+import { signupAndSignin, createOrg, getRoleId } from "./factory"
+
+describe("Categories (e2e)", () => {
+  let app: INestApplication
+  let prisma: PrismaService
+
+  beforeAll(async () => {
+    const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    app = await createTestApp(ref)
+    prisma = app.get(PrismaService)
+  })
+  afterAll(async () => app.close())
+
+  beforeEach(async () => {
+    await truncateAll(prisma)
+    await seedPermissions(prisma)
+  })
+
+  const agent = () => request(app.getHttpServer())
+  // ...
+})
+```
 
 ```bash
 corepack pnpm test   # jest --config test/jest-e2e.json (real PostgreSQL from .env.test)
@@ -483,11 +508,11 @@ Prisma is the single source of truth for the schema and migrations.
 ### Workflow
 
 ```bash
-corepack pnpm run migrate:dev    # prisma migrate dev — create + apply a migration in dev
-corepack pnpm run db:migrate     # prisma migrate deploy — apply pending migrations (prod)
-corepack pnpm run db:generate    # prisma generate — regenerate the typed client after schema edits
-corepack pnpm run prisma:pull    # prisma db pull — introspect an existing DB into schema.prisma
-corepack pnpm run db:seed        # prisma db seed — idempotent upsert of the 17 canonical permissions
+corepack pnpm migrate:dev    # prisma migrate dev — create + apply a migration in dev
+corepack pnpm db:migrate     # prisma migrate deploy — apply pending migrations (prod)
+corepack pnpm db:generate    # prisma generate — regenerate the typed client after schema edits
+corepack pnpm prisma:pull    # prisma db pull — introspect an existing DB into schema.prisma
+corepack pnpm db:seed        # prisma db seed — idempotent upsert of the 17 canonical permissions
 ```
 
 **Best practices:**
@@ -513,11 +538,14 @@ Global `JwtAuthGuard` protects everything by default. Opt a handler out with `@P
 
 ### Authorizing a handler
 
-Compose the guard stack on the controller and declare the permission per method:
+Apply one composite decorator from `src/tenancy/scoped.decorators.ts` on the controller — `@OrgScoped(permission?)` for `/orgs/:org_id/...` routes, `@ProjectScoped(permission?)` for nested `/:project_id/...` routes — and declare the permission per method:
 
 ```typescript
+import { ProjectScoped } from "../tenancy/scoped.decorators"
+import { RequirePermission } from "../common/decorators/require-permission.decorator"
+
 @Controller("orgs/:org_id/projects/:project_id/categories")
-@UseGuards(OrgGuard, ProjectGuard, PermissionsGuard)
+@ProjectScoped()
 export class CategoriesController {
   @Post()
   @RequirePermission("categories:create")
@@ -525,7 +553,11 @@ export class CategoriesController {
 }
 ```
 
-Read context with `@CurrentUser("id")`, `@CurrentOrg()`, `@CurrentProject()`. Project permissions merge with org permissions (deduped). Org-wide project visibility comes from the `project:read_all` permission rather than a role-name check, so any role granted it — including a custom one — sees every project in the org.
+The `permission` argument is optional: pass it (`@ProjectScoped("categories:read")`) when every handler on the controller shares one permission; leave it bare and use `@RequirePermission` per method otherwise, as `TodosController` does.
+
+Do not hand-roll the guard list. Guard order is a contract: `ProjectGuard` reads `req.org` set by `OrgGuard`, and `PermissionsGuard` reads `req.permissions` set by both. `scoped.decorators.ts` is the only place that order is written down; composing it by hand duplicates a decision that has exactly one correct answer.
+
+Read context with `@CurrentUser("id")`, `@CurrentOrg()`, `@CurrentProject()`, and `@CurrentPermissions()`. Project permissions merge with org permissions (deduped). Org-wide project visibility comes from the `project:read_all` permission rather than a role-name check, so any role granted it — including a custom one — sees every project in the org.
 
 ## Input Validation
 
@@ -590,32 +622,7 @@ You do **not** write try/catch-and-`next()` blocks — unhandled throws are caug
 
 ## API Response Format
 
-Return a plain payload from the handler; `TransformInterceptor` wraps it. By convention controllers return `{ message, data, pagination? }` explicitly.
-
-**Single resource:**
-
-```json
-{ "message": "OK", "data": { "id": "…", "name": "Example" } }
-```
-
-**Paginated list** — the shape produced by `PaginationService.buildMeta`:
-
-```json
-{
-  "message": "OK",
-  "data": [{ "id": "…", "name": "First" }],
-  "pagination": {
-    "current_page": 1,
-    "total_pages": 5,
-    "total_items": 50,
-    "items_per_page": 10,
-    "has_next_page": true,
-    "has_previous_page": false,
-    "next_page": 2,
-    "previous_page": null
-  }
-}
-```
+The envelope and its error form are documented in [`AGENTS.md`](AGENTS.md#response-envelope). What matters when adding a resource: return the payload directly from the service — the interceptor wraps it — and never construct the envelope by hand.
 
 ## Common Patterns and Recipes
 
@@ -699,7 +706,7 @@ Fetch related rows with Prisma `select`/`include` rather than hand-written joins
 
 **Prisma client is out of date after a schema edit**
 
-- Run `corepack pnpm run db:generate` (and `corepack pnpm run migrate:dev` to create/apply the migration).
+- Run `corepack pnpm db:generate` (and `corepack pnpm migrate:dev` to create/apply the migration).
 
 **Database connection errors**
 
@@ -715,6 +722,6 @@ Fetch related rows with Prisma `select`/`include` rather than hand-written joins
 
 ---
 
-**See README.md** for quick start and setup instructions.
+See [`README.md`](README.md) for quick start, setup, and the canonical environment-variable reference.
 
-**See AGENTS.md** (symlinked as CLAUDE.md) for the full architecture and command reference.
+See [`AGENTS.md`](AGENTS.md) (symlinked as `CLAUDE.md`) for the full architecture, endpoint table, and command reference.
