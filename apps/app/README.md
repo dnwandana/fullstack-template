@@ -14,11 +14,12 @@ corepack pnpm build:app
 corepack pnpm lint:app
 ```
 
-You can still run package-local commands from `apps/app` with `pnpm`.
+You can still run package-local commands from `apps/app` with `corepack pnpm`.
 
-This is my personal project that can be used together with the following backend repositories:
-
-- [express-template](https://github.com/dnwandana/express-template) - Node.js/Express backend
+Its backend is the NestJS API in [`apps/api`](../api/README.md), shipped in this same repo. An
+earlier standalone backend, [express-template](https://github.com/dnwandana/express-template),
+implements the same auth and todo contract and works as an alternative — see
+[Backend](#backend).
 
 ## Features
 
@@ -55,27 +56,26 @@ This is my personal project that can be used together with the following backend
 
 ## Backend
 
-This Vue template is designed to work with compatible backend APIs. You can use one of these backend templates:
+This SPA is built against the NestJS API in [`apps/api`](../api/README.md) — same repo, same
+release. It expects that API's contract: snake_case JSON, the `{ message, data, pagination? }`
+envelope, and `access_token` / `refresh_token` httpOnly cookies.
 
-- [express-template](https://github.com/dnwandana/express-template) - Express.js with JWT auth, todo CRUD, PostgreSQL
-
-Both backends provide:
-
-- JWT authentication via httpOnly cookies (signup, signin, refresh, logout)
-- RESTful API for todo management
-- Compatible API endpoints
+The template also works against [express-template](https://github.com/dnwandana/express-template),
+an earlier standalone backend implementing the same auth and todo contract.
 
 ## Prerequisites
 
-- **Node.js**: `^20.19.0 || >=22.12.0`
-- A running backend API (see Backend section above)
+- **Node.js**: `>=24.0.0` — declared in this package's `package.json` (and in
+  `apps/api/package.json`); the root package declares no `engines`, so a version check run at the
+  repo root enforces nothing.
+- A running backend API (see [Backend](#backend) above)
 
 ## Quick Start
 
 1. **Install dependencies**
 
    ```bash
-   npm install
+   corepack pnpm install
    ```
 
 2. **Configure environment variables**
@@ -90,9 +90,13 @@ Both backends provide:
    VITE_API_BASE_URL=http://localhost:3000/api
    ```
 
+   This step is not optional. `src/utils/http.js` reads `VITE_API_BASE_URL` once at module load
+   and applies **no fallback**, so skipping the copy leaves the base URL `undefined` and every
+   request goes to a URL like `"undefined/orgs"`.
+
 3. **Start the development server**
    ```bash
-   npm run dev
+   corepack pnpm dev
    ```
    The app will be available at `http://localhost:8080`
 
@@ -100,51 +104,42 @@ Both backends provide:
 
 ```bash
 # Start dev server (port 8080)
-npm run dev
+corepack pnpm dev
 
 # Build for production
-npm run build
+corepack pnpm build
 
 # Preview production build
-npm run preview
+corepack pnpm preview
+
+# Run tests (Vitest, single run)
+corepack pnpm test
+
+# Run tests in watch mode
+corepack pnpm test:watch
 
 # Run linters (oxlint + eslint with auto-fix)
-npm run lint
+corepack pnpm lint
 
 # Format code with Prettier
-npm run format
+corepack pnpm format
 ```
 
-## Project Structure
+## Project structure
 
-The application follows a layered architecture pattern for maintainability and scalability:
+The layer architecture — view → composable → store → api service → HTTP client — is documented in
+[`AGENTS.md`](AGENTS.md#layered-architecture). What lives in each directory is best read straight
+off `ls src/<layer>/`; `AGENTS.md` records only the contracts the filenames do not reveal, under
+[Stores](AGENTS.md#stores), [Composables](AGENTS.md#composables), and
+[API Service Layer](AGENTS.md#api-service-layer).
 
-```
-src/
-├── api/           # API service layer - pure HTTP calls
-├── stores/        # Pinia stores - business logic and state
-├── composables/   # Composables - form handling, UI state
-├── views/         # Page components - *View.vue naming
-├── components/    # Reusable components
-├── router/        # Vue Router configuration with auth guards
-└── utils/         # Utilities (fetch-based HTTP client with cookie auth, localStorage)
-```
+## Code style
 
-### Layer Architecture
-
-1. **API Layer** (`src/api/`) - Service functions that make HTTP requests
-2. **Store Layer** (`src/stores/`) - Pinia stores that manage domain state
-3. **Composable Layer** (`src/composables/`) - Reusable composition functions for UI logic
-4. **View Layer** (`src/views/`) - Page components that use composables
-
-This separation ensures each layer has a single responsibility and makes testing easier.
-
-## Code Style
-
-- **Linters**: oxlint (fast) + eslint (comprehensive)
-- **Formatter**: Prettier
-- **Rules**: No semicolons, double quotes, 100 char line width
-- **Import alias**: `@` maps to `src/`
+Prettier plus Oxlint and ESLint, all configured in this directory — the config files are
+authoritative. Note that `corepack pnpm lint` here is `run-s lint:*`, which **auto-fixes** with both
+linters, and `format` is scoped to `src/`, so `*.md` in this package has no Prettier owner. The
+naming conventions that are not mechanically enforced are in
+[`AGENTS.md`](AGENTS.md#file-naming).
 
 ## Browser DevTools Setup
 

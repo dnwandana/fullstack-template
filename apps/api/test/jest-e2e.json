@@ -1,0 +1,27 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": "(\\.e2e-spec|\\.int-spec)\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": [
+      "ts-jest",
+      { "astTransformers": { "before": ["<rootDir>/test/swagger-plugin.transformer.js"] } }
+    ]
+  },
+  "moduleNameMapper": {
+    "^@core/(.*)$": "<rootDir>/src/core/$1",
+    "^@shared/(.*)$": "<rootDir>/src/shared/$1",
+    "^@modules/(.*)$": "<rootDir>/src/modules/$1",
+    "^@tenancy/(.*)$": "<rootDir>/src/tenancy/$1",
+    "^@test/(.*)$": "<rootDir>/test/$1",
+    "^@app/(.*)$": "<rootDir>/src/$1"
+  },
+  "setupFiles": ["<rootDir>/test/load-test-env.ts"],
+  "setupFilesAfterEnv": ["<rootDir>/test/reset-redis-state.ts"],
+  "globalSetup": "<rootDir>/test/setup-e2e.ts",
+  "testTimeout": 30000,
+  "maxWorkers": 1,
+  "collectCoverageFrom": ["src/**/*.ts", "!src/**/*.module.ts", "!src/main.ts", "!src/**/dto/*.ts"],
+  "coverageDirectory": "<rootDir>/coverage"
+}

@@ -1,432 +1,361 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for agents working in `apps/api`. This file holds facts and invariants; runnable
+procedures, the command listing, the endpoint tables and the environment-variable reference all
+live in [`README.md`](README.md).
 
 ## Project Overview
 
-Multi-tenant Express.js RESTful API template with Organization → Project → Resource hierarchy, PostgreSQL, Knex.js, JWT authentication, and RBAC permissions. ES Modules (`"type": "module"`), Node.js v24+ (pinned in `.nvmrc`).
+Multi-tenant **NestJS 11** RESTful API with an Organization → Project → Resource hierarchy, PostgreSQL via **Prisma**, JWT authentication over httpOnly cookies, and RBAC permissions. TypeScript compiled to CommonJS (`nest build` → `dist/`), Node.js v24+ — pinned in the repo-root `.nvmrc` (there is deliberately no per-package copy; version managers search upward), `engines.node` in all four workspace `package.json`s, and the `node:24-alpine` base in both Dockerfiles. All of those must move together, and `engineStrict: true` in `pnpm-workspace.yaml` makes the `engines` fields a hard install-time gate rather than a warning.
 
 ## Commands
 
-```bash
-npm run dev              # Development server with nodemon
-npm start                # Production server
-npm test                 # Run tests (Vitest)
-npm run test:watch       # Run tests in watch mode
-npm run test:coverage    # Run tests with coverage
-npm run lint             # Oxlint (linter)
-npm run lint:fix         # Auto-fix lint issues
-npm run format           # Prettier check
-npm run format:fix       # Prettier fix
-npm run migrate          # Run latest migrations
-npm run migrate:make <n> # Create migration
-npm run migrate:rollback # Rollback last migration
-npm run seed             # Run all seeds
-npm run seed:make <n>    # Create seed file
-```
+Every script is listed and annotated in [`README.md`](README.md#development-commands). Four things that listing cannot tell you:
 
-No pre-commit hooks. Run `npm run lint:fix && npm run format:fix` before committing.
+- `corepack pnpm test` runs the **integration + e2e** tier only — `test/jest-e2e.json`'s `testRegex` is `(\.e2e-spec|\.int-spec)\.ts$`. It needs a reachable PostgreSQL **and Redis** from `.env.test`. `corepack pnpm test:unit` runs the disjoint unit tier and needs neither. See [Testing](#testing).
+- `corepack pnpm format` is `prettier --write .` with no markdown exclusion, so it reformats this file.
+- **Migrations never run automatically** — apply them explicitly on every environment.
+- **`corepack pnpm build` must stay `nest build`.** Raw `tsc` produces a `dist/` whose `require()` calls still say `@core/...`, and Node resolves those against `node_modules`, so the image fails at startup with `MODULE_NOT_FOUND` rather than at build time. See [Path aliases](#path-aliases).
 
 ## Architecture
 
-### MVC Pattern
+### Source layout
 
-- **Models** (`src/models/`): Knex.js queries only — no business logic
-- **Controllers** (`src/controllers/`): Business logic, Joi validation, coordinates models
-- **Routes** (`src/routes/`): Route definitions + param validation middleware, aggregated in `routes/index.js`
-- **Middleware** (`src/middlewares/`): Authorization (JWT), tenant resolution (`resolveOrg`, `resolveProject`), permission guards (`requirePermission`)
+`src/` splits four ways, and the split is a dependency rule, not filing preference:
 
-### Middleware Order (critical — in `src/app.js`)
+| Directory      | Holds                                                                                                                           | May import from                |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `src/core/`    | Infrastructure that owns a connection or global wiring: `config/`, `database/`, `redis/`, `queue/`, `filters/`, `interceptors/` | `shared/` only                 |
+| `src/shared/`  | Stateless helpers with no infrastructure of their own: `dto/`, `pagination/`, `decorators/`, `validators/`, `utils/`            | nothing in this app            |
+| `src/tenancy/` | The org/project guard chain and `MembershipService` — cross-cutting authorization, not a feature                                | `core/`, `shared/`             |
+| `src/modules/` | One self-contained feature module per directory                                                                                 | `core/`, `shared/`, `tenancy/` |
 
-1. Request ID (`requestId` — must be first so all downstream middleware can use `req.id`)
-2. Security (helmet with strict CSP, cors with explicit origins)
-3. Body parsing (express.json + express.urlencoded, both 100kb limit)
-4. HPP (HTTP Parameter Pollution protection)
-5. Cookie parsing (cookie-parser — populates `req.cookies` for auth token access)
-6. Health check (`/health` — before rate limiting so load balancers aren't throttled)
-7. Rate limiting (generalLimiter — global, configurable via `RATE_LIMIT_GENERAL_MAX`)
-8. Logging (Morgan httpLogger + custom requestLogger)
-9. Routes (`/api`):
-   - `/api/auth/*` — auth routes (authLimiter)
-   - `/api/invitations/:invitation_id/preview` — public, token-gated invitation preview (`routes/public-invitations.js`). **Must stay above the auth barrier.** That router declares only this one route, so all other `/api/invitations/*` requests fall through to the authenticated router below.
-   - `requireAccessToken` — all routes below are authenticated
-   - `/api/invitations` — user's pending invitations
-   - `/api/permissions` — permission reference
-   - `/api/orgs` — org routes (resolveOrg applied at route level)
-     - `/:org_id/projects` — project routes (resolveProject at route level)
-       - `/:project_id/todos` — project-scoped todos
-       - `/:project_id/members` — project members
-       - `/:project_id/invitations` — project invitations
-     - `/:org_id/roles` — org roles
-     - `/:org_id/members` — org members
-     - `/:org_id/invitations` — org invitations (create, list, revoke, resend)
-10. 404 handler (notFoundHandler)
-11. Error handler (errorHandler) — **must be last**
+**The feature boundary rule: a module under `src/modules/` must not import from a sibling module's
+internals.** If two features need the same thing, it moves down into `shared/` (if it is stateless)
+or `core/` (if it owns infrastructure), or the owning module exports it from its own module class
+for Nest DI. What it must never become is a reach across `../other-feature/other.service`. Two
+features deliberately duplicate a small Prisma projection rather than share one — `roles.service.ts`
+and `invitations.service.ts` each declare their own `select` shape, and the comment on
+`invite-row.ts` records why: a shared projection couples two features' response contracts so that
+widening one silently widens the other.
 
-`trust proxy` is set to `1` so rate limiting works correctly behind reverse proxies.
+`src/modules/` holds exactly the features below; if the table and `ls src/modules/` ever disagree,
+`ls` wins.
 
-### App Extraction (`src/app.js` vs `src/index.js`)
+| Module        | Responsibility                                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `auth`        | Signup/signin/refresh/logout + password reset; JWT (`token.service`), cookies (`cookie.service`), Argon2 (`password.service`), refresh-token rotation (`refresh-token.service`), reset tokens (`password-reset.service`) |
+| `users`       | User lookups (`findSafeById`, etc.) shared by other modules                                                                                                                                                              |
+| `permissions` | `GET /api/v1/permissions` reference list                                                                                                                                                                                 |
+| `orgs`        | Org CRUD; creates the system roles in `SYSTEM_ROLE_NAMES` per org (see `system-roles.ts`)                                                                                                                                |
+| `roles`       | Custom role CRUD, permission assignment                                                                                                                                                                                  |
+| `members`     | Org + project membership listing / role changes / removal (last-owner invariant)                                                                                                                                         |
+| `projects`    | Project CRUD, org-scoped                                                                                                                                                                                                 |
+| `todos`       | Example project-scoped resource, paginated                                                                                                                                                                               |
+| `invitations` | Invite/preview/accept/decline/revoke/resend + pending-account backfill                                                                                                                                                   |
+| `health`      | `GET /health`, `/health/live`, `/health/ready` — outside the global prefix, `VERSION_NEUTRAL`, `@Public()` and throttle-skipped at the class level                                                                       |
+| `maintenance` | `CleanupService` — `@Cron` job pruning expired auth/invitation rows (no controller)                                                                                                                                      |
 
-`src/app.js` configures Express (middleware, routes) and exports the app without calling `listen()`. `src/index.js` is the thin entry point: loads env, validates it, dynamically imports `app.js`, then starts the server. This split enables Supertest to import the app directly without binding to a port.
+The annotated directory tree lives in [`README.md`](README.md#project-structure).
 
-### Request ID Tracking
+### Path aliases
 
-`src/middlewares/request-id.js` runs first in the middleware chain. Accepts an incoming `X-Request-Id` header (up to 128 chars) or generates a UUID via `crypto.randomUUID()`. Stores on `req.id`, echoes in the response `X-Request-Id` header. All logs (Morgan, requestLogger, errorHandler, notFoundHandler) include `requestId: req.id`.
+`tsconfig.json` declares six aliases. They exist so a file move does not rewrite every importer, and
+so the layering above is visible at the import site.
 
-### Health Check
+| Alias        | Resolves to     |
+| ------------ | --------------- |
+| `@core/*`    | `src/core/*`    |
+| `@shared/*`  | `src/shared/*`  |
+| `@modules/*` | `src/modules/*` |
+| `@tenancy/*` | `src/tenancy/*` |
+| `@app/*`     | `src/*`         |
+| `@test/*`    | `test/*`        |
 
-`GET /health` — mounted before rate limiting so load balancers aren't throttled. Returns DB connectivity status (`SELECT 1`), uptime, and timestamp. Uses `apiResponse()` wrapper. Returns 200 when healthy, 503 when DB is unreachable.
+**Three places must agree**: `paths` in `tsconfig.json`, and the `moduleNameMapper` block in _both_
+`test/jest-unit.json` and `test/jest-e2e.json`. The Jest entries carry a `<rootDir>/` prefix because
+both configs set `rootDir: ".."`. Adding an alias to `tsconfig.json` alone type-checks fine and then
+fails at runtime under Jest with `Cannot find module` — the compiler and the test runner resolve
+modules independently.
 
-### Request Context Flow
+**What rewrites the aliases in `dist/` is `nest build`, not `tsc`.** The Nest CLI runs
+`@nestjs/cli`'s bundled `tsconfig-paths` AST transformer before emit, turning `@core/...` into a
+relative `require()`. Plain `tsc` does not do this — it type-checks the aliases and then emits the
+alias string verbatim, producing a `dist/` that only fails when Node tries to resolve it. This is
+why `package.json`'s `build` script is `nest build` and must stay that way. (`packages/contracts`
+builds with plain `tsc`, which is correct: it declares no path aliases.)
 
-Authorization middleware sets `req.user = { id }` from decoded JWT. Tenant resolution middleware builds up context:
+There is one structural gap: **no alias covers the `src/` root as a bare specifier.** `baseUrl` is
+`"./"`, so an import of `src/app.module` type-checks and then throws `MODULE_NOT_FOUND` at runtime.
+Test files reach the root with a relative `../src/app.module`; use `@app/app.module` in new code.
 
-- `resolveOrg` (on `/:org_id` routes): validates org_id UUID, loads org (404 if not found), verifies membership (403 if not member), loads permissions → sets `req.org = { id, role_name }` and `req.permissions = [...]`
-- `resolveProject` (on `/:project_id` routes): validates project_id UUID, loads project scoped to org (404 if not found), merges project-level permissions with org-level permissions → sets `req.project = { id }`
-- `requirePermission(name)`: higher-order middleware that checks `req.permissions.includes(name)`, returns 403 if missing
+### No barrel files
 
-**Permission Resolution**: Project permissions merge with org permissions (deduped). Org admins automatically have access to all projects without explicit project membership.
+Do not add `index.ts` re-export barrels inside `src/`. A barrel makes every importer of one symbol
+load the whole directory, which drags unrelated providers into a unit test's module graph and turns
+a leaf change into a wide rebuild; it also hides the layering the aliases exist to make visible.
+Import the file that declares the symbol.
 
-**Request properties (lean context)**:
+The single sanctioned exception is `packages/contracts/src/index.ts`, which is the package's public
+surface — a type-only package has no runtime graph to drag in.
+
+### Shared response contracts
+
+`@fullstack/contracts` (`packages/contracts`) is a dependency-free, **type-only** package: interfaces
+describing the response bodies the SPA consumes. The API's response classes declare `implements` on
+them, so a field renamed in a response class without a matching change to the contract is a compile
+error rather than a runtime surprise for the client.
+
+Two consequences worth knowing:
+
+- Every import of it is `import type`. The build emits types-only `.js` stubs, so a value import
+  would resolve to nothing at runtime. Keep imports `import type`.
+- It has **zero runtime presence** in `apps/api/dist` even though it sits in `dependencies`.
+
+### Bootstrap & global providers
+
+`src/main.ts` creates the app (`bufferLogs: true`, `bodyParser: false`) and calls `configureApp` from `src/bootstrap.ts`, which applies (in order): the pino `Logger`, `trust proxy = 1`, `helmet` (CSP `default-src 'none'`, `no-referrer`, HSTS), CORS (origins from `CORS_ALLOWED_ORIGINS`, `credentials: true`), `express.json`/`urlencoded` (100kb), `cookie-parser`, `setGlobalPrefix(API_PREFIX, { exclude: ["health", "health/live", "health/ready"] })`, `enableVersioning({ type: VersioningType.URI, defaultVersion: API_VERSION })`, the Swagger document (mounted at `api/docs` **after** the prefix so documented paths carry `/api/v1`, and only when `ConfigService.get("SWAGGER_ENABLED") === "true"`), and `enableShutdownHooks()`.
+
+`bodyParser: false` is load-bearing: it disables Nest's built-in parser so the explicit `express.json`/`urlencoded` calls in `configureApp` are the only ones registered, which is what makes the 100kb limit real. `test/create-test-app.ts` mirrors the flag.
+
+CORS also sets `allowedHeaders: ["Content-Type", "X-Request-Id"]` and `exposedHeaders: ["X-Request-Id"]` so a SPA can read the correlation id back. CORS also restricts `methods` to `["GET", "POST", "PUT", "DELETE"]` (`bootstrap.ts`), so a `PATCH` route would be rejected at the preflight even if a controller defined it.
+
+### URI versioning
+
+Every route is served under `/api/v1`. `API_PREFIX` (`"api"`) and `API_VERSION` (`"1"`) live in
+`src/core/config/api-version.ts`, which also derives `ACCESS_COOKIE_PATH` (`/api/v1`) and
+`REFRESH_COOKIE_PATH` (`/api/v1/auth`). That file is the source of truth for all four spellings.
+
+- **`setGlobalPrefix`'s `exclude` and `enableVersioning` are independent.** Excluding a route from
+  the prefix does **not** exclude it from the version segment. The health controller opts out of
+  versioning separately, with `@Controller({ path: "health", version: VERSION_NEUTRAL })` — that
+  decorator, not the `exclude` list, is what keeps `/health/live` from becoming `/v1/health/live`.
+- Each `exclude` entry is an **exact** route path, not a prefix — `"health"` alone does not cover
+  `health/live`.
+- **Swagger UI is not versioned.** It is mounted at `api/docs` straight on the Express instance, so
+  `enableVersioning` never sees it and there is no `/api/v1/docs`.
+- **Cookie paths match by whole path segments**, so `/api/auth` does not cover `/api/v1/auth/refresh`.
+  Bumping `API_VERSION` without moving the cookie paths with it logs every user out at their next
+  refresh, silently. The production edge rewrites the same paths a second time
+  (`nginx/templates/api.conf.template`), and nginx cannot import TypeScript — so those two files
+  carry the same strings by hand and must change together.
+
+### Global providers
+
+`src/app.module.ts` wires the global cross-cutting providers:
+
+- `APP_PIPE` → `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })` — unknown body fields are rejected, DTOs are class-transformed.
+- `APP_INTERCEPTOR` → `TransformInterceptor` — normalizes every response into the success envelope.
+- `APP_FILTER` → `AllExceptionsFilter` — normalizes every error into the error envelope.
+- `APP_GUARD` → `ThrottlerGuard` (rate limiting) then `JwtAuthGuard` (authentication).
+- `ConfigModule.forRoot({ isGlobal: true, validate })` — env validated at startup (fail-fast).
+- `LoggerModule` (nestjs-pino) — request id genned/validated from `x-request-id` and echoed back; `pino-pretty` in non-production.
+- `ThrottlerModule.forRootAsync` — one `general` limiter, 15-min window, `limit` read through `ConfigService.get("RATE_LIMIT_GENERAL_MAX")` (never `process.env`: Joi's coercion and default only exist on the validated config object). `@SkipThrottle({ general: true })` on `HealthController` exempts all health routes. `AuthController` narrows the same limiter with a class-level `@Throttle({ general: { limit: RATE_LIMIT_AUTH_MAX, ttl: 15m } })`; that one still reads `process.env` because decorator arguments are evaluated before the DI container exists. That decorator argument comes from `authThrottleLimit()` (`src/core/config/auth-throttle.ts`), which mirrors Joi's 1..50 integer constraint and **throws at import time** on an out-of-range value — the fail-fast `ConfigService` cannot provide this early (the old `Number(x ?? 10)` yielded `NaN`, which the throttler treats as no limit at all). `authThrottleLimit()` is the **one** config value in the app read straight from `process.env` rather than through `ConfigService`, and that is deliberate for exactly this reason. **The store is Redis** (`@nest-lab/throttler-storage-redis`), so counters are shared across instances instead of counted per process — which is also why the test tier must flush Redis between tests (see [Testing](#testing)).
+- `ScheduleModule.forRoot()` — required for `@Cron` to fire at all. Without it `CleanupService`'s job is silently inert.
+- `RedisModule` (`src/core/redis/`) — a **global** module providing the `REDIS_CLIENT` token (an ioredis client), used by the throttler storage and by BullMQ.
+- `QueueModule` (`src/core/queue/`) — registers the BullMQ `notifications` queue and its `NotificationProcessor`.
+
+### Redis and the notification queue
+
+**Redis is required in every environment.** `REDIS_URL` has no default in the Joi schema. It is not
+an optional accelerator: BullMQ has no in-memory driver, so an optional Redis with a fallback would
+mean jobs are accepted and never run. Only the local Docker stack ships a `redis` service;
+production points `REDIS_URL` at a managed instance, exactly as it does `DATABASE_URL`.
+
+Two consumers:
+
+- **Throttler storage** — rate-limit counters (see [Global providers](#global-providers)).
+- **The `notifications` queue** (`NOTIFICATION_QUEUE` in `src/core/queue/queue.constants.ts`, stored
+  under the Redis key prefix `bull:notifications:*`). `InvitationNotifierService` and
+  `PasswordResetNotifierService` now only **enqueue**; `NotificationProcessor` is the single place a
+  real mail provider gets wired in, and it runs off the request path. `NotificationJob` is a
+  discriminated union on `kind`, and the processor's `default` branch assigns to `never` — adding a
+  variant without a matching case is a compile error rather than a job that is acknowledged and
+  silently never delivered.
+
+**Boot behaviour with Redis unreachable is _not_ fail-fast, despite the "required" policy.** ioredis
+reconnects indefinitely with growing backoff, and `Nest application successfully started` is logged
+**after** the first `ECONNREFUSED`. A Redis-less instance boots, listens, serves traffic, and passes
+its container healthcheck — because that healthcheck probes `/health/live`, which by design never
+touches a dependency. `/health/ready` does not probe `REDIS_CLIENT` either, so nothing in the
+running system reports the degradation. Treat the requirement as an operational contract, not
+something the process enforces on itself.
+
+### Guard stack (auth → tenant → permission)
+
+Guards run in registration order: **global guards first, then controller-level, then handler metadata.** The effective order for a tenant-scoped route is:
+
+1. **`ThrottlerGuard`** (global) — rate limiting.
+2. **`JwtAuthGuard`** (global) — authentication. Verifies the `access_token` cookie and sets `req.user = { id }`. Routes marked `@Public()` (the health routes, invitation preview, signup/signin/refresh/logout, forgot/reset password) bypass it.
+
+   **`RefreshTokenGuard`** (`src/modules/auth/guards/refresh-token.guard.ts`) is a _second_ authentication path, applied with `@UseGuards` on `POST /api/v1/auth/refresh` and `POST /api/v1/auth/logout` (`auth.controller.ts`). Those routes are `@Public()` with respect to `JwtAuthGuard`, but they are not unauthenticated: this guard verifies the `refresh_token` cookie (rejecting a token whose `type` claim is not `"refresh"`) and also sets `req.user = { id }`. Any code reading `req.user` must account for both origins.
+
+3. **`OrgGuard`** (applied by `@OrgScoped`/`@ProjectScoped` on `/orgs/:org_id/...` controllers) — validates `org_id` is a UUID, loads the org, verifies membership via `MembershipService.resolveOrg`, sets `req.org` + `req.permissions`. `400` invalid id, `404` unknown org, `403` non-member. The 404/403 split is a **deliberate** existence disclosure to authenticated users (L-13, specified in the rebuild design): org ids are UUIDs, so enumeration is impractical, and non-members get an accurate error. Do not "fix" it to a uniform 404. `ProjectGuard` intentionally does not mirror it.
+4. **`ProjectGuard`** (added by `@ProjectScoped` on nested `/:project_id/...` controllers) — validates `project_id`, loads the project scoped to the org, **merges project-level permissions into the org permissions**, sets `req.project`. `404` if not found.
+5. **`PermissionsGuard`** — reads the `@RequirePermission("<name>")` metadata for the handler and throws `403` unless `req.permissions.includes(name)`. Handlers with no `@RequirePermission` pass through.
+
+Authorize a handler with the composite decorators from `src/tenancy/scoped.decorators.ts`: `@OrgScoped(permission?)` for `/orgs/:org_id/...` controllers, `@ProjectScoped(permission?)` for nested `/:project_id/...` controllers. `OrgScoped` composes `UseGuards(OrgGuard, PermissionsGuard)`; `ProjectScoped` composes `UseGuards(OrgGuard, ProjectGuard, PermissionsGuard)`. The `permission` argument is optional — pass it when every handler on the controller shares one permission, otherwise apply `@RequirePermission("<name>")` per method (what `TodosController` does with its bare class-level `@ProjectScoped()`). Read context with the `@CurrentUser`, `@CurrentOrg`, `@CurrentProject`, and `@CurrentPermissions` param decorators.
+
+Do not hand-roll the raw guard list. Guard order is a contract — `ProjectGuard` reads `req.org` set by `OrgGuard`, and `PermissionsGuard` reads `req.permissions` set by both — and `scoped.decorators.ts` is the only place that order is written down (L-7).
+
+**Permission resolution**: project permissions merge with org permissions (deduped). Cross-project visibility keys off the `project:read_all` **permission**, never a role name — `ProjectsController.list` returns every project in the org when `req.permissions` includes `project:read_all`, otherwise only the caller's project memberships. Owner and admin get it by default through `SYSTEM_ROLE_PERMISSIONS`, and a custom role granted it behaves identically. Do not reintroduce role-name checks such as the old `ADMIN_ROLES` set.
+
+### Response envelope
+
+Handlers return a plain payload; `TransformInterceptor` normalizes it into `{ message, data, pagination? }`.
+
+- `message` defaults to `"OK"` when a handler returns a bare value; controllers set `"Created"` on `POST`s.
+- `data` is the resource (object for single, array for list, `null` for deletes).
+- `pagination` is present only on paginated list endpoints, and carries the keys listed under [Pagination](#pagination).
+- **`request_id` appears on errors only** — it is not part of the success envelope.
+
+The **error** envelope (from `AllExceptionsFilter`) is always `{ "message": "…", "data": null, "request_id": "…" }` with the thrown `HttpException`'s status. `class-validator` failures (arrays of messages) are **flattened to a single string** joined by `"; "`. Non-Nest errors carrying an http-errors `status`/`statusCode` (e.g. body-parser `PayloadTooLargeError`) surface that real status instead of collapsing to 500; in production, non-`HttpException` messages are replaced with the generic status text.
+
+Prisma's `P2025` ("record not found", thrown by `update`/`delete` against a missing row) is mapped to `404 "Not found"` by `src/core/filters/all-exceptions.filter.ts` before the generic non-`HttpException` handling runs, so services do not need an existence check purely to produce a 404.
+
+### Prisma access
+
+`PrismaService` (in `src/core/database/`) extends `PrismaClient` and manages its lifecycle (`$connect` on `onModuleInit`, `$disconnect` on `onModuleDestroy`). Inject it into any service with `constructor(private readonly prisma: PrismaService) {}`.
+
+The schema (`prisma/schema.prisma`) is snake_case in the DB but camelCase in the client (`@map`/`@@map`). Services translate the Prisma camelCase rows back to the **snake_case API contract** the SPA consumes (see the shared `toSnakeKeys` generic in `src/shared/utils/to-snake-keys.ts`, imported by the `invitations`, `members`, `todos`, `roles`, `permissions`, `projects`, and `orgs` services). It is shallow by design — `select` the fields you want first rather than relying on it to walk nested relations. Multi-row invariants use PostgreSQL locks inside `prisma.$transaction` — `pg_advisory_xact_lock` for the last-owner check, `SELECT … FOR UPDATE` for invitation accept, and the non-blocking `pg_try_advisory_xact_lock` for the nightly cleanup job.
+
+### Request context
 
 ```
-req.id          // Request ID (from requestId middleware)
-req.user        // { id } from JWT
-req.org         // { id, role_name } from resolveOrg
-req.project     // { id } from resolveProject
+req.id          // Request ID (pino genReqId, from x-request-id or a fresh UUID)
+req.user        // { id } — set by JwtAuthGuard (access_token) or RefreshTokenGuard (refresh_token)
+req.org         // { id, role_name } from OrgGuard
+req.project     // { id } from ProjectGuard
 req.permissions // ["todos:create", ...] merged org + project permissions
 ```
 
-### Authentication Flow
+### Authentication flow
 
-- POST `/api/auth/signup` → creates user, returns `{ id, name, email }` (no tokens). Email is required and unique; name is a non-unique display name.
-- POST `/api/auth/signin` → authenticates by email + password, stores refresh token hash in DB, sets `access_token` and `refresh_token` as httpOnly cookies, returns `{ id, name, email }`
-- POST `/api/auth/refresh` → **token rotation**: revokes old refresh token, stores new hash, sets new `access_token` and `refresh_token` cookies
-- POST `/api/auth/logout` → revokes the refresh token in DB, clears cookies. Idempotent (succeeds even if token already revoked). Reads refresh token from cookie.
+- `POST /api/v1/auth/signup` → creates user, returns `{ id, name, email }` (no tokens). Backfills any pending invitations for that email (best-effort). Email required + unique; name is a display name. **Deliberate trade-off (L-14)**: signup reveals when an email is taken. Signin and forgot-password are enumeration-hardened; signup is not, because the "if an account exists we've emailed you" pattern requires real email delivery, which the template does not ship. Revisit when a mailer lands — do not "fix" this alone.
+- `POST /api/v1/auth/signin` → authenticates by email + password, stores the refresh-token hash, sets `access_token` + `refresh_token` httpOnly cookies, returns `{ id, name, email }`.
+- `POST /api/v1/auth/refresh` → **token rotation**: claims the old refresh token atomically (`claimForRotation` sets `revokedAt` only where still null — a read-check-revoke sequence would let two concurrent presenters both rotate), stores the new hash, sets new cookies. **Reuse detection**: the row is looked up with `findByToken` (which deliberately does _not_ filter on `revokedAt`, so a replay is distinguishable from a forgery); if the presented token is already revoked — or loses the atomic claim — every refresh token for that user is revoked, the cookies are cleared, a warning is logged, and the request gets `401 "Invalid refresh token"`.
+- `POST /api/v1/auth/logout` → revokes the refresh token, clears cookies. Idempotent.
+- `GET /api/v1/auth/me` → authenticated; confirms the `access_token` cookie is still valid and returns the user.
+- `POST /api/v1/auth/forgot-password` → `{ email }`, always `200` with a neutral message. Unknown addresses are a silent no-op (no enumeration). Issuing a new token voids any earlier outstanding ones — the newest link is the only valid link. Delivery goes through `PasswordResetNotifierService`, whose always-on log line carries the user id (the address is PII); the reset URL is logged at `debug` **only** when `NODE_ENV === "development"`.
+- `POST /api/v1/auth/reset-password` → `{ token, password, confirmation_password }`. `token` is 64 hex chars; only its SHA-256 hash is stored. Claimed atomically via `updateMany({ where: { tokenHash, usedAt: null, expiresAt: { gt: now } } })` — 0 rows updated means `400 "Invalid or expired reset token"`. TTL is 1 hour. Success is a full credential rotation: it clears `failedLoginAttempts`/`lockedUntil`, revokes every outstanding refresh token, and voids every other outstanding reset token for that user.
 
-Token cookies: `access_token` and `refresh_token` (httpOnly cookies set by server). JWT algorithm pinned to HS256 with explicit verification.
+Cookies: `access_token` (path `/api/v1`) and `refresh_token` (path `/api/v1/auth`) — both derived from `ACCESS_COOKIE_PATH` / `REFRESH_COOKIE_PATH` in `src/core/config/api-version.ts`, never spelled by hand; see [URI versioning](#uri-versioning). Both httpOnly, `SameSite=Strict`, `Secure` in production. `SameSite=Strict` is a **deliberate** choice (L-24): it requires the SPA and API to share a registrable domain — the shipped `app.<DOMAIN>` / `api.<DOMAIN>` topology qualifies; splitting them across registrable domains silently breaks auth, and changing it means editing `cookie.service.ts`, not an env var. `maxAge` is **derived** from `ACCESS_TOKEN_EXPIRES_IN` / `REFRESH_TOKEN_EXPIRES_IN` via `parseDuration` (`src/shared/utils/duration.ts`) rather than hard-coded, so cookie and JWT lifetimes cannot drift; `clear()` uses `maxAge: 0`. JWT pinned to HS256.
 
-Validation: name 1–100 chars, trimmed, and rejected if it contains control characters or bidirectional overrides (`\p{Cc}`, `\p{Zl}`, `\p{Zp}`, and the LRM/RLM, embedding, and isolate ranges). ZWJ and ZWNJ are deliberately permitted — they are required to spell Persian, Hindi, and Bengali names. Email is required, max 255 chars, unique, and is the login identifier; it is trimmed and lowercased by Joi (`.trim().lowercase().email().max(255)`) at signup, signin, and invitation creation, so casing is never preserved. Password 8–72 chars (72 is Argon2's input limit). Auth routes are rate-limited via `authLimiter` (default 10 req/15min, cap at 50).
+Signin hardening: every attempt runs one Argon2 verify against a real or dummy hash **before** branching on lock state, so unknown-email, wrong-password and locked paths share one timing profile; 5 failed attempts lock the account for 15 minutes (`MAX_FAILED_ATTEMPTS` / `LOCKOUT_DURATION_MS` in `auth.service.ts`).
 
-**Signin hardening**: a pre-computed dummy Argon2 hash is verified when no user matches, so response timing doesn't reveal whether an email is registered ("invalid credentials" is returned either way). Accounts lock for 15 minutes after 5 consecutive failed attempts (`failed_login_attempts` / `locked_until` on `users`).
+### Multi-tenancy
 
-**Signup uniqueness**: the controller pre-checks `findOne({ email })` to avoid a wasted Argon2 hash, then relies on the `users.email` unique index as the real gate. A Postgres `23505` unique violation from the insert is translated into the same 400 as the pre-check, so a lost race between concurrent signups never surfaces as a 500.
+**Hierarchy**: Organization → Project → Resources (Todos). Shared database, tenant columns (`org_id`, `project_id`); no schema-per-tenant. Users may belong to many orgs and many projects.
 
-### Refresh Token Architecture
+### Permissions
 
-**Table**: `refresh_tokens` — UUID PK, `user_id` FK CASCADE, `token_hash` (64-char SHA-256), `expires_at`, `revoked_at` (nullable). Indexes on `user_id` and `token_hash`.
+**RBAC**: permission-per-role. Each org gets the four system roles in `SYSTEM_ROLE_NAMES` on creation; owners may add custom roles with granular permissions. The canonical permission list and the system-role → permission map live in **`src/modules/orgs/system-roles.ts`** (`ALL_PERMISSIONS`, which is module-private, and the exported `SYSTEM_ROLE_PERMISSIONS`):
 
-**Lifecycle**:
+| Role   | Permissions                                                       |
+| ------ | ----------------------------------------------------------------- |
+| owner  | All of `ALL_PERMISSIONS`                                          |
+| admin  | All except `org:delete` and `org:manage_roles`                    |
+| member | `org:read`, `project:read`, `todos:*` (create/read/update/delete) |
+| viewer | `org:read`, `project:read`, `todos:read`                          |
 
-- **Signin**: Controller generates refresh token, hashes with SHA-256 (`refresh-tokens.hashToken`), stores hash in DB, sets tokens as httpOnly cookies.
-- **Refresh**: Controller finds active token by hash (`findActiveByHash`), revokes old token (`revokeById`), creates new token hash, sets new token cookies via rotation. Prevents reuse — if a revoked token is used again, it's rejected.
-- **Logout**: Controller revokes token by ID (`revokeById`), clears cookies. Idempotent — no error if token missing or already revoked.
-- **Model functions**: `hashToken`, `create`, `findActiveByHash`, `revokeById`, `revokeAllForUser` (unused), `purgeOld` (unused — no cron job yet).
+`project:read_all` ("view all projects in the organization, not only those you belong to") is the most recently added permission; owner and admin have it, member and viewer do not. It exists so cross-project visibility is a grantable permission instead of a role-name special case.
 
-### Multi-Tenancy Architecture
+**Invariant: `ALL_PERMISSIONS` in `src/modules/orgs/system-roles.ts` and `PERMISSION_NAMES` in `prisma/seed.ts` must hold the same set of names.** Nothing enforces it: `ALL_PERMISSIONS` is not exported, `test/seed.int-spec.ts` only compares `PERMISSION_NAMES` against the seeded DB rows, and a name present in one and absent from the other compiles and seeds cleanly — it just silently fails to grant. Edit both in the same commit.
 
-**Hierarchy**: Organization → Project → Resources (Todos)
+### Invitation system
 
-**Data isolation**: Shared database with tenant columns (`org_id`, `project_id`). No schema-per-tenant.
+Invite by email, 7-day expiry, accept/decline/revoke/resend. Tokens are hashed (SHA-256) — only the hash (`token_hash`) is stored; the raw token is returned only at create/resend so an admin can deliver the link by hand (no mail provider ships — `InvitationNotifierService` is the seam; the accept URL is built by `invitation-url.ts`).
 
-**Membership**: Users can belong to multiple orgs and multiple projects within each org (like GitHub).
+- **Public preview**: `GET /api/v1/invitations/:invitation_id/preview?token=<64hex>` is `@Public()` — a logged-out invitee can see what they were invited to. Possession of the raw token is the only credential; `404` for both an unknown invitation and a wrong token (no enumeration). Returns `{ id, org_name, project_name, inviter_name, role_name, invitee_email, status, expires_at, is_expired, requires_signup }`.
+- **Accept**: `POST /api/v1/invitations/:invitation_id/accept` is **authenticated and requires the raw token in the body** — `{ token: "<64 hex chars>" }` (`AcceptInvitationDto`). Two gates apply, in order: the service matches on `{ id: invitationId, tokenHash: hash(rawToken) }` and throws `404 "Invitation not found"` when either half is wrong (so a wrong token cannot probe which invitation ids exist), then checks ownership — the logged-in user's id/email must match `invitee_id`/`invitee_email`, else `403 "This invitation does not belong to you"`. Being the invitee is not sufficient on its own; the raw link is required too. Uses `SELECT … FOR UPDATE` inside a transaction to serialize concurrent accepts. Project invitations auto-add the user to the parent org as `viewer` if not already a member.
+- **Pending-account invitations**: inviting an unregistered address is valid (no 404). Signup backfills `invitee_id` on matching pending/unexpired invitations so they appear in `GET /api/v1/invitations`.
+- **Duplicate prevention**: a pending invitation for the same `(invitee_email, org_id, project_id)` scope is rejected with `400 "A pending invitation already exists for this email"`.
+- **Expiry is derived, never written** — evaluated live against `expires_at`.
+- **Invitation-only membership (I-9)**: there is **no** direct "add member" endpoint, by design. Membership rows are created only by accepting an invitation (or by creating the org/project). Do not add a POST-a-member route — every join must stay invitee-consented and flow through the invitation system.
 
-**RBAC**: Permission-per-Role table pattern. System roles (owner/admin/member/viewer) created per org. Org owners can create custom roles with granular permissions. 16 system permissions across org, project, todos, and invitations resources.
+### Environment validation
 
-**System Roles**:
+`src/core/config/env.validation.ts` (Joi) runs via `ConfigModule`'s `validate` hook at startup, `abortEarly: false`. JWT secrets must be ≥32 chars, must differ, and must not start with `changeme`. `RATE_LIMIT_AUTH_MAX` capped at 50. Failure throws before the app boots (fail-fast). Every variable, its default and its constraint are tabulated in [`README.md`](README.md#configuration).
 
-| Role   | Permissions                             |
-| ------ | --------------------------------------- |
-| owner  | All 16 permissions                      |
-| admin  | All except org:delete, org:manage_roles |
-| member | org:read, project:read, todos CRUD      |
-| viewer | org:read, project:read, todos:read      |
+Two things to know when reading env values elsewhere:
 
-**Nested REST URLs**: `/api/orgs/:org_id/projects/:project_id/todos`
+- **Duration grammar**: `ACCESS_TOKEN_EXPIRES_IN` / `REFRESH_TOKEN_EXPIRES_IN` must match `/^\d+[smhd]$/`. This is deliberately narrower than what `@nestjs/jwt` accepts (no `1w`) because the same string also feeds `parseDuration` for the cookie `maxAge` and the `refresh_tokens` row.
+- **Defaults are not written back to `process.env`.** `@nestjs/config` applies Joi's defaults only to the validated object behind `ConfigService`, so any code reading `process.env.X` directly misses them. Read through `ConfigService` unless you are in a decorator argument, which is evaluated before the container exists.
 
-### Invitation System
+`LOG_LEVEL` accepts only `error | warn | info | debug` — pino's `trace` and `fatal` are rejected. `SWAGGER_ENABLED` has a function default that resolves to `"false"` when `NODE_ENV === "production"` and `"true"` otherwise, which is why it must stay declared last in the schema (Joi resolves keys in declaration order and reads siblings off `parent`).
 
-Invite by email, 7-day expiry, accept/decline/revoke flow. One shared Joi schema (`{ email, role_id }`, `stripUnknown`) validates both org and project invitations.
+`.env.example` is the operator-facing template; `.env.test.example` ships valid dummy secrets so the e2e suite boots from `cp .env.test.example .env.test` unchanged. Do not copy `.env.example` for tests — its `changeme_…` secrets are rejected by validation on purpose.
 
-**Token security**: On creation, the invitation token is hashed with SHA-256 (`invitations.hashToken`) and only the hash is stored in `token_hash`. The raw token is returned in the creation and resend responses only. All list/get queries use a `SAFE_COLUMNS` array that excludes `token` and `token_hash` to prevent leakage. There is exactly one deliberate exception: `invitations.findOneWithTokenHash(id)` selects `token_hash` so the public preview endpoint can verify a submitted token — the hash is stripped by the controller and never reaches a response body.
+### Scheduled maintenance
 
-**Accept validation**: `POST /api/invitations/:id/accept` requires `{ token: "<64-char-hex>" }` in the request body. The controller hashes the provided token and compares against `token_hash` using `crypto.timingSafeEqual` to prevent timing attacks. Uses `SELECT ... FOR UPDATE` within a transaction to prevent race conditions on acceptance.
+`src/modules/maintenance/cleanup.service.ts` runs `@Cron(CronExpression.EVERY_DAY_AT_3AM)`. It returns immediately when `CLEANUP_ENABLED === "false"`. Deletes run in bounded batches (10k rows), each in its own short transaction that takes `pg_try_advisory_xact_lock(hashtext('auth-cleanup'))` — non-blocking, so a replica that loses the lock stops its sweep instead of queueing behind the winner. The lock is transaction-scoped, so it is released between batches: two replicas may interleave batches of the same sweep, which is harmless (disjoint rows, both make progress) — the lock prevents duplicated work, not concurrent runs. Batching caps WAL volume and lock time no matter how large the first-sweep backlog is. The swept `expires_at`/`revoked_at` columns are indexed (see `schema.prisma`). Grace periods: refresh tokens and password-reset tokens 7 days, invitations 30 days. Retention is always measured from `expiresAt`/`revokedAt`, never `createdAt`, so a long-lived token is not deleted while still valid.
 
-**Public preview**: `GET /api/invitations/:invitation_id/preview?token=<64hex>` is mounted in `routes/public-invitations.js` **above** the `requireAccessToken` barrier in `routes/index.js`, so a logged-out invitee can see what they were invited to before creating an account. Possession of the raw token is the only credential. Returns `{ id, org_name, project_name, inviter_name, role_name, invitee_email, status, expires_at, is_expired, requires_signup }` — never the token or its hash. `400` for a non-UUID invitation ID or a token that is not 64 lowercase hex characters (the shape is validated _before_ `timingSafeEqual`, which throws on length mismatch); `404` for both an unknown invitation and a wrong token, so the endpoint cannot be used to enumerate invitation IDs. Express matches in registration order and the public router only declares this one route, so every other `/api/invitations/*` request still falls through to the authenticated router.
+### Pagination
 
-**Pending-account invitations**: `resolveInvitee(email)` looks the address up in `users` and returns `invitee_id` (or `null` when nobody has signed up with it yet) plus `invitee_email`. Inviting an unregistered address is valid — it does not 404. At signup, `invitations.linkInviteeByEmail(email, userId)` backfills `invitee_id` on every pending, unexpired, unlinked invitation for the new user's email, so the invitation becomes visible in `GET /api/invitations` (which keys on `invitee_id`). The backfill is best-effort: it runs after the user row is committed and its failure is swallowed, so a broken backfill can never turn a successful signup into a 500 — only in-app discovery degrades, and the invite link keeps working. On accept, the controller still matches the authenticated user's email against `invitee_email` for invitations that were never linked.
+List endpoints accept a pagination DTO (`page`, `limit`, `sort_by`, `sort_order`, `search` — see `src/shared/pagination/pagination.dto.ts`) and services return `{ data, pagination }`, which the controller passes straight into the envelope. The meta shape is fixed at `{ current_page, total_pages, total_items, items_per_page, has_next_page, has_previous_page, next_page, previous_page }` (`PaginationService.buildMeta`); the SPA reads these keys verbatim, so adding, renaming or dropping one is a breaking client change. `next_page`/`previous_page` are `null`, not omitted, at the ends. Search terms are escaped for PostgreSQL `ILIKE`.
 
-**Delivery**: the template ships **no mail provider**. `src/utils/invitation-notifier.js` is the seam — `sendInvitationEmail({ to, acceptUrl, orgName, projectName, inviterName, roleName, expiresAt })`, whose default implementation logs the accept URL via Winston. Wire SendGrid, Brevo, Mailgun, SES, or SMTP by replacing that one function body; no controller changes are required. Delivery is best-effort — every call site wraps it in `try/catch` after the row is already committed. The link itself is built by `src/utils/invitation-url.js` (`buildInvitationAcceptUrl`), the single source of truth for the shape `${APP_BASE_URL}/invite/:invitation_id?token=<raw>`; the SPA route in `apps/app/src/router/index.js` must stay in sync with it. Until a provider is wired, the create and resend responses return `token` and `accept_url` so an admin can deliver the link by hand.
+Two DTOs exist and their defaults differ deliberately. `PaginationQueryDto` defaults `limit` to **10** and backs todos (via `ListTodosDto`, which narrows `sort_by` to `updated_at | title`). `ListQueryDto` extends it and defaults `limit` to **50**, backing org members, project members, and org invitations — those render whole-list UIs in the SPA that send no query params, so page 1 must hold a typical tenant. Both cap `limit` at 100. `sort_order` defaults to `desc`; `sort_by` has no default at the DTO layer, so each service resolves its own (todos falls back to `updated_at`).
 
-**Resend**: `POST /api/orgs/:org_id/invitations/:invitation_id/resend` (requires `invitations:manage`) mints a new token — invalidating the previous link — and resets the 7-day expiry, returning `{ ...safe columns, token, accept_url }`. `400` if the invitation is no longer pending, `404` if it belongs to a different org. Required because the raw token is only returned at the moment it is minted: without resend, a lost link is unrecoverable and the duplicate guard blocks re-inviting the same address.
+## Endpoints
 
-**Duplicate prevention**: before creating an invitation, both handlers call `invitations.findPendingForScope({ invitee_email, org_id, project_id })` and reject with 400 `"A pending invitation already exists for this email"` if one is found. Scope is exact — a pending org invitation does not block a project invitation for the same address. Revoking an invitation frees the scope for a fresh invite.
+The full endpoint list — every method, path, and required permission — lives in
+[`README.md`](README.md#api-endpoints). It is the only place that list is written down; adding or
+renaming a route means editing it. Route _shape_ rules are documented here:
 
-**Project invitations**: Auto-add the user to the parent org as a viewer if not already a member.
+- **Tenancy prefixes**: org-scoped controllers mount at `orgs/:org_id/...`, project-scoped
+  controllers nest under `orgs/:org_id/projects/:project_id/...`. The segment names are part of the
+  contract — `OrgGuard` and `ProjectGuard` read `org_id` / `project_id` off `req.params`.
+- **Two authentication origins**: `POST /api/v1/auth/refresh` and `POST /api/v1/auth/logout` are
+  `@Public()` with respect to `JwtAuthGuard` but gated by `RefreshTokenGuard`; the invitation
+  preview route is gated only by possession of the raw token.
+- Global prefix, guard composition and the `PATCH`-at-preflight rule are covered above under
+  [Bootstrap](#bootstrap--global-providers) and [Guard stack](#guard-stack-auth--tenant--permission).
 
-**Expiry is derived, never written**: `"expired"` is a legal value of the `status` column but nothing in the codebase writes it. Expiry is evaluated live against `expires_at` on every read and on accept. Clients that want to display it (see `apps/app/src/components/InvitationsTable.vue`) derive it themselves.
+Adding a resource is a worked tutorial in
+[`TEMPLATE_GUIDE.md`](TEMPLATE_GUIDE.md#adding-a-new-resource-step-by-step-tutorial). One thing that
+tutorial cannot tell you: the OpenAPI document needs no manual step, because the `@nestjs/swagger`
+CLI plugin in `nest-cli.json` (`introspectComments: true`,
+`dtoFileNameSuffix: [".dto.ts", ".response.ts"]`) derives property types, optionality, and
+descriptions from the source, so plain class-validator DTOs and response classes alike are
+documented without `@ApiProperty()` boilerplate. There is no checked-in `openapi.json` to update —
+the previous hand-maintained file was deleted precisely because it drifted.
 
-### Error Handling
-
-Controllers throw `HttpError(status, message)` → caught by `next(error)` → centralized `errorHandler` logs full context (requestId, stack, IP, userId, method, URL) but only returns `{ message }` to client. Controllers should **not** log errors themselves — the centralized handler is the single logging point. Stack traces are only logged outside production. `notFoundHandler` logs 404s with user-agent tracking.
-
-### Environment Validation
-
-`src/utils/validate-env.js` runs at the very top of `src/index.js`, **before** Express initializes. Validates all required env vars with Joi (`abortEarly: false` to report all errors at once). JWT secrets must be ≥32 characters and must be distinct from each other. `RATE_LIMIT_AUTH_MAX` is capped at 50. Validated values are written back to `process.env`. Fails with `process.exit(1)` — not HttpError (Express doesn't exist yet).
-
-### Pagination & Search
-
-`src/utils/pagination.js` exports three functions:
-
-- `validatePaginationQuery(query, sortableColumns)` — validates page, limit, sort_by, sort_order, search
-- `buildPaginationMeta(page, limit, totalItems)` — pagination metadata object
-- `executePaginatedQuery(countFn, findFn, conditions, params, searchableColumns)` — runs count + data fetch in parallel
-
-Search input is sanitized via `escapeIlike()` from `src/utils/sanitize.js` — escapes `%`, `_`, and `\` so they are treated as literals in PostgreSQL ILIKE patterns.
-
-**Usage in controllers:**
-
-```javascript
-import { validatePaginationQuery, executePaginatedQuery } from "../utils/pagination.js"
-
-const params = validatePaginationQuery(req.query, ["updated_at", "title"])
-const { data: todos, pagination } = await executePaginatedQuery(
-  model.count,
-  model.findManyPaginated,
-  { project_id: req.project.id },
-  params,
-  ["title"],
-)
-return res.json(apiResponse({ data: todos, pagination }))
-```
-
-**Model contract:** Models must expose `count(conditions, options)` and `findManyPaginated(conditions, options)` where options supports `{ search, searchColumns, limit, offset, orders }`. Search uses `ILIKE %term%` on specified columns.
-
-### Bulk Delete
-
-DELETE `/api/orgs/:org_id/projects/:project_id/todos?ids=id1,id2,id3` — comma-separated UUIDs in query string. Validated: max 50 IDs, each must be a valid UUID. Uses `removeMany(ids, conditions)` with `whereIn` for a single query instead of per-ID deletes.
-
-## Complete Endpoint Table
-
-### Public (no authentication)
-
-| Method | Path                                      | Controller                          | Auth                | Rate Limit          |
-| ------ | ----------------------------------------- | ----------------------------------- | ------------------- | ------------------- |
-| GET    | `/health`                                 | Inline handler                      | No                  | No (before limiter) |
-| POST   | `/api/auth/signup`                        | `authentication.signup`             | No                  | authLimiter         |
-| POST   | `/api/auth/signin`                        | `authentication.signin`             | No                  | authLimiter         |
-| GET    | `/api/auth/me`                            | `authentication.getMe`              | requireAccessToken  | authLimiter         |
-| POST   | `/api/auth/refresh`                       | `authentication.refreshAccessToken` | requireRefreshToken | authLimiter         |
-| POST   | `/api/auth/logout`                        | `authentication.logout`             | requireRefreshToken | authLimiter         |
-| GET    | `/api/invitations/:invitation_id/preview` | `invitations.previewInvitation`     | No — token in query | generalLimiter      |
-
-### Authenticated (requireAccessToken)
-
-**User-level (no org context):**
-
-| Method | Path                           | Controller                      | Permission |
-| ------ | ------------------------------ | ------------------------------- | ---------- |
-| GET    | `/api/invitations`             | `invitations.getMyInvitations`  | —          |
-| POST   | `/api/invitations/:id/accept`  | `invitations.acceptInvitation`  | —          |
-| POST   | `/api/invitations/:id/decline` | `invitations.declineInvitation` | —          |
-| GET    | `/api/permissions`             | `permissions.getPermissions`    | —          |
-
-**Organizations:**
-
-| Method | Path                | Controller                | Permission   |
-| ------ | ------------------- | ------------------------- | ------------ |
-| POST   | `/api/orgs`         | `organizations.createOrg` | —            |
-| GET    | `/api/orgs`         | `organizations.getOrgs`   | —            |
-| GET    | `/api/orgs/:org_id` | `organizations.getOrg`    | `org:read`   |
-| PUT    | `/api/orgs/:org_id` | `organizations.updateOrg` | `org:update` |
-| DELETE | `/api/orgs/:org_id` | `organizations.deleteOrg` | `org:delete` |
-
-**Org Members:**
-
-| Method | Path                                 | Controller                 | Permission           |
-| ------ | ------------------------------------ | -------------------------- | -------------------- |
-| GET    | `/api/orgs/:org_id/members`          | `members.getMembers`       | `org:read`           |
-| PUT    | `/api/orgs/:org_id/members/:user_id` | `members.updateMemberRole` | `org:manage_members` |
-| DELETE | `/api/orgs/:org_id/members/:user_id` | `members.removeMember`     | `org:manage_members` |
-
-**Roles:**
-
-| Method | Path                               | Controller         | Permission         |
-| ------ | ---------------------------------- | ------------------ | ------------------ |
-| POST   | `/api/orgs/:org_id/roles`          | `roles.createRole` | `org:manage_roles` |
-| GET    | `/api/orgs/:org_id/roles`          | `roles.getRoles`   | `org:read`         |
-| GET    | `/api/orgs/:org_id/roles/:role_id` | `roles.getRole`    | `org:read`         |
-| PUT    | `/api/orgs/:org_id/roles/:role_id` | `roles.updateRole` | `org:manage_roles` |
-| DELETE | `/api/orgs/:org_id/roles/:role_id` | `roles.deleteRole` | `org:manage_roles` |
-
-**Org Invitations:**
-
-| Method | Path                                                  | Controller                        | Permission           |
-| ------ | ----------------------------------------------------- | --------------------------------- | -------------------- |
-| POST   | `/api/orgs/:org_id/invitations`                       | `invitations.createOrgInvitation` | `invitations:create` |
-| GET    | `/api/orgs/:org_id/invitations`                       | `invitations.getOrgInvitations`   | `invitations:manage` |
-| DELETE | `/api/orgs/:org_id/invitations/:invitation_id`        | `invitations.revokeInvitation`    | `invitations:manage` |
-| POST   | `/api/orgs/:org_id/invitations/:invitation_id/resend` | `invitations.resendInvitation`    | `invitations:manage` |
-
-**Projects:**
-
-| Method | Path                                     | Controller               | Permission       |
-| ------ | ---------------------------------------- | ------------------------ | ---------------- |
-| POST   | `/api/orgs/:org_id/projects`             | `projects.createProject` | `project:create` |
-| GET    | `/api/orgs/:org_id/projects`             | `projects.getProjects`   | `project:read`   |
-| GET    | `/api/orgs/:org_id/projects/:project_id` | `projects.getProject`    | `project:read`   |
-| PUT    | `/api/orgs/:org_id/projects/:project_id` | `projects.updateProject` | `project:update` |
-| DELETE | `/api/orgs/:org_id/projects/:project_id` | `projects.deleteProject` | `project:delete` |
-
-**Project Members:**
-
-| Method | Path                                                      | Controller                 | Permission               |
-| ------ | --------------------------------------------------------- | -------------------------- | ------------------------ |
-| GET    | `/api/orgs/:org_id/projects/:project_id/members`          | `members.getMembers`       | `project:read`           |
-| PUT    | `/api/orgs/:org_id/projects/:project_id/members/:user_id` | `members.updateMemberRole` | `project:manage_members` |
-| DELETE | `/api/orgs/:org_id/projects/:project_id/members/:user_id` | `members.removeMember`     | `project:manage_members` |
-
-**Project Invitations:**
-
-| Method | Path                                                 | Controller                            | Permission           |
-| ------ | ---------------------------------------------------- | ------------------------------------- | -------------------- |
-| POST   | `/api/orgs/:org_id/projects/:project_id/invitations` | `invitations.createProjectInvitation` | `invitations:create` |
-
-**Todos:**
-
-| Method | Path                                                    | Controller          | Permission     |
-| ------ | ------------------------------------------------------- | ------------------- | -------------- |
-| GET    | `/api/orgs/:org_id/projects/:project_id/todos`          | `todos.getTodos`    | `todos:read`   |
-| POST   | `/api/orgs/:org_id/projects/:project_id/todos`          | `todos.createTodo`  | `todos:create` |
-| DELETE | `/api/orgs/:org_id/projects/:project_id/todos` (bulk)   | `todos.deleteTodos` | `todos:delete` |
-| GET    | `/api/orgs/:org_id/projects/:project_id/todos/:todo_id` | `todos.getTodo`     | `todos:read`   |
-| PUT    | `/api/orgs/:org_id/projects/:project_id/todos/:todo_id` | `todos.updateTodo`  | `todos:update` |
-| DELETE | `/api/orgs/:org_id/projects/:project_id/todos/:todo_id` | `todos.deleteTodo`  | `todos:delete` |
-
-## Model Catalog
-
-| File                 | Exports                                                                                                                                                             |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `users.js`           | `create`, `findOne`, `findOneWithPassword`, `incrementFailedAttempts`                                                                                               |
-| `refresh-tokens.js`  | `hashToken`, `create`, `findActiveByHash`, `revokeById`, `revokeAllForUser`, `purgeOld`                                                                             |
-| `organizations.js`   | `create`, `findOne`, `findManyByUserId`, `update`, `remove`                                                                                                         |
-| `org-members.js`     | `create`, `findOne`, `findManyByOrgId`, `findMemberWithPermissions`, `getPermissions`, `updateRole`, `remove`                                                       |
-| `projects.js`        | `create`, `findOne`, `findManyByOrgId`, `findManyByUserId`, `update`, `remove`                                                                                      |
-| `project-members.js` | `create`, `findOne`, `findManyByProjectId`, `getPermissions`, `updateRole`, `remove`                                                                                |
-| `roles.js`           | `create`, `findOne`, `findMany`, `update`, `remove`, `findPermissionsByRoleId`, `setPermissions`                                                                    |
-| `permissions.js`     | `findAll`, `findOne`, `findByIds`                                                                                                                                   |
-| `invitations.js`     | `hashToken`, `create`, `findOne`, `findManyByOrgId`, `findPendingByUserId`, `findPendingForScope`, `findOneWithTokenHash`, `linkInviteeByEmail`, `update`, `remove` |
-| `todos.js`           | `create`, `findOne`, `findMany`, `findManyPaginated`, `count`, `update`, `remove`, `removeMany`                                                                     |
-
-## Controller Catalog
-
-| File                | Exports                                                                                                                                                                                         |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `authentication.js` | `signup`, `signin`, `getMe`, `refreshAccessToken`, `logout`                                                                                                                                     |
-| `organizations.js`  | `createOrg`, `getOrgs`, `getOrg`, `updateOrg`, `deleteOrg`                                                                                                                                      |
-| `projects.js`       | `createProject`, `getProjects`, `getProject`, `updateProject`, `deleteProject`                                                                                                                  |
-| `todos.js`          | `requireTodoIdParam` (middleware), `getTodos`, `getTodo`, `createTodo`, `updateTodo`, `deleteTodo`, `deleteTodos`                                                                               |
-| `members.js`        | `getMembers`, `updateMemberRole`, `removeMember`                                                                                                                                                |
-| `roles.js`          | `createRole`, `getRoles`, `getRole`, `updateRole`, `deleteRole`                                                                                                                                 |
-| `permissions.js`    | `getPermissions`                                                                                                                                                                                |
-| `invitations.js`    | `createOrgInvitation`, `createProjectInvitation`, `getOrgInvitations`, `getMyInvitations`, `previewInvitation`, `acceptInvitation`, `declineInvitation`, `revokeInvitation`, `resendInvitation` |
-
-## Middleware Catalog
-
-| File                    | Exports                                     |
-| ----------------------- | ------------------------------------------- |
-| `request-id.js`         | `requestId`                                 |
-| `authorization.js`      | `requireAccessToken`, `requireRefreshToken` |
-| `resolve-org.js`        | `resolveOrg`                                |
-| `resolve-project.js`    | `resolveProject`                            |
-| `require-permission.js` | `requirePermission`                         |
-| `rate-limit.js`         | `authLimiter`, `generalLimiter`             |
-| `logger.js`             | `httpLogger`, `requestLogger`               |
-| `error.js`              | `errorHandler`, `notFoundHandler`           |
-
-**Note**: `cookie-parser` is also loaded as middleware (NPM package, not a custom file) to populate `req.cookies` for reading auth tokens from httpOnly cookies.
-
-## Utility Catalog
-
-| File                     | Exports                                                                                  |
-| ------------------------ | ---------------------------------------------------------------------------------------- |
-| `argon2.js`              | `hashPassword`, `verifyPassword`                                                         |
-| `jwt.js`                 | `generateAccessToken`, `generateRefreshToken`, `verifyAccessToken`, `verifyRefreshToken` |
-| `http-error.js`          | `HttpError` (default)                                                                    |
-| `response.js`            | `apiResponse` (default)                                                                  |
-| `pagination.js`          | `validatePaginationQuery`, `buildPaginationMeta`, `executePaginatedQuery`                |
-| `sanitize.js`            | `escapeIlike`                                                                            |
-| `constant.js`            | `HTTP_STATUS_CODE`, `HTTP_STATUS_MESSAGE`                                                |
-| `logger.js`              | `logger` (default, Winston instance)                                                     |
-| `validate-env.js`        | `validateEnv` (default)                                                                  |
-| `invitation-url.js`      | `buildInvitationAcceptUrl`                                                               |
-| `invitation-notifier.js` | `sendInvitationEmail` (the email seam — default implementation logs)                     |
-
-## Code Style
-
-- **Formatter**: Prettier — no semicolons, 2-space indent, 100 char width
-- **Linter**: Oxlint — correctness (error), suspicious (warn)
-- **File naming**: kebab-case (`http-error.js`, `validate-env.js`)
-- **UUIDs**: Use `crypto.randomUUID()` from `node:crypto` (not uuid package)
-- **Imports**: ES modules only. Models use named exports. Controllers imported as namespace (`import * as controller`)
-- **Responses**: Always use `apiResponse({ message, data, pagination })` from `src/utils/response.js`. Pass resource directly as `data` (object for single, array for list, `null` for delete/error). For paginated lists, pass the array as `data` and metadata as `pagination`.
-
-## Environment Variables
-
-Required: `DATABASE_URL`, `ACCESS_TOKEN_SECRET` (≥32 chars), `REFRESH_TOKEN_SECRET` (≥32 chars, must differ from ACCESS_TOKEN_SECRET), `JWT_ISSUER`, `JWT_AUDIENCE`
-
-Optional with defaults: `NODE_ENV` (development), `PORT` (3000), `ACCESS_TOKEN_EXPIRES_IN` (15m), `REFRESH_TOKEN_EXPIRES_IN` (7d), `LOG_LEVEL` (info), `LOG_TO_FILE` (true), `CORS_ALLOWED_ORIGINS` (http://localhost:8080), `APP_BASE_URL` (http://localhost:8080), `RATE_LIMIT_AUTH_MAX` (10, capped at 50), `RATE_LIMIT_GENERAL_MAX` (100)
-
-`APP_BASE_URL` is the public origin of the SPA and is the base of every invitation accept link. The default is only correct for `corepack pnpm dev`; it **must** be set explicitly in production (`https://app.<DOMAIN>`) or invitation links point at localhost. See [`docs/invitation-flow.md`](../../docs/invitation-flow.md) for per-environment values.
+One step it **does** require: a response class only reaches `components.schemas` if it is listed in
+the `extraModels` array passed to `SwaggerModule.createDocument` in `configureApp`. Generic
+interfaces erase at runtime, so a class referenced only through `Payload<T>` is invisible to the
+scanner. Adding a response class without adding it there yields a document that silently omits its
+schema.
 
 ## Database
 
-- **Config**: `knexfile.js` — connection pool min 2, max 10
-- **Migrations**: `database/migrations/` — format `YYYYMMDDHHMMSS_name.js`
-  - 11 migration files: users, organizations, permissions, roles, role_permissions, org_members, projects, project_members, invitations, todos, refresh_tokens
-  - `invitations.inviter_id` is `NOT NULL` with an `ON DELETE RESTRICT` FK — `SET NULL` would contradict the not-null constraint. Migrations never run automatically — apply them explicitly on every environment.
-- **Seeds**: `database/seeds/` — 9 seed files:
-  - 01: 16 system permissions
-  - 02: 5 test users (password: "secretpassword", unique emails used as login)
-  - 03: 2 organizations (Acme Corp, Globex Corporation)
-  - 04: 8 system roles (4 per org: owner/admin/member/viewer)
-  - 05: Role-permission mappings
-  - 06: 7 org memberships
-  - 07: 3 projects
-  - 08: 8 project memberships
-  - 09: ~250 project-scoped todos
-- Tables use `timestamps(true, true)` for timezone-aware created_at/updated_at
-- Organizations cascade delete to projects, todos, members, invitations
-- Projects cascade delete to todos, project_members
-- Roles are org-scoped with UNIQUE(org_id, name)
-
-## Adding a New Resource
-
-1. Migration: `npm run migrate:make create_<resource>_table` — include `org_id` or `project_id` foreign key for tenant scoping
-2. Model: `src/models/<resource>.js` — CRUD with tenant-scoped conditions
-3. Controller: `src/controllers/<resource>.js` — Use `req.org.id` / `req.project.id` for scoping, Joi validation inline
-4. Routes: `src/routes/<resource>.js` — Use `Router({ mergeParams: true })` for nested routes, apply `requirePermission()` guards
-5. Wire up in parent route file (e.g., `src/routes/projects.js` for project-scoped resources)
-6. Add permissions to `database/seeds/01_permissions.js` and update role mappings in `05_role_permissions.js`
+- **Schema**: `prisma/schema.prisma` — the domain models (`@map`/`@@map` keep the DB snake_case). `DATABASE_URL` drives the connection. `grep '^model ' prisma/schema.prisma` for the current set.
+- **Role FKs**: `OrgMember.role` and `ProjectMember.role` use `onDelete: Restrict`, not `Cascade` — deleting a role that is still assigned must not silently strip memberships. `RolesService` maps the resulting `P2003`/`P2014` to `400 "Cannot delete a role that is in use"`.
+- **Migrations**: `prisma/migrations/` — `prisma migrate deploy` (prod) / `prisma migrate dev` (dev). Never automatic.
+- **Seed**: `prisma/seed.ts` — idempotent upsert of the canonical permissions (`prisma db seed`), wired through `prisma.config.ts`'s `seed` field.
+- **Dependency placement (deliberate)**: `prisma` and `dotenv` are **production** dependencies — the runtime image runs `prisma migrate deploy`/`prisma db seed`, and `prisma.config.ts` imports `dotenv/config` at runtime, so neither may move to `devDependencies`. `express` is a direct dependency because `bootstrap.ts` imports the `json`/`urlencoded` values from it rather than through `@nestjs/platform-express`. The auto-generated banner in `prisma.config.ts` suggesting `--save-dev` is wrong for this image — do not "fix" it.
 
 ## Testing
 
-- **Runner**: Vitest with `globals: true` (no explicit `describe`/`it` imports needed)
-- **HTTP**: Supertest for integration tests against the Express app
-- **Database**: Real PostgreSQL test database (configured in `.env.test`)
-- **Config**: `vitest.config.js` — `fileParallelism: false` (integration tests share DB state), `testTimeout`/`hookTimeout` 30s (these tests do real Argon2 hashing against real PostgreSQL; the previous 10s ceiling caused non-deterministic cold-start timeouts)
-- **Setup**: `tests/global-setup.js` — loads `.env.test`, validates env, runs migrations, truncates all tables, seeds permissions; returns teardown function
-- **Helpers**: `tests/helpers.js`:
-  - `getApp()`, `request()` — app bootstrapping
-  - `createTestUser()`, `getAuthCookies()` — authentication (returns Cookie header from httpOnly cookie-based signin)
-  - `createTestOrg()` — creates org with system roles, adds creator as owner
-  - `createTestProject()` — creates project within org, adds creator as member
-  - `addOrgMember()`, `addProjectMember()` — membership setup
-  - `cleanAllTables()` — truncates all tables except permissions
-  - `seedPermissions()` — seeds 16 system permissions (called once in global setup)
-- **Structure**: `tests/unit/` for pure logic, `tests/integration/` for HTTP endpoints
-- **Coverage**:
-  - Unit: `http-error.test.js`, `pagination.test.js`, `request-id.test.js`, `sanitize.test.js`
-  - Integration: `health.test.js`, `auth.test.js`, `todos.test.js`, `organizations.test.js`, `projects.test.js`, `permissions.test.js`, `invitations.test.js`
-  - Not tested: projects CRUD (`projects.test.js` only covers list visibility), roles CRUD, member management, rate limiting, and every middleware except `request-id`
-- **Convention**: Each integration test file calls `cleanAllTables()` in `beforeEach` or `afterEach`. Permissions persist across tests (seeded once in global setup).
+How to run the suites is in [`README.md`](README.md#testing). The traps:
+
+**Three tiers, selected by filename suffix alone.** There is no exclusion list; `testPathIgnorePatterns` was removed once the suffixes carried the distinction.
+
+| Tier        | Suffix         | Config                | `testRegex`                     | Needs              |
+| ----------- | -------------- | --------------------- | ------------------------------- | ------------------ |
+| Unit        | `.spec.ts`     | `test/jest-unit.json` | `\.spec\.ts$`                   | nothing external   |
+| Integration | `.int-spec.ts` | `test/jest-e2e.json`  | `(\.e2e-spec\|\.int-spec)\.ts$` | PostgreSQL + Redis |
+| End-to-end  | `.e2e-spec.ts` | `test/jest-e2e.json`  | `(\.e2e-spec\|\.int-spec)\.ts$` | PostgreSQL + Redis |
+
+- **The two configs select disjoint sets.** `.int-spec.ts` and `.e2e-spec.ts` do not end in `.spec.ts`, so no file runs in both tiers and the two counts may be added. Renaming a spec moves it between tiers with no config edit — which is the point, and also means a mistyped suffix silently drops a file from both tiers rather than failing.
+- Unit specs live beside the code they cover; integration specs mostly do too. `test/` holds the e2e specs, the shared helpers, and the two configs.
+- **PostgreSQL has no automatic per-test reset.** `test/setup-e2e.ts` is a Jest `globalSetup`: it applies migrations and seeds the permissions (re-exporting `seedPermissions` from `prisma/seed.ts` so suites share one implementation) **once** per run. It also exports `truncateAll`, which each spec calls itself — a spec that omits the call leaks rows into the next one.
+- **Redis _is_ reset before every test.** `test/reset-redis-state.ts` is registered as `setupFilesAfterEnv` in `test/jest-e2e.json`, so its `beforeEach` is a root hook covering every test in every suite in the tier. It calls `flushRedis`, which issues `flushdb` (not `flushall`), and `.env.test` pins the connection to **database 1** so the blast radius is exactly the data the run owns. This exists because throttle counters and BullMQ job hashes are process-external: without it a full e2e pass exceeds `RATE_LIMIT_AUTH_MAX`, which is Joi-capped at 50 and so cannot simply be raised in `.env.test`. It flushes the whole db rather than matching key patterns because a pattern list must be kept in step with two libraries' key layouts — a renamed key would stop matching and nothing would fail until an unrelated suite did.
+- **Style**: boot the actual NestJS app (`test/create-test-app.ts`) and drive it with Supertest.
+
+## Code Style
+
+- **UUIDs**: `randomUUID()` imported from `crypto`.
+- **Responses**: return `{ message, data, pagination? }`; the global `TransformInterceptor` normalizes it. Do not build responses by hand.
+- **No barrel files** inside `src/` — see [No barrel files](#no-barrel-files).
+- **Imports cross directories by alias**, not by `../../..` — see [Path aliases](#path-aliases).
+- **`noUncheckedIndexedAccess` is on.** An indexed read is `T | undefined`; narrow it. Never silence it with a non-null `!` or an `as` cast — those turn a compile-time signal into a runtime `TypeError` at a distance from the cause.

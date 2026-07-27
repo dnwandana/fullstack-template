@@ -5,7 +5,11 @@ import { clearUserData } from "./storage"
 // Config
 // ---------------------------------------------------------------------------
 
-export const baseURL = import.meta.env.VITE_API_BASE_URL
+// The version lives here and only here. Every request URL is `${baseURL}${url}`,
+// so prefixing call sites instead would break NO_RETRY_ENDPOINTS /
+// NO_REDIRECT_ENDPOINTS below — those match the bare endpoint argument, and a
+// missed NO_RETRY match turns a 401 on signin into a refresh/retry loop.
+export const baseURL = `${import.meta.env.VITE_API_BASE_URL}/v1`
 
 const DEFAULT_TIMEOUT = 10000
 

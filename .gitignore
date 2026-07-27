@@ -12,8 +12,10 @@ node_modules/
 
 # Coding agents
 .agents/
+.superpowers/
 docs/
 skills-lock.json
+claude-design/
 
 # Environment files
 .env

@@ -1,8 +1,27 @@
 packages:
   - "apps/*"
+  - "packages/*"
+# Turns the `engines.node` field in every workspace package.json into a hard gate: pnpm exits
+# non-zero on an older Node instead of warning and installing anyway. Node 24 is a real floor —
+# prisma.config.ts seeds via `node prisma/seed.ts` and native type-stripping — so a warning that
+# scrolls past leaves a confusing syntax error at seed time as the first real symptom.
+# pnpm reads this here, not from `.npmrc`; the npm-era `engine-strict` key is silently ignored.
+engineStrict: true
 allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  # Transitive dep of @nestjs/swagger. Its postinstall is anonymous usage telemetry —
+  # nothing needs it to build or run, so it stays denied.
+  '@scarf/scarf': false
   argon2: true
   core-js: true
   esbuild: true
+  # Optional native accelerator pulled in by bullmq -> msgpackr. msgpackr falls back
+  # to its pure-JS packer when the binding is absent, so denying the node-gyp build
+  # costs a little serialization speed on a low-volume notification queue and keeps a
+  # compiler out of the production image. Flip to true if the queue ever gets hot.
+  msgpackr-extract: false
+  prisma: true
+  unrs-resolver: true
 minimumReleaseAgeExclude:
   - pnpm@11.11.0

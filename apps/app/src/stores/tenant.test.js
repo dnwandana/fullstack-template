@@ -158,7 +158,9 @@ describe("tenant store", () => {
         if (url === "/orgs") return Promise.resolve({ data: { data: ORGS } })
         if (url.endsWith("/members")) return Promise.resolve({ data: { data: MEMBERS } })
         if (url.includes("/roles/"))
-          return Promise.resolve({ data: { data: { ...ROLE, permissions: [{ name: "org:read" }] } } })
+          return Promise.resolve({
+            data: { data: { ...ROLE, permissions: [{ name: "org:read" }] } },
+          })
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })
 

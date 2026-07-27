@@ -26,6 +26,22 @@ export function getRole(orgId, roleId) {
 }
 
 /**
+ * Remap the form-layer `permissions` key to the API's `permission_ids`
+ * contract. `permissions` already holds an array of permission UUID
+ * strings (not objects) — only the key name needs to change. Omitted
+ * entirely when not provided, so callers that don't touch permissions
+ * (e.g. renaming a role) never send a spurious key.
+ * @param {Object} data - Role data as emitted by the form layer
+ * @param {string} data.name - Role name
+ * @param {string} [data.description] - Optional role description
+ * @param {string[]} [data.permissions] - Array of permission UUIDs to assign
+ * @returns {Object} Request body matching the API's DTO contract
+ */
+function toRequestBody({ permissions, ...rest }) {
+  return permissions === undefined ? rest : { ...rest, permission_ids: permissions }
+}
+
+/**
  * Create a new custom role in an organization
  * @param {string} orgId - Organization UUID
  * @param {Object} data - Role data
@@ -35,7 +51,7 @@ export function getRole(orgId, roleId) {
  * @returns {Promise} API response with created role data
  */
 export function createRole(orgId, data) {
-  return request.post(`/orgs/${orgId}/roles`, data)
+  return request.post(`/orgs/${orgId}/roles`, toRequestBody(data))
 }
 
 /**
@@ -49,7 +65,7 @@ export function createRole(orgId, data) {
  * @returns {Promise} API response with updated role data
  */
 export function updateRole(orgId, roleId, data) {
-  return request.put(`/orgs/${orgId}/roles/${roleId}`, data)
+  return request.put(`/orgs/${orgId}/roles/${roleId}`, toRequestBody(data))
 }
 
 /**

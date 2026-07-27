@@ -15,14 +15,6 @@
     "__filename": "readonly",
     "global": "readonly"
   },
-  "overrides": [
-    {
-      "files": ["knexfile.js"],
-      "rules": {
-        "no-console": "off"
-      }
-    }
-  ],
   "ignorePatterns": [
     "node_modules/**",
     "dist/**",

@@ -60,6 +60,52 @@ describe("members store — permission cache invalidation (finding 3)", () => {
     })
   })
 
+  describe("in-place membership update (L-26)", () => {
+    const orgRow = (over = {}) => ({
+      user_id: "u2",
+      org_id: "o1",
+      role_id: "r1",
+      joined_at: "2026-07-01T00:00:00.000Z",
+      name: "Two",
+      email: "two@x.io",
+      role_name: "member",
+      ...over,
+    })
+
+    it("splices the returned org membership into the list without refetching", async () => {
+      const members = useMembersStore()
+      request.get.mockResolvedValue({ data: { data: [orgRow(), orgRow({ user_id: "u1" })] } })
+      await members.fetchOrgMembers("o1")
+      expect(request.get).toHaveBeenCalledTimes(1)
+
+      const updated = orgRow({ role_id: "r2", role_name: "admin" })
+      request.put.mockResolvedValue({ data: { message: "OK", data: updated } })
+      await members.updateOrgMemberRole("o1", "u2", "r2")
+
+      expect(request.get).toHaveBeenCalledTimes(1)
+      expect(members.orgMembers).toHaveLength(2)
+      expect(members.orgMembers[0]).toEqual(updated)
+    })
+
+    it("splices the returned project membership into the list without refetching", async () => {
+      const projectRow = (over = {}) => {
+        const { org_id: _org, ...row } = orgRow(over)
+        return { ...row, project_id: "p1" }
+      }
+      const members = useMembersStore()
+      request.get.mockResolvedValue({ data: { data: [projectRow()] } })
+      await members.fetchProjectMembers("o1", "p1")
+      expect(request.get).toHaveBeenCalledTimes(1)
+
+      const updated = projectRow({ role_id: "r2", role_name: "admin" })
+      request.put.mockResolvedValue({ data: { message: "OK", data: updated } })
+      await members.updateProjectMemberRole("o1", "p1", "u2", "r2")
+
+      expect(request.get).toHaveBeenCalledTimes(1)
+      expect(members.projectMembers).toEqual([updated])
+    })
+  })
+
   describe("updateProjectMemberRole", () => {
     it("invalidates the cache when the current user's own project role changes", async () => {
       // Roles are org-scoped even when assigned to a project member (roles.org_id

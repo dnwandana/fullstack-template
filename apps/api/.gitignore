@@ -18,6 +18,7 @@ node_modules/
 .env
 .env.*
 !.env.example
+!.env.test.example
 
 # Build output
 dist/
@@ -32,3 +33,9 @@ Thumbs.db
 
 # Prettier cache
 .prettiercache
+
+# NestJS/Prisma build artifacts
+node_modules/.prisma/
+prisma/*.db
+
+/generated/prisma
