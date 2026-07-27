@@ -9,16 +9,14 @@
       { "astTransformers": { "before": ["<rootDir>/test/swagger-plugin.transformer.js"] } }
     ]
   },
+  "moduleNameMapper": {
+    "^@core/(.*)$": "<rootDir>/src/core/$1",
+    "^@shared/(.*)$": "<rootDir>/src/shared/$1",
+    "^@modules/(.*)$": "<rootDir>/src/modules/$1",
+    "^@tenancy/(.*)$": "<rootDir>/src/tenancy/$1",
+    "^@test/(.*)$": "<rootDir>/test/$1",
+    "^@app/(.*)$": "<rootDir>/src/$1"
+  },
   "setupFiles": ["<rootDir>/test/load-test-env.ts"],
-  "testPathIgnorePatterns": [
-    "/node_modules/",
-    "membership.spec.ts",
-    "org-creation.spec.ts",
-    "cleanup.spec.ts",
-    "seed.spec.ts",
-    "users.spec.ts",
-    "refresh-token.spec.ts",
-    "password-reset.spec.ts"
-  ],
   "testTimeout": 10000
 }

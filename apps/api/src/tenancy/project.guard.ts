@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common"
 import { Request } from "express"
-import { isUuid } from "../common/uuid"
+import { isUuid } from "@shared/utils/uuid"
 import { MembershipService } from "./membership.service"
 
 @Injectable()

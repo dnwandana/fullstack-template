@@ -14,9 +14,18 @@
     "incremental": true,
     "skipLibCheck": true,
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "paths": {
+      "@core/*": ["src/core/*"],
+      "@shared/*": ["src/shared/*"],
+      "@modules/*": ["src/modules/*"],
+      "@tenancy/*": ["src/tenancy/*"],
+      "@test/*": ["test/*"],
+      "@app/*": ["src/*"]
+    }
   },
   "include": ["src/**/*", "test/**/*"],
   "exclude": ["node_modules", "dist"]

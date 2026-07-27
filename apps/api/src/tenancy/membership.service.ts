@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common"
-import { PrismaService } from "../prisma/prisma.service"
+import { PrismaService } from "@core/database/prisma.service"
 
 // PERFORMANCE SEAM: every org-scoped request costs 2 queries here (resolveOrg)
 // and project-scoped requests 2 more (resolveProject) — it is the hot path

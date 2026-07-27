@@ -1,5 +1,5 @@
 import { applyDecorators, UseGuards } from "@nestjs/common"
-import { RequirePermission } from "../common/decorators/require-permission.decorator"
+import { RequirePermission } from "@shared/decorators/require-permission.decorator"
 import { OrgGuard } from "./org.guard"
 import { ProjectGuard } from "./project.guard"
 import { PermissionsGuard } from "./permissions.guard"

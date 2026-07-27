@@ -14,12 +14,12 @@
 const plugin = require("@nestjs/swagger/plugin")
 
 module.exports.name = "nestjs-swagger-plugin"
-module.exports.version = 1
+module.exports.version = 2
 
 // Keep these in sync with nest-cli.json#compilerOptions.plugins — a divergence would mean
 // the document under test is not the document that ships.
 module.exports.factory = (compiler) =>
   plugin.before(
-    { introspectComments: true, dtoFileNameSuffix: [".dto.ts"] },
+    { introspectComments: true, dtoFileNameSuffix: [".dto.ts", ".response.ts"] },
     compiler.program ?? compiler.languageService?.getProgram(),
   )
