@@ -12,9 +12,8 @@ export class OrgResponse implements Org {
   @ApiProperty({ format: "date-time" }) updated_at!: Date
 }
 
-// The return annotation is the guard: `toSnakeKeys<OrgRow>` produces
-// `SnakeKeys<OrgRow>`, so widening ORG_SELECT without updating OrgResponse
-// stops compiling here instead of silently changing the public API.
+// The return annotation is the guard: widening ORG_SELECT without updating
+// OrgResponse stops compiling here instead of silently changing the public API.
 export function toOrgResponse(row: OrgRow): OrgResponse {
   return toSnakeKeys<OrgRow>(row)
 }

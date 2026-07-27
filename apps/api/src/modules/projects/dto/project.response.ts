@@ -13,8 +13,7 @@ export class ProjectResponse implements Project {
   @ApiProperty({ format: "date-time" }) updated_at!: Date
 }
 
-// The return annotation is the guard: `toSnakeKeys<ProjectRow>` produces
-// `SnakeKeys<ProjectRow>`, so widening PROJECT_SELECT without updating
+// The return annotation is the guard: widening PROJECT_SELECT without updating
 // ProjectResponse stops compiling here instead of silently changing the public API.
 export function toProjectResponse(row: ProjectRow): ProjectResponse {
   return toSnakeKeys<ProjectRow>(row)

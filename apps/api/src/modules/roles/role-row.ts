@@ -1,6 +1,7 @@
-// One projection for every role response — the list endpoint returning fewer
-// fields than the detail endpoint was accidental drift (L-27), and description
-// is what a role-picker UI renders.
+/**
+ * One projection for every role response — list returning fewer fields than detail
+ * was accidental drift (L-27), and `description` is what a role-picker UI renders.
+ */
 export const ROLE_SELECT = {
   id: true,
   orgId: true,
@@ -11,6 +12,7 @@ export const ROLE_SELECT = {
   updatedAt: true,
 } as const
 
+/** Shared by the list and detail paths so both emit an identical permission shape. */
 export const PERMISSION_SELECT = {
   id: true,
   name: true,
@@ -19,6 +21,7 @@ export const PERMISSION_SELECT = {
   description: true,
 } as const
 
+/** The row `ROLE_SELECT` produces; `toRoleResponse` adds `permissions` on top. */
 export type RoleRow = {
   id: string
   orgId: string

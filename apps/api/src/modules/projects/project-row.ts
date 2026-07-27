@@ -1,7 +1,8 @@
-// The Prisma selection and the row type it produces, kept together so a change to
-// one is visibly a change to the other. `toProjectResponse` maps this to the wire
-// contract; if these drift apart, that mapper stops compiling — which is the
-// entire point of declaring the response type separately.
+/**
+ * The Prisma selection and the row type it produces, kept together so a change to one is
+ * visibly a change to the other: `toProjectResponse` maps this to the wire contract, so
+ * drifting them apart stops that mapper compiling instead of changing the public API.
+ */
 export const PROJECT_SELECT = {
   id: true,
   orgId: true,
@@ -12,6 +13,7 @@ export const PROJECT_SELECT = {
   updatedAt: true,
 } as const
 
+/** What `PROJECT_SELECT` returns — the input side of `toProjectResponse`. */
 export type ProjectRow = {
   id: string
   orgId: string

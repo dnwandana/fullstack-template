@@ -1,7 +1,7 @@
-// The Prisma selection and the row type it produces, kept together so a change to
-// one is visibly a change to the other. `toOrgResponse` maps this to the wire
-// contract; if these drift apart, that mapper stops compiling — which is the
-// entire point of declaring the response type separately.
+/**
+ * Kept beside `OrgRow` so a change to one is visibly a change to the other: if the
+ * two drift apart, `toOrgResponse` stops compiling.
+ */
 export const ORG_SELECT = {
   id: true,
   name: true,
@@ -11,6 +11,7 @@ export const ORG_SELECT = {
   updatedAt: true,
 } as const
 
+/** The row `ORG_SELECT` produces; `OrgResponse` is its snake_case wire form. */
 export type OrgRow = {
   id: string
   name: string

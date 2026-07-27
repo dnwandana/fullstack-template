@@ -10,13 +10,14 @@ import { PermissionResponse, RoleResponse, toRoleResponse } from "./dto/role.res
 const isUniqueViolation = (err: unknown): boolean =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
 
-// P2003 is the raw foreign-key rejection Postgres raises (SQLSTATE 23503) when a
-// RESTRICT/NO ACTION reference still points at the row being deleted. P2014 is the
-// same condition detected by Prisma itself as a required-relation violation.
+// P2003 is Postgres's raw FK rejection (SQLSTATE 23503) when a RESTRICT reference
+// still points at the row being deleted; P2014 is Prisma detecting the same
+// condition itself as a required-relation violation.
 const isForeignKeyViolation = (err: unknown): boolean =>
   err instanceof Prisma.PrismaClientKnownRequestError &&
   (err.code === "P2003" || err.code === "P2014")
 
+/** Custom role CRUD within one org. System roles are read-only through it. */
 @Injectable()
 export class RolesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -40,6 +41,10 @@ export class RolesService {
     })
   }
 
+  /**
+   * Every role in the org, name-ascending, each carrying the same permission
+   * projection `findOne` returns — list and detail must not drift.
+   */
   async findByOrg(orgId: string): Promise<RoleResponse[]> {
     const rows = await this.prisma.role.findMany({
       where: { orgId },
@@ -49,8 +54,8 @@ export class RolesService {
       },
       orderBy: { name: "asc" },
     })
-    // Destructure the relation off before mapping — nested objects must not
-    // reach the shallow key mapper.
+    // Destructure the relation off first: the key mapper is shallow and must never
+    // see a nested object.
     return rows.map(({ rolePermissions, ...cols }) =>
       toRoleResponse(
         cols,
@@ -59,6 +64,7 @@ export class RolesService {
     )
   }
 
+  /** Throws `404` when the role exists but belongs to another org. */
   async findOne(orgId: string, roleId: string): Promise<RoleResponse> {
     const role = await this.prisma.role.findFirst({
       where: { id: roleId, orgId },
@@ -68,6 +74,7 @@ export class RolesService {
     return toRoleResponse(role, await this.permissionsOf(roleId))
   }
 
+  /** Throws `400` for a duplicate name or an unknown permission id, never a `500`. */
   async create(orgId: string, dto: CreateRoleDto): Promise<RoleResponse> {
     const permissionIds = await this.assertPermissionsExist(dto.permission_ids)
     try {
@@ -96,6 +103,10 @@ export class RolesService {
     }
   }
 
+  /**
+   * Throws `400` for a system role or a duplicate name. `permission_ids`, when
+   * given, wholly replaces the role's grants rather than merging into them.
+   */
   async update(orgId: string, roleId: string, dto: UpdateRoleDto): Promise<RoleResponse> {
     const role = await this.prisma.role.findFirst({
       where: { id: roleId, orgId },
@@ -131,13 +142,16 @@ export class RolesService {
     }
   }
 
+  /**
+   * Throws `400` for a system role, and for one still assigned to any org or
+   * project member — deleting a role must never strip memberships.
+   */
   async remove(orgId: string, roleId: string): Promise<void> {
     try {
       await this.prisma.$transaction(async (tx) => {
         // Same org-level advisory lock the member-management paths take, so a role
-        // assignment racing this delete cannot slip past the in-use count below.
-        // The member role FKs are RESTRICT, which closes the remaining window
-        // against paths that never take the lock (see the catch below).
+        // assignment racing this delete cannot slip past the in-use count below. Paths
+        // that never take the lock are closed by the RESTRICT FKs — see the catch.
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${orgId}))::text`
         const role = await tx.role.findFirst({
           where: { id: roleId, orgId },
@@ -154,10 +168,9 @@ export class RolesService {
         await tx.role.delete({ where: { id: roleId } })
       })
     } catch (err) {
-      // The advisory lock narrows the in-use race but does not close it for callers
-      // that never take the lock; the RESTRICT FKs do. Translate that DB-level
-      // rejection into the same 400 the fast-path count check produces, so both
-      // paths look identical to clients instead of leaking a 500.
+      // `OrgMember.role`/`ProjectMember.role` are `onDelete: Restrict`, so deleting an
+      // in-use role cannot silently strip memberships. Map that rejection to the same
+      // 400 the fast-path count check produces, so neither path leaks a 500.
       if (isForeignKeyViolation(err)) {
         throw new BadRequestException("Cannot delete a role that is in use")
       }

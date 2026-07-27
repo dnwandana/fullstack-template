@@ -7,10 +7,12 @@ import { CurrentUser } from "@shared/decorators/current-user.decorator"
 import { CurrentOrg } from "@shared/decorators/current-org.decorator"
 import { OrgScoped } from "@tenancy/scoped.decorators"
 
+/** Org CRUD. `create` and `list` are the only routes not `@OrgScoped` — no org exists yet. */
 @Controller("orgs")
 export class OrgsController {
   constructor(private readonly orgs: OrgsService) {}
 
+  // Also creates the org's four system roles and the caller's owner membership.
   @Post()
   async create(
     @CurrentUser("id") userId: string,
@@ -20,12 +22,14 @@ export class OrgsController {
     return { message: "Created", data }
   }
 
+  // Orgs the caller is a member of, newest first — not every org.
   @Get()
   async list(@CurrentUser("id") userId: string): Promise<Payload<OrgResponse[]>> {
     const data = await this.orgs.findManyByUserId(userId)
     return { message: "OK", data }
   }
 
+  // `OrgGuard` already 404s an unknown org, so the `null` arm is unreachable in practice.
   @Get(":org_id")
   @OrgScoped("org:read")
   async read(@CurrentOrg() org: { id: string }): Promise<Payload<OrgResponse | null>> {

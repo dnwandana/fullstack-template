@@ -9,10 +9,14 @@ import { CurrentPermissions } from "@shared/decorators/current-permissions.decor
 import { CurrentProject } from "@shared/decorators/current-project.decorator"
 import { OrgScoped, ProjectScoped } from "@tenancy/scoped.decorators"
 
+/** Org-scoped project CRUD; `list` is the only route whose visible set varies by permission. */
 @Controller("orgs/:org_id/projects")
 export class ProjectsController {
   constructor(private readonly projects: ProjectsService) {}
 
+  // Every project in the org when the caller holds `project:read_all`, otherwise only the ones
+  // they belong to. Visibility keys off the permission, never a role name — a custom role
+  // granted it behaves like owner/admin. Do not reintroduce the old `ADMIN_ROLES` check.
   @Get()
   @OrgScoped("project:read")
   async list(
@@ -20,8 +24,6 @@ export class ProjectsController {
     @CurrentOrg() org: { id: string },
     @CurrentPermissions() permissions: string[],
   ): Promise<Payload<ProjectResponse[]>> {
-    // Visibility keys off a permission, not a role name: a custom role granted
-    // project:read_all sees the whole org, exactly like owner/admin do.
     const data = permissions.includes("project:read_all")
       ? await this.projects.findManyByOrgId(org.id)
       : await this.projects.findManyByUserId(org.id, userId)

@@ -6,10 +6,16 @@ import { SYSTEM_ROLE_NAMES, SYSTEM_ROLE_PERMISSIONS } from "./system-roles"
 import { ORG_SELECT } from "./org-row"
 import { OrgResponse, toOrgResponse } from "./dto/org.response"
 
+/** Org CRUD. Creation is the only path that mints roles and memberships. */
 @Injectable()
 export class OrgsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Creates the org, the four system roles in `SYSTEM_ROLE_NAMES`, and the caller's
+   * owner membership in one transaction. Throws if any name in
+   * `SYSTEM_ROLE_PERMISSIONS` has no row in the permissions table.
+   */
   async createWithSystemRoles(userId: string, dto: OrgBodyDto): Promise<OrgResponse> {
     const org = await this.prisma.$transaction(async (tx) => {
       const created = await tx.organization.create({
@@ -38,9 +44,9 @@ export class OrgsService {
           select: { id: true },
         })
         if (roleName === "owner") ownerRoleId = role.id
-        // Fail loudly on drift between SYSTEM_ROLE_PERMISSIONS and the permissions
-        // table — silently skipping a name would mint roles with missing grants
-        // for every org created afterwards. The transaction rolls back cleanly.
+        // Fail loudly on drift from the permissions table: skipping a name would mint
+        // roles with missing grants for every org created afterwards. The transaction
+        // rolls back cleanly.
         const permissionIds = SYSTEM_ROLE_PERMISSIONS[roleName].map((n) => {
           const id = permIdByName.get(n)
           if (!id) throw new Error(`Unknown permission "${n}" for system role "${roleName}"`)
@@ -57,6 +63,7 @@ export class OrgsService {
     return toOrgResponse(org)
   }
 
+  /** Orgs the user is a member of, newest first — not every org. */
   async findManyByUserId(userId: string): Promise<OrgResponse[]> {
     const rows = await this.prisma.organization.findMany({
       where: { orgMembers: { some: { userId } } },
@@ -66,6 +73,7 @@ export class OrgsService {
     return rows.map((row) => toOrgResponse(row))
   }
 
+  /** Returns `null` for an unknown id rather than throwing. */
   async findById(orgId: string): Promise<OrgResponse | null> {
     const org = await this.prisma.organization.findUnique({
       where: { id: orgId },
@@ -74,6 +82,7 @@ export class OrgsService {
     return org ? toOrgResponse(org) : null
   }
 
+  /** Prisma's `P2025` on an unknown id becomes a `404` via `AllExceptionsFilter`. */
   async update(orgId: string, dto: OrgBodyDto): Promise<OrgResponse> {
     const org = await this.prisma.organization.update({
       where: { id: orgId },
@@ -83,6 +92,7 @@ export class OrgsService {
     return toOrgResponse(org)
   }
 
+  /** Idempotent: `deleteMany` makes deleting an unknown org a no-op, not a `404`. */
   async remove(orgId: string): Promise<void> {
     await this.prisma.organization.deleteMany({ where: { id: orgId } })
   }

@@ -5,10 +5,15 @@ import { ProjectBodyDto } from "./dto/project-body.dto"
 import { PROJECT_SELECT } from "./project-row"
 import { ProjectResponse, toProjectResponse } from "./dto/project.response"
 
+/**
+ * Project CRUD. Which of the two list methods to call is the caller's decision: it turns on
+ * `project:read_all`, which only the request context knows.
+ */
 @Injectable()
 export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Every project in the org — the caller must have confirmed `project:read_all` first. */
   async findManyByOrgId(orgId: string): Promise<ProjectResponse[]> {
     const rows = await this.prisma.project.findMany({
       where: { orgId },
@@ -18,6 +23,7 @@ export class ProjectsService {
     return rows.map((row) => toProjectResponse(row))
   }
 
+  /** Only the projects this user is a member of, which is the default visibility. */
   async findManyByUserId(orgId: string, userId: string): Promise<ProjectResponse[]> {
     const rows = await this.prisma.project.findMany({
       where: { orgId, projectMembers: { some: { userId } } },
@@ -27,6 +33,10 @@ export class ProjectsService {
     return rows.map((row) => toProjectResponse(row))
   }
 
+  /**
+   * Also adds the creator as a project member, in the same transaction, carrying their org-level
+   * role across. A creator with no org membership gets the project but no membership row.
+   */
   async create(orgId: string, userId: string, dto: ProjectBodyDto): Promise<ProjectResponse> {
     const project = await this.prisma.$transaction(async (tx) => {
       const created = await tx.project.create({
@@ -39,7 +49,7 @@ export class ProjectsService {
         },
         select: PROJECT_SELECT,
       })
-      // Add the creator as a project member with their org-level role.
+      // Creator joins with their org-level role; no org membership means no project row.
       const orgMembership = await tx.orgMember.findUnique({
         where: { userId_orgId: { userId, orgId } },
         select: { roleId: true },
@@ -62,6 +72,7 @@ export class ProjectsService {
     return project ? toProjectResponse(project) : null
   }
 
+  /** Full replace: a `description` omitted from the body is written back as null. */
   async update(projectId: string, dto: ProjectBodyDto): Promise<ProjectResponse> {
     const project = await this.prisma.project.update({
       where: { id: projectId },
@@ -71,6 +82,7 @@ export class ProjectsService {
     return toProjectResponse(project)
   }
 
+  /** Uses `deleteMany`, so deleting an already-gone project is a no-op rather than a P2025/404. */
   async remove(projectId: string): Promise<void> {
     await this.prisma.project.deleteMany({ where: { id: projectId } })
   }

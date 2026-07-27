@@ -9,17 +9,20 @@ import { CurrentPermissions } from "@shared/decorators/current-permissions.decor
 import { RequirePermission } from "@shared/decorators/require-permission.decorator"
 import { ProjectScoped } from "@tenancy/scoped.decorators"
 
+/** Project membership routes; `@ProjectScoped()` runs OrgGuard, ProjectGuard, PermissionsGuard. */
 @Controller("orgs/:org_id/projects/:project_id/members")
 @ProjectScoped()
 export class ProjectMembersController {
   constructor(private readonly members: MembersService) {}
 
+  // Spreads the service's `{ data, pagination }` into the envelope; `limit` defaults to 50.
   @Get()
   @RequirePermission("project:read")
   async list(@CurrentProject() project: { id: string }, @Query() query: ListQueryDto) {
     return { message: "OK", ...(await this.members.listProjectMembers(project.id, query)) }
   }
 
+  // 400 for the owner role — owner is org-level and never assignable at project scope.
   @Put(":user_id")
   @RequirePermission("project:manage_members")
   async update(

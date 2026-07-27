@@ -22,9 +22,8 @@ export class RoleResponse implements Role {
   @ApiProperty({ type: [PermissionResponse] }) permissions!: PermissionResponse[]
 }
 
-// Two arguments because a role response is a composition, not a mapping: the row
-// converted to snake_case plus a permission list fetched separately. Declaring it
-// here is what stops the two halves drifting apart in the controller.
+// A role response is a composition, not a mapping: the snake_cased row plus a
+// separately fetched permission list, joined here so the halves cannot drift apart.
 export function toRoleResponse(row: RoleRow, permissions: PermissionResponse[]): RoleResponse {
   return { ...toSnakeKeys<RoleRow>(row), permissions }
 }

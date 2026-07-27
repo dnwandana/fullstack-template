@@ -6,6 +6,7 @@ import { toSnakeKeys } from "@shared/utils/to-snake-keys"
 export class PermissionsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Every permission row, ordered by name. */
   async findAll() {
     const rows = await this.prisma.permission.findMany({
       select: {
