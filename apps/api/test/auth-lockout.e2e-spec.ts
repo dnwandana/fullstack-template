@@ -3,7 +3,7 @@ import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { PrismaService } from "../src/prisma/prisma.service"
+import { PrismaService } from "@core/database/prisma.service"
 import { truncateAll } from "./setup-e2e"
 
 const CREDS = {
@@ -27,15 +27,15 @@ describe("Account lockout (e2e)", () => {
   const agent = () => request(app.getHttpServer())
 
   it("locks the account after 5 failed attempts, rejecting even the correct password", async () => {
-    await agent().post("/api/auth/signup").send(CREDS)
+    await agent().post("/api/v1/auth/signup").send(CREDS)
     for (let i = 0; i < 5; i++) {
       const bad = await agent()
-        .post("/api/auth/signin")
+        .post("/api/v1/auth/signin")
         .send({ email: CREDS.email, password: "Wr0ng!pass" })
       expect(bad.status).toBe(401)
     }
     const locked = await agent()
-      .post("/api/auth/signin")
+      .post("/api/v1/auth/signin")
       .send({ email: CREDS.email, password: CREDS.password })
     expect(locked.status).toBe(401)
     expect(locked.body.message).toBe("invalid credentials")

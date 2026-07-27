@@ -1,10 +1,24 @@
-import { INestApplication } from "@nestjs/common"
+import { INestApplication, VersioningType } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config"
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger"
 import { Logger } from "nestjs-pino"
 import helmet from "helmet"
 import cookieParser from "cookie-parser"
 import { json, urlencoded } from "express"
+import { API_PREFIX, API_VERSION } from "@core/config/api-version"
+import { PaginationMetaResponse } from "@shared/dto/pagination-meta.response"
+import { TodoListResponse, TodoResponse } from "@modules/todos/dto/todo.response"
+import { OrgResponse } from "@modules/orgs/dto/org.response"
+import { ProjectResponse } from "@modules/projects/dto/project.response"
+import { PermissionResponse, RoleResponse } from "@modules/roles/dto/role.response"
+import {
+  InvitationListItemResponse,
+  InvitationListResponse,
+  InvitationPreviewResponse,
+  InvitationResponse,
+  InvitationWithTokenResponse,
+  MyInvitationResponse,
+} from "@modules/invitations/dto/invitation.response"
 
 export function configureApp(app: INestApplication): void {
   app.useLogger(app.get(Logger))
@@ -44,7 +58,17 @@ export function configureApp(app: INestApplication): void {
 
   // Each entry matches an exact route path, not a prefix — "health" alone does NOT
   // cover "health/live". Container healthchecks hit these unprefixed.
-  app.setGlobalPrefix("api", { exclude: ["health", "health/live", "health/ready"] })
+  app.setGlobalPrefix(API_PREFIX, { exclude: ["health", "health/live", "health/ready"] })
+
+  // URI versioning: every controller without an explicit @Version lands on v1.
+  // This is independent of setGlobalPrefix's `exclude` — a route excluded from the
+  // "api" prefix is still versioned unless it is VERSION_NEUTRAL. The health probes
+  // are, because nginx and the container healthchecks hardcode their paths.
+  //
+  // defaultVersion takes the bare "1"; Nest adds the "v". The cookie constants in
+  // @core/config/api-version add it explicitly — that asymmetry is why they share
+  // API_VERSION rather than a pre-formatted string.
+  app.enableVersioning({ type: VersioningType.URI, defaultVersion: API_VERSION })
 
   // Read through ConfigService, never process.env. Joi's NODE_ENV-derived default is applied
   // to the validated config object that backs ConfigService, and @nestjs/config does not
@@ -62,7 +86,40 @@ export function configureApp(app: INestApplication): void {
       .build()
     // Mounted after setGlobalPrefix so the documented paths carry the /api prefix the
     // client actually calls.
-    SwaggerModule.setup("api/docs", app, SwaggerModule.createDocument(app, docs))
+    // extraModels is what makes these classes appear in components.schemas, and every
+    // response contract needs an entry here — not just the ones no controller mentions.
+    // createDocument emits a schema only for a model it can name in a controller's
+    // signature, and handlers return Payload<T>: a generic interface, which erases at
+    // compile time. So `Promise<Payload<OrgResponse>>` leaves nothing nameable behind
+    // and OrgResponse goes undocumented despite being referenced. Verified by dumping
+    // the document with the annotations in place and this array untouched — the schema
+    // set was byte-identical to before them.
+    //
+    // Without an entry the schema is silently absent: the document still generates and
+    // every endpoint still works, which is exactly the failure mode this plumbing
+    // exists to prevent. Absence is not something the document announces, so a new
+    // response class must be added here in the same change that declares it.
+    SwaggerModule.setup(
+      "api/docs",
+      app,
+      SwaggerModule.createDocument(app, docs, {
+        extraModels: [
+          PaginationMetaResponse,
+          TodoResponse,
+          TodoListResponse,
+          OrgResponse,
+          ProjectResponse,
+          RoleResponse,
+          PermissionResponse,
+          InvitationResponse,
+          InvitationWithTokenResponse,
+          InvitationListItemResponse,
+          InvitationListResponse,
+          MyInvitationResponse,
+          InvitationPreviewResponse,
+        ],
+      }),
+    )
   }
 
   app.enableShutdownHooks()

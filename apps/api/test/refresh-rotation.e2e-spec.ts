@@ -4,8 +4,8 @@ import { randomUUID } from "crypto"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { PrismaService } from "../src/prisma/prisma.service"
-import { RefreshTokenService } from "../src/auth/refresh-token.service"
+import { PrismaService } from "@core/database/prisma.service"
+import { RefreshTokenService } from "@modules/auth/refresh-token.service"
 import { signupAndSignin } from "./factory"
 import { truncateAll } from "./setup-e2e"
 
@@ -51,7 +51,7 @@ describe("Refresh rotation claims the token atomically (e2e)", () => {
     const { cookies } = await signupAndSignin(app)
 
     const responses = await Promise.all(
-      Array.from({ length: 4 }, () => agent().post("/api/auth/refresh").set("Cookie", cookies)),
+      Array.from({ length: 4 }, () => agent().post("/api/v1/auth/refresh").set("Cookie", cookies)),
     )
 
     const statuses = responses.map((r: { status: number }) => r.status).toSorted()

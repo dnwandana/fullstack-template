@@ -3,7 +3,7 @@ import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { PrismaService } from "../src/prisma/prisma.service"
+import { PrismaService } from "@core/database/prisma.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
 import { signupAndSignin, createOrg, getRoleId } from "./factory"
 
@@ -25,13 +25,13 @@ describe("Members (e2e)", () => {
   it("lists org members and blocks the owner from changing their own role", async () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
-    const list = await agent().get(`/api/orgs/${org.id}/members`).set("Cookie", owner.cookies)
+    const list = await agent().get(`/api/v1/orgs/${org.id}/members`).set("Cookie", owner.cookies)
     expect(list.status).toBe(200)
     expect(list.body.data).toHaveLength(1)
 
     const adminRoleId = await getRoleId(prisma, org.id, "admin")
     const selfChange = await agent()
-      .put(`/api/orgs/${org.id}/members/${owner.userId}`)
+      .put(`/api/v1/orgs/${org.id}/members/${owner.userId}`)
       .set("Cookie", owner.cookies)
       .send({ role_id: adminRoleId })
     expect(selfChange.status).toBe(400)
@@ -42,7 +42,7 @@ describe("Members (e2e)", () => {
     const org = await createOrg(app, owner.cookies)
     const adminRoleId = await getRoleId(prisma, org.id, "admin")
     const res = await agent()
-      .put(`/api/orgs/${org.id}/members/not-a-uuid`)
+      .put(`/api/v1/orgs/${org.id}/members/not-a-uuid`)
       .set("Cookie", owner.cookies)
       .send({ role_id: adminRoleId })
     expect(res.status).toBe(400)
@@ -51,7 +51,7 @@ describe("Members (e2e)", () => {
   it("lists members with snake_case fields", async () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
-    const list = await agent().get(`/api/orgs/${org.id}/members`).set("Cookie", owner.cookies)
+    const list = await agent().get(`/api/v1/orgs/${org.id}/members`).set("Cookie", owner.cookies)
     expect(list.body.data[0]).toMatchObject({ user_id: owner.userId, role_name: "owner" })
     expect(list.body.data[0].email).toBeDefined()
     expect(list.body.data[0].name).toBeDefined()
@@ -69,11 +69,11 @@ describe("Members (e2e)", () => {
 
     const [r1, r2] = await Promise.all([
       agent()
-        .put(`/api/orgs/${org.id}/members/${b.userId}`)
+        .put(`/api/v1/orgs/${org.id}/members/${b.userId}`)
         .set("Cookie", a.cookies)
         .send({ role_id: adminRoleId }),
       agent()
-        .put(`/api/orgs/${org.id}/members/${a.userId}`)
+        .put(`/api/v1/orgs/${org.id}/members/${a.userId}`)
         .set("Cookie", b.cookies)
         .send({ role_id: adminRoleId }),
     ])
@@ -95,7 +95,7 @@ describe("Members (e2e)", () => {
     })
 
     const { body } = await agent()
-      .put(`/api/orgs/${org.id}/members/${member.userId}`)
+      .put(`/api/v1/orgs/${org.id}/members/${member.userId}`)
       .set("Cookie", owner.cookies)
       .send({ role_id: adminRoleId })
       .expect(200)
@@ -114,7 +114,7 @@ describe("Members (e2e)", () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
     const proj = await agent()
-      .post(`/api/orgs/${org.id}/projects`)
+      .post(`/api/v1/orgs/${org.id}/projects`)
       .set("Cookie", owner.cookies)
       .send({ name: "P" })
     const projectId = proj.body.data.id as string
@@ -130,7 +130,7 @@ describe("Members (e2e)", () => {
     })
 
     const { body } = await agent()
-      .put(`/api/orgs/${org.id}/projects/${projectId}/members/${member.userId}`)
+      .put(`/api/v1/orgs/${org.id}/projects/${projectId}/members/${member.userId}`)
       .set("Cookie", owner.cookies)
       .send({ role_id: viewerRoleId })
       .expect(200)
@@ -155,7 +155,7 @@ describe("Members (e2e)", () => {
     })
 
     const { body } = await agent()
-      .get(`/api/orgs/${org.id}/members?page=1&limit=1`)
+      .get(`/api/v1/orgs/${org.id}/members?page=1&limit=1`)
       .set("Cookie", owner.cookies)
       .expect(200)
     expect(body.data).toHaveLength(1)
@@ -173,7 +173,7 @@ describe("Members (e2e)", () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
     const { body } = await agent()
-      .get(`/api/orgs/${org.id}/members`)
+      .get(`/api/v1/orgs/${org.id}/members`)
       .set("Cookie", owner.cookies)
       .expect(200)
     expect(body.pagination.items_per_page).toBe(50)
@@ -183,7 +183,7 @@ describe("Members (e2e)", () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
     await agent()
-      .get(`/api/orgs/${org.id}/members?limit=200`)
+      .get(`/api/v1/orgs/${org.id}/members?limit=200`)
       .set("Cookie", owner.cookies)
       .expect(400)
   })
@@ -192,13 +192,13 @@ describe("Members (e2e)", () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
     const proj = await agent()
-      .post(`/api/orgs/${org.id}/projects`)
+      .post(`/api/v1/orgs/${org.id}/projects`)
       .set("Cookie", owner.cookies)
       .send({ name: "P" })
     const projectId = proj.body.data.id as string
 
     const { body } = await agent()
-      .get(`/api/orgs/${org.id}/projects/${projectId}/members?page=1&limit=1`)
+      .get(`/api/v1/orgs/${org.id}/projects/${projectId}/members?page=1&limit=1`)
       .set("Cookie", owner.cookies)
       .expect(200)
     expect(body.data).toHaveLength(1)
@@ -214,7 +214,7 @@ describe("Members (e2e)", () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
     const res = await agent()
-      .delete(`/api/orgs/${org.id}/members/${owner.userId}`)
+      .delete(`/api/v1/orgs/${org.id}/members/${owner.userId}`)
       .set("Cookie", owner.cookies)
     expect(res.status).toBe(400)
     expect(res.body.message).toMatch(/last owner/)

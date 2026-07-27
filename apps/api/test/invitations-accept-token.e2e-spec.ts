@@ -3,7 +3,7 @@ import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { PrismaService } from "../src/prisma/prisma.service"
+import { PrismaService } from "@core/database/prisma.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
 import { signupAndSignin, createOrg, getRoleId } from "./factory"
 
@@ -35,13 +35,13 @@ describe("Invitation accept requires the raw token (e2e)", () => {
     const memberRoleId = await getRoleId(prisma, org.id, "member")
 
     const created = await agent()
-      .post(`/api/orgs/${org.id}/invitations`)
+      .post(`/api/v1/orgs/${org.id}/invitations`)
       .set("Cookie", owner.cookies)
       .send({ email: "invitee@x.io", role_id: memberRoleId })
     expect(created.status).toBe(201)
 
     const other = await agent()
-      .post(`/api/orgs/${org.id}/invitations`)
+      .post(`/api/v1/orgs/${org.id}/invitations`)
       .set("Cookie", owner.cookies)
       .send({ email: "other@x.io", role_id: memberRoleId })
     expect(other.status).toBe(201)
@@ -60,7 +60,7 @@ describe("Invitation accept requires the raw token (e2e)", () => {
     const { inviteeCookies, invitationId } = await setupPendingInvitation()
 
     const res = await agent()
-      .post(`/api/invitations/${invitationId}/accept`)
+      .post(`/api/v1/invitations/${invitationId}/accept`)
       .set("Cookie", inviteeCookies)
       .send({})
 
@@ -76,7 +76,7 @@ describe("Invitation accept requires the raw token (e2e)", () => {
     const { inviteeCookies, invitationId } = await setupPendingInvitation()
 
     const res = await agent()
-      .post(`/api/invitations/${invitationId}/accept`)
+      .post(`/api/v1/invitations/${invitationId}/accept`)
       .set("Cookie", inviteeCookies)
       .send({ token: "nothex" })
 
@@ -89,7 +89,7 @@ describe("Invitation accept requires the raw token (e2e)", () => {
     const { inviteeCookies, invitationId, otherToken } = await setupPendingInvitation()
 
     const res = await agent()
-      .post(`/api/invitations/${invitationId}/accept`)
+      .post(`/api/v1/invitations/${invitationId}/accept`)
       .set("Cookie", inviteeCookies)
       .send({ token: otherToken })
 
@@ -105,7 +105,7 @@ describe("Invitation accept requires the raw token (e2e)", () => {
     const { orgId, inviteeCookies, invitationId, token } = await setupPendingInvitation()
 
     const res = await agent()
-      .post(`/api/invitations/${invitationId}/accept`)
+      .post(`/api/v1/invitations/${invitationId}/accept`)
       .set("Cookie", inviteeCookies)
       .send({ token })
 
@@ -117,7 +117,7 @@ describe("Invitation accept requires the raw token (e2e)", () => {
     expect(row?.status).toBe("accepted")
 
     // Membership was actually granted (the member role carries org:read).
-    const readOrg = await agent().get(`/api/orgs/${orgId}`).set("Cookie", inviteeCookies)
+    const readOrg = await agent().get(`/api/v1/orgs/${orgId}`).set("Cookie", inviteeCookies)
     expect(readOrg.status).toBe(200)
   })
 })

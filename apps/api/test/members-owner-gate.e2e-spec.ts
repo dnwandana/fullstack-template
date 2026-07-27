@@ -4,7 +4,7 @@ import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { PrismaService } from "../src/prisma/prisma.service"
+import { PrismaService } from "@core/database/prisma.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
 import { signupAndSignin, createOrg, getRoleId } from "./factory"
 
@@ -57,20 +57,20 @@ describe("Owner-role gate (e2e)", () => {
     })
 
     const promote = await agent()
-      .put(`/api/orgs/${org.id}/members/${member.userId}`)
+      .put(`/api/v1/orgs/${org.id}/members/${member.userId}`)
       .set("Cookie", admin.cookies)
       .send({ role_id: ownerRoleId })
     expect(promote.status).toBe(403)
     expect(promote.body.message).toMatch(/Only owners/)
 
     const demote = await agent()
-      .put(`/api/orgs/${org.id}/members/${secondOwner.userId}`)
+      .put(`/api/v1/orgs/${org.id}/members/${secondOwner.userId}`)
       .set("Cookie", admin.cookies)
       .send({ role_id: adminRoleId })
     expect(demote.status).toBe(403)
 
     const remove = await agent()
-      .delete(`/api/orgs/${org.id}/members/${secondOwner.userId}`)
+      .delete(`/api/v1/orgs/${org.id}/members/${secondOwner.userId}`)
       .set("Cookie", admin.cookies)
     expect(remove.status).toBe(403)
   })
@@ -85,7 +85,7 @@ describe("Owner-role gate (e2e)", () => {
       data: { orgId: org.id, userId: member.userId, roleId: memberRoleId },
     })
     const res = await agent()
-      .put(`/api/orgs/${org.id}/members/${member.userId}`)
+      .put(`/api/v1/orgs/${org.id}/members/${member.userId}`)
       .set("Cookie", owner.cookies)
       .send({ role_id: ownerRoleId })
     expect(res.status).toBe(200)
@@ -108,7 +108,7 @@ describe("Owner-role gate (e2e)", () => {
     const superRoleId = await createCustomRole(org.id, "superrole", ["org:read", "org:delete"])
 
     const res = await agent()
-      .put(`/api/orgs/${org.id}/members/${member.userId}`)
+      .put(`/api/v1/orgs/${org.id}/members/${member.userId}`)
       .set("Cookie", admin.cookies)
       .send({ role_id: superRoleId })
     expect(res.status).toBe(403)
@@ -119,7 +119,7 @@ describe("Owner-role gate (e2e)", () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
     const proj = await agent()
-      .post(`/api/orgs/${org.id}/projects`)
+      .post(`/api/v1/orgs/${org.id}/projects`)
       .set("Cookie", owner.cookies)
       .send({ name: "P" })
     const projectId = proj.body.data.id as string
@@ -141,7 +141,7 @@ describe("Owner-role gate (e2e)", () => {
     const sneakyRoleId = await createCustomRole(org.id, "sneaky", ["org:manage_roles"])
 
     const res = await agent()
-      .put(`/api/orgs/${org.id}/projects/${projectId}/members/${target.userId}`)
+      .put(`/api/v1/orgs/${org.id}/projects/${projectId}/members/${target.userId}`)
       .set("Cookie", admin.cookies)
       .send({ role_id: sneakyRoleId })
     expect(res.status).toBe(403)
@@ -164,13 +164,13 @@ describe("Owner-role gate (e2e)", () => {
     })
 
     const change = await agent()
-      .put(`/api/orgs/${org.id}/members/${member.userId}`)
+      .put(`/api/v1/orgs/${org.id}/members/${member.userId}`)
       .set("Cookie", admin.cookies)
       .send({ role_id: viewerRoleId })
     expect(change.status).toBe(200)
 
     const remove = await agent()
-      .delete(`/api/orgs/${org.id}/members/${member.userId}`)
+      .delete(`/api/v1/orgs/${org.id}/members/${member.userId}`)
       .set("Cookie", admin.cookies)
     expect(remove.status).toBe(200)
   })
@@ -179,7 +179,7 @@ describe("Owner-role gate (e2e)", () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
     const proj = await agent()
-      .post(`/api/orgs/${org.id}/projects`)
+      .post(`/api/v1/orgs/${org.id}/projects`)
       .set("Cookie", owner.cookies)
       .send({ name: "P" })
     const projectId = proj.body.data.id as string
@@ -195,7 +195,7 @@ describe("Owner-role gate (e2e)", () => {
     })
 
     const res = await agent()
-      .put(`/api/orgs/${org.id}/projects/${projectId}/members/${other.userId}`)
+      .put(`/api/v1/orgs/${org.id}/projects/${projectId}/members/${other.userId}`)
       .set("Cookie", owner.cookies)
       .send({ role_id: ownerRoleId })
     expect(res.status).toBe(400)

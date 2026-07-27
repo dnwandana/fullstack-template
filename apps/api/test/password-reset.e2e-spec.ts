@@ -4,7 +4,7 @@ import { createHash } from "crypto"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { PrismaService } from "../src/prisma/prisma.service"
+import { PrismaService } from "@core/database/prisma.service"
 import { signupAndSignin } from "./factory"
 import { truncateAll } from "./setup-e2e"
 
@@ -25,9 +25,9 @@ describe("Password reset (e2e)", () => {
 
   it("replies identically for known and unknown addresses", async () => {
     const user = await signupAndSignin(app)
-    const known = await agent().post("/api/auth/forgot-password").send({ email: user.email })
+    const known = await agent().post("/api/v1/auth/forgot-password").send({ email: user.email })
     const unknown = await agent()
-      .post("/api/auth/forgot-password")
+      .post("/api/v1/auth/forgot-password")
       .send({ email: "nobody@example.com" })
 
     expect(known.status).toBe(200)
@@ -38,7 +38,7 @@ describe("Password reset (e2e)", () => {
 
   it("resets the password and invalidates the old one", async () => {
     const user = await signupAndSignin(app)
-    await agent().post("/api/auth/forgot-password").send({ email: user.email })
+    await agent().post("/api/v1/auth/forgot-password").send({ email: user.email })
 
     // Overwrite the stored hash with one derived from a token the test knows — the raw
     // token itself is only ever handed to the notifier.
@@ -49,20 +49,20 @@ describe("Password reset (e2e)", () => {
     })
 
     const res = await agent()
-      .post("/api/auth/reset-password")
+      .post("/api/v1/auth/reset-password")
       .send({ token: raw, password: "BrandNewP4ss!", confirmation_password: "BrandNewP4ss!" })
     expect(res.status).toBe(200)
     expect(res.body).toEqual({ message: "OK", data: null })
 
     const signin = (password: string) =>
-      agent().post("/api/auth/signin").send({ email: user.email, password })
+      agent().post("/api/v1/auth/signin").send({ email: user.email, password })
     expect((await signin("Str0ng!pass")).status).toBe(401)
     expect((await signin("BrandNewP4ss!")).status).toBe(200)
   })
 
   it("rejects a mismatched confirmation_password with 400", async () => {
     const res = await agent()
-      .post("/api/auth/reset-password")
+      .post("/api/v1/auth/reset-password")
       .send({ token: "d".repeat(64), password: "BrandNewP4ss!", confirmation_password: "nope" })
     expect(res.status).toBe(400)
     expect(res.body.data).toBeNull()
@@ -70,7 +70,7 @@ describe("Password reset (e2e)", () => {
 
   it("rejects an unknown token with 400 and the generic message", async () => {
     const res = await agent()
-      .post("/api/auth/reset-password")
+      .post("/api/v1/auth/reset-password")
       .send({
         token: "e".repeat(64),
         password: "BrandNewP4ss!",

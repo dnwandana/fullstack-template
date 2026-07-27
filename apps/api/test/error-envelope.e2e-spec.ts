@@ -4,8 +4,8 @@ import { Prisma } from "@prisma/client"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { PrismaService } from "../src/prisma/prisma.service"
-import { Public } from "../src/common/decorators/public.decorator"
+import { PrismaService } from "@core/database/prisma.service"
+import { Public } from "@shared/decorators/public.decorator"
 import { truncateAll, seedPermissions } from "./setup-e2e"
 import { signupAndSignin, createOrg } from "./factory"
 
@@ -51,14 +51,14 @@ describe("Error envelope (e2e)", () => {
   }
 
   it("401 (no auth) has a string message and data:null", async () => {
-    const res = await agent().get("/api/permissions")
+    const res = await agent().get("/api/v1/permissions")
     expect(res.status).toBe(401)
     assertErrorShape(res.body)
   })
 
   it("400 (validation) flattens class-validator arrays to a single string", async () => {
     const res = await agent()
-      .post("/api/auth/signup")
+      .post("/api/v1/auth/signup")
       .send({ name: "", email: "nope", password: "weak", confirmation_password: "different" })
     expect(res.status).toBe(400)
     assertErrorShape(res.body)
@@ -71,7 +71,7 @@ describe("Error envelope (e2e)", () => {
     const owner = await signupAndSignin(app)
     const outsider = await signupAndSignin(app)
     const { id } = await createOrg(app, owner.cookies)
-    const forbidden = await agent().get(`/api/orgs/${id}`).set("Cookie", outsider.cookies)
+    const forbidden = await agent().get(`/api/v1/orgs/${id}`).set("Cookie", outsider.cookies)
     expect(forbidden.status).toBe(403)
     assertErrorShape(forbidden.body)
   })
@@ -79,7 +79,7 @@ describe("Error envelope (e2e)", () => {
   it("404 (missing) keeps the shape", async () => {
     const { cookies } = await signupAndSignin(app)
     const notFound = await agent()
-      .get("/api/orgs/11111111-1111-1111-1111-111111111111")
+      .get("/api/v1/orgs/11111111-1111-1111-1111-111111111111")
       .set("Cookie", cookies)
     expect(notFound.status).toBe(404)
     assertErrorShape(notFound.body)
@@ -91,7 +91,7 @@ describe("Error envelope (e2e)", () => {
     // instead of stopping at JwtAuthGuard with a 401.
     const { cookies } = await signupAndSignin(app)
     const { body } = await agent()
-      .get("/api/orgs/not-a-uuid")
+      .get("/api/v1/orgs/not-a-uuid")
       .set("Cookie", cookies)
       .set("X-Request-Id", id)
       .expect(400)
@@ -99,7 +99,7 @@ describe("Error envelope (e2e)", () => {
   })
 
   it("maps Prisma P2025 to 404 instead of 500", async () => {
-    const { body } = await agent().get("/api/__p2025__").expect(404)
+    const { body } = await agent().get("/api/v1/__p2025__").expect(404)
     expect(body).toEqual({ message: "Not found", data: null, request_id: expect.any(String) })
   })
 })

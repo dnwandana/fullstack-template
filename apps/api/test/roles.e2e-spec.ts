@@ -4,8 +4,8 @@ import { Prisma } from "@prisma/client"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { PrismaService } from "../src/prisma/prisma.service"
-import { RolesService } from "../src/roles/roles.service"
+import { PrismaService } from "@core/database/prisma.service"
+import { RolesService } from "@modules/roles/roles.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
 import { signupAndSignin, createOrg, getRoleId } from "./factory"
 import { randomUUID } from "crypto"
@@ -31,12 +31,12 @@ describe("Roles (e2e)", () => {
     const perm = await prisma.permission.findFirstOrThrow({ where: { name: "todos:read" } })
 
     const created = await agent()
-      .post(`/api/orgs/${org.id}/roles`)
+      .post(`/api/v1/orgs/${org.id}/roles`)
       .set("Cookie", cookies)
       .send({ name: "Auditor", description: "read only", permission_ids: [perm.id] })
     expect(created.status).toBe(201)
 
-    const list = await agent().get(`/api/orgs/${org.id}/roles`).set("Cookie", cookies)
+    const list = await agent().get(`/api/v1/orgs/${org.id}/roles`).set("Cookie", cookies)
     expect(list.status).toBe(200)
     expect(list.body.data.some((r: { name: string }) => r.name === "Auditor")).toBe(true)
 
@@ -44,7 +44,7 @@ describe("Roles (e2e)", () => {
       where: { orgId: org.id, name: "owner" },
     })
     const blocked = await agent()
-      .put(`/api/orgs/${org.id}/roles/${ownerRole.id}`)
+      .put(`/api/v1/orgs/${org.id}/roles/${ownerRole.id}`)
       .set("Cookie", cookies)
       .send({ name: "Overlord" })
     expect(blocked.status).toBe(400)
@@ -55,7 +55,7 @@ describe("Roles (e2e)", () => {
     const org = await createOrg(app, cookies)
     const perm = await prisma.permission.findFirstOrThrow({ where: { name: "todos:read" } })
     const res = await agent()
-      .post(`/api/orgs/${org.id}/roles`)
+      .post(`/api/v1/orgs/${org.id}/roles`)
       .set("Cookie", cookies)
       .send({ name: "admin", permission_ids: [perm.id] })
     expect(res.status).toBe(400)
@@ -68,14 +68,14 @@ describe("Roles (e2e)", () => {
 
     // "Owner" collides with the system role "owner" only via the lower(name) index.
     const caseOnly = await agent()
-      .post(`/api/orgs/${org.id}/roles`)
+      .post(`/api/v1/orgs/${org.id}/roles`)
       .set("Cookie", cookies)
       .send({ name: "Owner", description: "x", permission_ids: [perm.id] })
     expect(caseOnly.status).toBe(400)
 
     // " owner " collides after the DTO trims it.
     const padded = await agent()
-      .post(`/api/orgs/${org.id}/roles`)
+      .post(`/api/v1/orgs/${org.id}/roles`)
       .set("Cookie", cookies)
       .send({ name: " owner ", description: "x", permission_ids: [perm.id] })
     expect(padded.status).toBe(400)
@@ -87,7 +87,7 @@ describe("Roles (e2e)", () => {
     const perm = await prisma.permission.findFirstOrThrow({ where: { name: "todos:read" } })
 
     const { body } = await agent()
-      .post(`/api/orgs/${org.id}/roles`)
+      .post(`/api/v1/orgs/${org.id}/roles`)
       .set("Cookie", cookies)
       .send({ name: "  Auditor  ", description: "x", permission_ids: [perm.id] })
       .expect(201)
@@ -98,7 +98,7 @@ describe("Roles (e2e)", () => {
     const { cookies } = await signupAndSignin(app)
     const org = await createOrg(app, cookies)
     const res = await agent()
-      .post(`/api/orgs/${org.id}/roles`)
+      .post(`/api/v1/orgs/${org.id}/roles`)
       .set("Cookie", cookies)
       .send({ name: "Ghost", permission_ids: [randomUUID()] })
     expect(res.status).toBe(400)
@@ -108,7 +108,7 @@ describe("Roles (e2e)", () => {
     const { cookies } = await signupAndSignin(app)
     const org = await createOrg(app, cookies)
     const res = await agent()
-      .put(`/api/orgs/${org.id}/roles/not-a-uuid`)
+      .put(`/api/v1/orgs/${org.id}/roles/not-a-uuid`)
       .set("Cookie", cookies)
       .send({ name: "X" })
     expect(res.status).toBe(400)
@@ -119,12 +119,12 @@ describe("Roles (e2e)", () => {
     const org = await createOrg(app, cookies)
     const perm = await prisma.permission.findFirstOrThrow({ where: { name: "todos:read" } })
     const created = await agent()
-      .post(`/api/orgs/${org.id}/roles`)
+      .post(`/api/v1/orgs/${org.id}/roles`)
       .set("Cookie", cookies)
       .send({ name: "Auditor", permission_ids: [perm.id] })
 
     const res = await agent()
-      .get(`/api/orgs/${org.id}/roles/${created.body.data.id}`)
+      .get(`/api/v1/orgs/${org.id}/roles/${created.body.data.id}`)
       .set("Cookie", cookies)
     expect(res.status).toBe(200)
     expect(res.body.data).toMatchObject({ name: "Auditor", is_system: false })
@@ -133,7 +133,7 @@ describe("Roles (e2e)", () => {
     )
 
     const missing = await agent()
-      .get(`/api/orgs/${org.id}/roles/11111111-1111-1111-1111-111111111111`)
+      .get(`/api/v1/orgs/${org.id}/roles/11111111-1111-1111-1111-111111111111`)
       .set("Cookie", cookies)
     expect(missing.status).toBe(404)
   })
@@ -141,10 +141,13 @@ describe("Roles (e2e)", () => {
   it("returns the same permission projection from list and detail", async () => {
     const { cookies } = await signupAndSignin(app)
     const org = await createOrg(app, cookies)
-    const list = await agent().get(`/api/orgs/${org.id}/roles`).set("Cookie", cookies).expect(200)
+    const list = await agent()
+      .get(`/api/v1/orgs/${org.id}/roles`)
+      .set("Cookie", cookies)
+      .expect(200)
     const ownerRole = list.body.data.find((r: { name: string }) => r.name === "owner")
     const detail = await agent()
-      .get(`/api/orgs/${org.id}/roles/${ownerRole.id}`)
+      .get(`/api/v1/orgs/${org.id}/roles/${ownerRole.id}`)
       .set("Cookie", cookies)
       .expect(200)
     const shape = {
@@ -164,7 +167,7 @@ describe("Roles (e2e)", () => {
     const org = await createOrg(app, cookies)
     const perm = await prisma.permission.findFirstOrThrow({ where: { name: "todos:read" } })
     const created = await agent()
-      .post(`/api/orgs/${org.id}/roles`)
+      .post(`/api/v1/orgs/${org.id}/roles`)
       .set("Cookie", cookies)
       .send({ name: "Temp", permission_ids: [perm.id] })
     const other = await signupAndSignin(app)
@@ -172,7 +175,7 @@ describe("Roles (e2e)", () => {
       data: { orgId: org.id, userId: other.userId, roleId: created.body.data.id },
     })
     const res = await agent()
-      .delete(`/api/orgs/${org.id}/roles/${created.body.data.id}`)
+      .delete(`/api/v1/orgs/${org.id}/roles/${created.body.data.id}`)
       .set("Cookie", cookies)
     expect(res.status).toBe(400)
   })
@@ -184,7 +187,7 @@ describe("Roles (e2e)", () => {
     const perm = await prisma.permission.findFirstOrThrow({ where: { name: "todos:read" } })
 
     const created = await agent()
-      .post(`/api/orgs/${org.id}/roles`)
+      .post(`/api/v1/orgs/${org.id}/roles`)
       .set("Cookie", owner.cookies)
       .send({
         name: "project-only",
@@ -195,7 +198,7 @@ describe("Roles (e2e)", () => {
     const roleId = created.body.data.id as string
 
     const project = await agent()
-      .post(`/api/orgs/${org.id}/projects`)
+      .post(`/api/v1/orgs/${org.id}/projects`)
       .set("Cookie", owner.cookies)
       .send({ name: "P1" })
     expect(project.status).toBe(201)
@@ -212,7 +215,7 @@ describe("Roles (e2e)", () => {
     await prisma.projectMember.create({ data: { projectId, userId: invitee.userId, roleId } })
 
     const res = await agent()
-      .delete(`/api/orgs/${org.id}/roles/${roleId}`)
+      .delete(`/api/v1/orgs/${org.id}/roles/${roleId}`)
       .set("Cookie", owner.cookies)
 
     expect(res.status).toBe(400)
@@ -261,13 +264,13 @@ describe("Roles (e2e)", () => {
     const org = await createOrg(app, cookies)
     const perm = await prisma.permission.findFirstOrThrow({ where: { name: "todos:read" } })
     const created = await agent()
-      .post(`/api/orgs/${org.id}/roles`)
+      .post(`/api/v1/orgs/${org.id}/roles`)
       .set("Cookie", cookies)
       .send({ name: "Temp", permission_ids: [perm.id] })
     expect(
       (
         await agent()
-          .delete(`/api/orgs/${org.id}/roles/${created.body.data.id}`)
+          .delete(`/api/v1/orgs/${org.id}/roles/${created.body.data.id}`)
           .set("Cookie", cookies)
       ).status,
     ).toBe(200)
@@ -276,7 +279,7 @@ describe("Roles (e2e)", () => {
       where: { orgId: org.id, name: "member" },
     })
     expect(
-      (await agent().delete(`/api/orgs/${org.id}/roles/${memberRole.id}`).set("Cookie", cookies))
+      (await agent().delete(`/api/v1/orgs/${org.id}/roles/${memberRole.id}`).set("Cookie", cookies))
         .status,
     ).toBe(400)
   })

@@ -3,7 +3,7 @@ import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { HealthService } from "../src/health/health.service"
+import { HealthService } from "@modules/health/health.service"
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -73,5 +73,18 @@ describe("GET /health", () => {
 
     const res = await request(app.getHttpServer()).get("/health/live")
     expect(res.status).toBe(200)
+  })
+
+  it.each(["/health", "/health/live", "/health/ready"])(
+    "%s stays unversioned — nginx and the container healthcheck hardcode these paths",
+    async (path) => {
+      const res = await request(app.getHttpServer()).get(path)
+      expect(res.status).toBe(200)
+    },
+  )
+
+  it("does not expose a versioned health route", async () => {
+    const res = await request(app.getHttpServer()).get("/v1/health/live")
+    expect(res.status).toBe(404)
   })
 })

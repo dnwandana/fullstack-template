@@ -3,7 +3,7 @@ import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { PrismaService } from "../src/prisma/prisma.service"
+import { PrismaService } from "@core/database/prisma.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
 import { signupAndSignin, createOrg, getRoleId } from "./factory"
 
@@ -27,14 +27,14 @@ describe("Todos (e2e)", () => {
     cookies = user.cookies
     const org = await createOrg(app, cookies)
     const proj = await agent()
-      .post(`/api/orgs/${org.id}/projects`)
+      .post(`/api/v1/orgs/${org.id}/projects`)
       .set("Cookie", cookies)
       .send({ name: "P" })
     projectId = proj.body.data.id
     ;(globalThis as Record<string, unknown>).__orgId = org.id
   })
   const base = () =>
-    `/api/orgs/${(globalThis as Record<string, unknown>).__orgId}/projects/${projectId}/todos`
+    `/api/v1/orgs/${(globalThis as Record<string, unknown>).__orgId}/projects/${projectId}/todos`
 
   it("creates a todo (title required)", async () => {
     const missing = await agent()
@@ -97,12 +97,12 @@ describe("Todos (e2e)", () => {
     const todoId = created.body.data.id
     const orgId = (globalThis as Record<string, unknown>).__orgId
     const other = await agent()
-      .post(`/api/orgs/${orgId}/projects`)
+      .post(`/api/v1/orgs/${orgId}/projects`)
       .set("Cookie", cookies)
       .send({ name: "Other" })
     const otherProjectId = other.body.data.id
     const res = await agent()
-      .put(`/api/orgs/${orgId}/projects/${otherProjectId}/todos/${todoId}`)
+      .put(`/api/v1/orgs/${orgId}/projects/${otherProjectId}/todos/${todoId}`)
       .set("Cookie", cookies)
       .send({ title: "hijacked" })
     expect(res.status).toBe(404)

@@ -4,7 +4,7 @@ import { randomUUID } from "crypto"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { PrismaService } from "../src/prisma/prisma.service"
+import { PrismaService } from "@core/database/prisma.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
 import { signupAndSignin, createOrg, getRoleId } from "./factory"
 
@@ -27,26 +27,26 @@ describe("Projects (e2e)", () => {
     const { cookies } = await signupAndSignin(app)
     const org = await createOrg(app, cookies)
     const created = await agent()
-      .post(`/api/orgs/${org.id}/projects`)
+      .post(`/api/v1/orgs/${org.id}/projects`)
       .set("Cookie", cookies)
       .send({ name: "Website" })
     expect(created.status).toBe(201)
     const id = created.body.data.id
 
-    const list = await agent().get(`/api/orgs/${org.id}/projects`).set("Cookie", cookies)
+    const list = await agent().get(`/api/v1/orgs/${org.id}/projects`).set("Cookie", cookies)
     expect(list.status).toBe(200)
     expect(list.body.data.some((p: { id: string }) => p.id === id)).toBe(true)
 
     expect(
-      (await agent().get(`/api/orgs/${org.id}/projects/${id}`).set("Cookie", cookies)).status,
+      (await agent().get(`/api/v1/orgs/${org.id}/projects/${id}`).set("Cookie", cookies)).status,
     ).toBe(200)
     const upd = await agent()
-      .put(`/api/orgs/${org.id}/projects/${id}`)
+      .put(`/api/v1/orgs/${org.id}/projects/${id}`)
       .set("Cookie", cookies)
       .send({ name: "Website v2" })
     expect(upd.body.data.name).toBe("Website v2")
     expect(
-      (await agent().delete(`/api/orgs/${org.id}/projects/${id}`).set("Cookie", cookies)).status,
+      (await agent().delete(`/api/v1/orgs/${org.id}/projects/${id}`).set("Cookie", cookies)).status,
     ).toBe(200)
   })
 
@@ -54,11 +54,11 @@ describe("Projects (e2e)", () => {
     const { cookies } = await signupAndSignin(app)
     const org = await createOrg(app, cookies)
     const created = await agent()
-      .post(`/api/orgs/${org.id}/projects`)
+      .post(`/api/v1/orgs/${org.id}/projects`)
       .set("Cookie", cookies)
       .send({ name: "Website" })
     const res = await agent()
-      .get(`/api/orgs/${org.id}/projects/${created.body.data.id}`)
+      .get(`/api/v1/orgs/${org.id}/projects/${created.body.data.id}`)
       .set("Cookie", cookies)
     expect(res.body.data).toMatchObject({ org_id: org.id, name: "Website" })
     expect(res.body.data.created_at).toBeDefined()
@@ -68,7 +68,9 @@ describe("Projects (e2e)", () => {
   it("rejects a malformed project id with 400", async () => {
     const { cookies } = await signupAndSignin(app)
     const org = await createOrg(app, cookies)
-    const res = await agent().get(`/api/orgs/${org.id}/projects/not-a-uuid`).set("Cookie", cookies)
+    const res = await agent()
+      .get(`/api/v1/orgs/${org.id}/projects/not-a-uuid`)
+      .set("Cookie", cookies)
     expect(res.status).toBe(400)
     expect(res.body.message).toBe("Invalid project ID format")
   })
@@ -77,7 +79,7 @@ describe("Projects (e2e)", () => {
     const { cookies } = await signupAndSignin(app)
     const org = await createOrg(app, cookies)
     const res = await agent()
-      .get(`/api/orgs/${org.id}/projects/11111111-1111-1111-1111-111111111111`)
+      .get(`/api/v1/orgs/${org.id}/projects/11111111-1111-1111-1111-111111111111`)
       .set("Cookie", cookies)
     expect(res.status).toBe(404)
     expect(res.body.message).toBe("Project not found")
@@ -87,7 +89,7 @@ describe("Projects (e2e)", () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
     await agent()
-      .post(`/api/orgs/${org.id}/projects`)
+      .post(`/api/v1/orgs/${org.id}/projects`)
       .set("Cookie", owner.cookies)
       .send({ name: "Owner-only project" })
 
@@ -111,7 +113,7 @@ describe("Projects (e2e)", () => {
       data: { orgId: org.id, userId: auditor.userId, roleId: role.id },
     })
 
-    const res = await agent().get(`/api/orgs/${org.id}/projects`).set("Cookie", auditor.cookies)
+    const res = await agent().get(`/api/v1/orgs/${org.id}/projects`).set("Cookie", auditor.cookies)
     expect(res.status).toBe(200)
     expect(res.body.data).toHaveLength(1)
   })
@@ -120,7 +122,7 @@ describe("Projects (e2e)", () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
     await agent()
-      .post(`/api/orgs/${org.id}/projects`)
+      .post(`/api/v1/orgs/${org.id}/projects`)
       .set("Cookie", owner.cookies)
       .send({ name: "Owner-only project" })
 
@@ -134,7 +136,7 @@ describe("Projects (e2e)", () => {
       },
     })
 
-    const res = await agent().get(`/api/orgs/${org.id}/projects`).set("Cookie", member.cookies)
+    const res = await agent().get(`/api/v1/orgs/${org.id}/projects`).set("Cookie", member.cookies)
     expect(res.status).toBe(200)
     expect(res.body.data).toHaveLength(0)
   })

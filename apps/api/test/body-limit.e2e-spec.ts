@@ -18,7 +18,7 @@ describe("body parser limits (L-22)", () => {
 
   it("rejects a JSON body over 100kb with 413", async () => {
     await request(app.getHttpServer())
-      .post("/api/auth/signin")
+      .post("/api/v1/auth/signin")
       .set("Content-Type", "application/json")
       .send({ email: "a@b.co", password: "x".repeat(120 * 1024) })
       .expect(413)
@@ -26,7 +26,7 @@ describe("body parser limits (L-22)", () => {
 
   it("accepts a body under the limit", async () => {
     await request(app.getHttpServer())
-      .post("/api/auth/signin")
+      .post("/api/v1/auth/signin")
       .send({ email: "nobody@example.com", password: "wrong-password" })
       .expect(401)
   })

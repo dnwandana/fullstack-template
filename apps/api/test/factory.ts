@@ -1,6 +1,6 @@
 import { INestApplication } from "@nestjs/common"
 import request from "supertest"
-import { PrismaService } from "../src/prisma/prisma.service"
+import { PrismaService } from "@core/database/prisma.service"
 
 let counter = 0
 
@@ -13,10 +13,10 @@ export async function signupAndSignin(
   const name = creds?.name ?? `User ${counter}`
   const server = app.getHttpServer()
   const signup = await request(server)
-    .post("/api/auth/signup")
+    .post("/api/v1/auth/signup")
     .send({ name, email, password, confirmation_password: password })
   const userId = signup.body.data.id as string
-  const signin = await request(server).post("/api/auth/signin").send({ email, password })
+  const signin = await request(server).post("/api/v1/auth/signin").send({ email, password })
   const cookies = signin.headers["set-cookie"] as unknown as string[]
   return { userId, cookies, email }
 }
@@ -27,7 +27,7 @@ export async function createOrg(
   name = "Acme",
 ): Promise<{ id: string }> {
   const res = await request(app.getHttpServer())
-    .post("/api/orgs")
+    .post("/api/v1/orgs")
     .set("Cookie", cookies)
     .send({ name })
   return { id: res.body.data.id as string }

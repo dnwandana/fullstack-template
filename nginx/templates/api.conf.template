@@ -34,10 +34,16 @@ server {
         proxy_hide_header  Strict-Transport-Security;
 
         # Strip the upstream /api prefix from Set-Cookie paths so the clean
-        # URLs the browser uses (/auth/..., /orgs/...) match the cookies.
+        # URLs the browser uses (/v1/auth/..., /v1/orgs/...) match the cookies.
+        # The version segment stays: only /api is removed, never /v1.
         # More specific path first — nginx uses the first matching rule.
-        proxy_cookie_path  /api/auth /auth;
-        proxy_cookie_path  /api /;
+        #
+        # Mirrors ACCESS_COOKIE_PATH / REFRESH_COOKIE_PATH in
+        # apps/api/src/core/config/api-version.ts, which is the source of truth
+        # — nginx cannot import them, so the two path strings are duplicated
+        # here by hand and must be changed together.
+        proxy_cookie_path  /api/v1/auth /v1/auth;
+        proxy_cookie_path  /api/v1 /v1;
 
         proxy_buffering    off;
     }

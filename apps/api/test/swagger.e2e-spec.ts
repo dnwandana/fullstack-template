@@ -4,7 +4,7 @@ import { ConfigService } from "@nestjs/config"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { validate } from "../src/config/env.validation"
+import { validate } from "@core/config/env.validation"
 
 // SwaggerModule registers its routes straight on the Express instance, so these responses
 // bypass TransformInterceptor entirely — the document is the whole body, not body.data.
@@ -20,6 +20,7 @@ const base = {
   REFRESH_TOKEN_SECRET: "b".repeat(40),
   JWT_ISSUER: "https://api.example.com",
   JWT_AUDIENCE: "https://api.example.com",
+  REDIS_URL: "redis://localhost:6379",
 }
 
 describe("SWAGGER_ENABLED validation", () => {
@@ -55,7 +56,7 @@ describe("GET /api/docs (enabled)", () => {
     expect(res.status).toBe(200)
     expect(res.body.info.title).toBe("Fullstack Template API")
     expect(res.body.info.version).toBe("1.0")
-    expect(res.body.paths["/api/auth/signup"]).toBeDefined()
+    expect(res.body.paths["/api/v1/auth/signup"]).toBeDefined()
   })
 
   it("serves the Swagger UI", async () => {
@@ -67,7 +68,7 @@ describe("GET /api/docs (enabled)", () => {
 
   it("documents the invitation accept body restored in Task 05", async () => {
     const res = await request(app.getHttpServer()).get("/api/docs-json")
-    const op = res.body.paths["/api/invitations/{invitation_id}/accept"].post
+    const op = res.body.paths["/api/v1/invitations/{invitation_id}/accept"].post
     expect(op.requestBody.required).toBe(true)
     // Derived from the controller's @Body() param type. If a handler ever drops its body
     // again — the M-1 regression — requestBody disappears and this throws.
@@ -103,7 +104,7 @@ describe("GET /api/docs (enabled)", () => {
   it("carries the /api prefix because setup runs after setGlobalPrefix", async () => {
     const res = await request(app.getHttpServer()).get("/api/docs-json")
     const paths = Object.keys(res.body.paths)
-    expect(paths).toContain("/api/permissions")
+    expect(paths).toContain("/api/v1/permissions")
     expect(paths).not.toContain("/permissions")
   })
 
@@ -111,13 +112,21 @@ describe("GET /api/docs (enabled)", () => {
     const res = await request(app.getHttpServer()).get("/api/docs-json")
     expect(res.body.paths["/health/live"]).toBeDefined()
     expect(res.body.paths["/health/ready"]).toBeDefined()
-    expect(res.body.paths["/api/health/live"]).toBeUndefined()
+    expect(res.body.paths["/api/v1/health/live"]).toBeUndefined()
+  })
+
+  it("emits a schema for the pagination envelope", async () => {
+    // PaginationMeta is an interface and erases at compile time — only a decorated
+    // class produces a schema. Without this, every paginated endpoint documents its
+    // `pagination` field as an empty object.
+    const res = await request(app.getHttpServer()).get("/api/docs-json")
+    expect(res.body.components?.schemas).toHaveProperty("PaginationMetaResponse")
   })
 
   it("documents the password-reset routes added in Task 06", async () => {
     const res = await request(app.getHttpServer()).get("/api/docs-json")
-    expect(res.body.paths["/api/auth/forgot-password"]).toBeDefined()
-    expect(res.body.paths["/api/auth/reset-password"]).toBeDefined()
+    expect(res.body.paths["/api/v1/auth/forgot-password"]).toBeDefined()
+    expect(res.body.paths["/api/v1/auth/reset-password"]).toBeDefined()
   })
 })
 
