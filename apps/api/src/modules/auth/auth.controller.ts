@@ -14,10 +14,14 @@ import { CurrentUser } from "@shared/decorators/current-user.decorator"
 import { RefreshTokenGuard } from "./guards/refresh-token.guard"
 import { authThrottleLimit } from "@core/config/auth-throttle"
 
-// Override the global "general" throttler with the stricter auth limit
-// (RATE_LIMIT_AUTH_MAX, default 10/15min) for every route in this controller.
-// Read via authThrottleLimit() — decorator arguments run before the DI container
-// (and Joi) exist, so the helper mirrors Joi's constraints and fails fast.
+/**
+ * `refresh` and `logout` are `@Public()` with respect to `JwtAuthGuard` but gated by
+ * `RefreshTokenGuard`, so they authenticate off the refresh cookie, not the access cookie.
+ */
+
+// Narrows the global "general" throttler to RATE_LIMIT_AUTH_MAX (default 10/15min) for every
+// route here. authThrottleLimit() reads process.env because decorator arguments run before the
+// DI container and Joi exist; it mirrors Joi's constraints and throws at import time.
 @Throttle({
   general: { limit: authThrottleLimit(), ttl: 15 * 60 * 1000 },
 })
@@ -51,8 +55,8 @@ export class AuthController {
   @HttpCode(200)
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     await this.passwordReset.issue(dto.email)
-    // Always the same reply. Branching on whether the address exists would turn this
-    // endpoint into an account-enumeration oracle.
+    // Always the same reply: branching on whether the address exists would turn this endpoint
+    // into an account-enumeration oracle.
     return {
       message: "If an account exists for that address, a reset link has been sent",
       data: null,

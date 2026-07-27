@@ -4,6 +4,11 @@ import { Response } from "express"
 import { parseDuration } from "@shared/utils/duration"
 import { ACCESS_COOKIE_PATH, REFRESH_COOKIE_PATH } from "@core/config/api-version"
 
+/**
+ * Writes the auth cookies. `SameSite=Strict` is deliberate (L-24) and requires the SPA and API to
+ * share a registrable domain — splitting them silently breaks auth, and changing it means editing
+ * this file, not an env var. `Secure` is set in production only.
+ */
 @Injectable()
 export class CookieService {
   constructor(private readonly config: ConfigService) {}
@@ -13,9 +18,8 @@ export class CookieService {
   }
 
   private maxAge(key: "ACCESS_TOKEN_EXPIRES_IN" | "REFRESH_TOKEN_EXPIRES_IN"): number {
-    // Same source of truth as the JWT and the refresh_tokens row. A hardcoded value
-    // here would expire the cookie out from under a still-valid token.
-    // parseDuration returns milliseconds, which is exactly the unit res.cookie wants.
+    // Same source of truth as the JWT and the refresh_tokens row: hardcoding would expire the
+    // cookie out from under a still-valid token. parseDuration returns ms, as res.cookie wants.
     return parseDuration(this.config.get<string>(key) as string)
   }
 
@@ -39,6 +43,7 @@ export class CookieService {
     })
   }
 
+  /** Expires both cookies on the paths they were set on; a mismatched path clears nothing. */
   clear(res: Response): void {
     // maxAge 0 is an expiry instruction, not a lifetime — never derived from config.
     const base = { httpOnly: true, secure: this.secure, sameSite: "strict" as const, maxAge: 0 }

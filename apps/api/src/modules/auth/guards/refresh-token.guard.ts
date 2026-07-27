@@ -2,10 +2,16 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Request } from "express"
 import { TokenService } from "../token.service"
 
+/**
+ * A second authentication path alongside `JwtAuthGuard`, applied by hand to the `@Public()`
+ * refresh and logout routes. It verifies the `refresh_token` cookie and *also* sets `req.user`,
+ * so any code reading `req.user` must account for both origins.
+ */
 @Injectable()
 export class RefreshTokenGuard implements CanActivate {
   constructor(private readonly tokens: TokenService) {}
 
+  /** Rejects a token whose `type` claim is not `"refresh"`, so an access token cannot be spent. */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context
       .switchToHttp()

@@ -4,6 +4,7 @@ import { Request } from "express"
 import { IS_PUBLIC_KEY } from "@shared/decorators/public.decorator"
 import { TokenService } from "../token.service"
 
+/** Global authentication: verifies the `access_token` cookie and sets `req.user`. */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
@@ -11,6 +12,10 @@ export class JwtAuthGuard implements CanActivate {
     private readonly tokens: TokenService,
   ) {}
 
+  /**
+   * Returns true without touching the cookie for `@Public()` routes. Rejects a token whose `type`
+   * claim is not `"access"`, so a refresh token cannot be spent as an access token.
+   */
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),

@@ -1,8 +1,14 @@
 import { Injectable, OnModuleInit } from "@nestjs/common"
 import * as argon2 from "argon2"
 
+/** Argon2 hashing, plus the dummy hash signin verifies against on the unknown-email path. */
 @Injectable()
 export class PasswordService implements OnModuleInit {
+  /**
+   * Verified against when no user matched, so signin's latency does not reveal whether the email
+   * exists. Built in `onModuleInit`, so it is undefined until the module initialises — a test
+   * that only calls `compile()` never gets one.
+   */
   dummyHash!: string
 
   async onModuleInit(): Promise<void> {

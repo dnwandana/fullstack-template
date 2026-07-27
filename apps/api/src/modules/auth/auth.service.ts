@@ -20,6 +20,10 @@ const LOCKOUT_DURATION_MS = 15 * 60 * 1000
 
 type SafeUser = { id: string; name: string; email: string }
 
+/**
+ * Credential and session lifecycle. Refresh-token rotation is one-shot: a refresh that loses the
+ * atomic claim is treated as a leak, not a retry, and takes every session for that user with it.
+ */
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name)
@@ -33,6 +37,11 @@ export class AuthService {
     private readonly config: ConfigService,
   ) {}
 
+  /**
+   * Creates the user and backfills any pending invitations for the address.
+   * Deliberately reveals that an email is taken (L-14): the "if an account exists we've emailed
+   * you" reply needs real mail delivery, so do not "fix" this alone — revisit when a mailer lands.
+   */
   async signup(dto: SignupDto): Promise<SafeUser> {
     const existing = await this.users.findSafeByEmail(dto.email)
     if (existing) throw new BadRequestException("user with the given email already exists")
@@ -46,8 +55,8 @@ export class AuthService {
       try {
         await this.invitations.linkInviteeByEmail(dto.email, created.id)
       } catch (backfillErr) {
-        // best-effort backfill — swallow (matches Express behavior); never turns a
-        // successful signup into a 500. Logged so a broken backfill is diagnosable.
+        // Best-effort: swallowed (matches Express behaviour) so a broken backfill never turns a
+        // successful signup into a 500, but logged so it stays diagnosable.
         this.logger.warn(
           `invitation backfill failed for user ${created.id}: ${(backfillErr as Error).message}`,
         )
@@ -61,6 +70,11 @@ export class AuthService {
     }
   }
 
+  /**
+   * Verifies credentials and issues a token pair, persisting the refresh-token hash.
+   * 5 failed attempts lock the account for 15 minutes, and a locked account gets the same
+   * "invalid credentials" 401 as a wrong password, so a caller cannot tell the two apart.
+   */
   async signin(
     dto: SigninDto,
   ): Promise<{ user: SafeUser; accessToken: string; refreshToken: string }> {
@@ -91,6 +105,11 @@ export class AuthService {
     return { user: { id: user.id, name: user.name, email: user.email }, ...tokens }
   }
 
+  /**
+   * Rotates the presented refresh token. A token that is already revoked, or that loses the
+   * atomic claim to a concurrent presenter, is treated as a leak: every refresh token for the
+   * user is revoked and `RefreshReuseException` is thrown.
+   */
   async refresh(
     userId: string,
     rawRefreshToken: string,
@@ -100,30 +119,29 @@ export class AuthService {
       throw new UnauthorizedException("Invalid refresh token")
     }
     if (stored.revokedAt) {
-      // This token was already rotated, so the presenter is replaying a token that
-      // should no longer exist anywhere.
+      // Already rotated: the presenter is replaying a token that should no longer exist anywhere.
       return this.handleReuse(stored.userId)
     }
     if (stored.expiresAt < new Date()) throw new UnauthorizedException("Refresh token has expired")
     const user = await this.users.findSafeById(userId)
     if (!user) throw new UnauthorizedException("invalid credentials")
-    // The claim is atomic (revokedAt set only if still null), so of two concurrent
-    // presenters of the same token exactly one rotates; the loser is a replay by
-    // definition, even though the revokedAt check above saw null.
+    // The claim is atomic, so of two concurrent presenters exactly one rotates; the loser is a
+    // replay by definition, even though the revokedAt check above saw null.
     const claimed = await this.refreshTokens.claimForRotation(stored.id)
     if (!claimed) return this.handleReuse(stored.userId)
     return this.issueTokens(userId)
   }
 
-  // Assume the replayed token leaked and kill every live session for the user —
-  // including the one minted by whoever rotated it. Throws RefreshReuseException
-  // so the controller knows to clear the auth cookies on exactly this path.
+  // Assume the replayed token leaked and kill every live session for the user — including the
+  // one minted by whoever rotated it. Throws RefreshReuseException so the controller clears the
+  // auth cookies on exactly this path.
   private async handleReuse(userId: string): Promise<never> {
     await this.refreshTokens.revokeAllForUser(userId)
     this.logger.warn(`Refresh token reuse detected for user ${userId}`)
     throw new RefreshReuseException()
   }
 
+  /** No-op when the cookie is missing or already revoked, which is what makes logout idempotent. */
   async logout(rawRefreshToken: string | undefined): Promise<void> {
     if (rawRefreshToken) {
       const stored = await this.refreshTokens.findActive(rawRefreshToken)
@@ -131,6 +149,7 @@ export class AuthService {
     }
   }
 
+  /** Throws `NotFoundException`, not `401`, when the token verified but the user row is gone. */
   async me(userId: string): Promise<SafeUser> {
     const user = await this.users.findSafeById(userId)
     if (!user) throw new NotFoundException("User not found")

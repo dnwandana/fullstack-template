@@ -3,10 +3,12 @@ import { createHash, randomUUID } from "crypto"
 import { PrismaService } from "@core/database/prisma.service"
 import { parseDuration } from "@shared/utils/duration"
 
+/** Stores refresh tokens as SHA-256 hashes and owns the atomic claim that rotation depends on. */
 @Injectable()
 export class RefreshTokenService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Deterministic, so a raw token can be looked up by hash; the raw token is never stored. */
   hashToken(raw: string): string {
     return createHash("sha256").update(raw).digest("hex")
   }
@@ -25,8 +27,11 @@ export class RefreshTokenService {
     return row
   }
 
-  // Unlike findActive, this does NOT filter on revokedAt: the caller needs to tell
-  // "never existed" (forgery) apart from "existed and was rotated" (replay).
+  /**
+   * Unlike `findActive`, this deliberately does NOT filter on `revokedAt` — that is what lets the
+   * caller tell "never existed" (forgery) from "existed and was rotated" (replay), and so is what
+   * makes reuse detection possible at all. Do not add the filter.
+   */
   async findByToken(
     raw: string,
   ): Promise<{ id: string; userId: string; expiresAt: Date; revokedAt: Date | null } | null> {
@@ -40,11 +45,11 @@ export class RefreshTokenService {
     await this.prisma.refreshToken.update({ where: { id }, data: { revokedAt: new Date() } })
   }
 
-  // Atomic claim for rotation: revokedAt is set only if still null, so exactly one of
-  // N concurrent presenters of the same token wins. A read-check-revoke sequence here
-  // would let a racing replay slip past reuse detection entirely.
-  // Losers are treated as reuse and revoke the whole family, so clients must serialize
-  // their refreshes — the SPA does (single-flight queue in apps/app/src/utils/http.js).
+  /**
+   * Sets `revokedAt` only where still null, so exactly one of N concurrent presenters of a token
+   * wins; read-check-revoke would let a racing replay slip past reuse detection. Losers count as
+   * reuse and kill the family, so clients must serialize (apps/app/src/utils/http.js does).
+   */
   async claimForRotation(id: string): Promise<boolean> {
     const res = await this.prisma.refreshToken.updateMany({
       where: { id, revokedAt: null },
@@ -53,6 +58,7 @@ export class RefreshTokenService {
     return res.count === 1
   }
 
+  /** The reuse response: logs out every device, including sessions the presenter never touched. */
   async revokeAllForUser(userId: string): Promise<void> {
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
@@ -61,8 +67,8 @@ export class RefreshTokenService {
   }
 
   expiryFromDuration(duration: string): Date {
-    // parseDuration returns milliseconds and throws on a bad value — no silent 7-day
-    // fallback, which used to let the DB row disagree with the JWT.
+    // parseDuration throws on a bad value — no silent 7-day fallback, which used to let the DB
+    // row disagree with the JWT.
     return new Date(Date.now() + parseDuration(duration))
   }
 }

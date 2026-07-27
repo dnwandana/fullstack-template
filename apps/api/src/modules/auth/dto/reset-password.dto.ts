@@ -5,10 +5,9 @@ export class ResetPasswordDto {
   @Matches(/^[0-9a-f]{64}$/, { message: "token must be a 64-character hex string" })
   token!: string
 
-  // Rules copied verbatim from SignupDto — a reset that accepts a weaker password
-  // than signup would be a bypass of the signup policy. The shared cap is 8–128:
-  // Argon2 hashes arbitrary-length input, so the old 72-char ceiling was a
-  // bcrypt artifact (L-15), not a real constraint.
+  // Rules copied verbatim from SignupDto — a reset accepting a weaker password than signup
+  // would bypass the signup policy. The 8–128 cap is real; the old 72-char ceiling was a
+  // bcrypt artifact (L-15), not an Argon2 constraint.
   @IsString()
   @MinLength(8, { message: "password must be at least 8 characters" })
   @MaxLength(128, { message: "password must be at most 128 characters" })
