@@ -22,10 +22,10 @@ This template provides a production-ready foundation for building RESTful APIs w
 
 ### Module layout
 
-Each feature is a self-contained module under `src/<feature>/`:
+Each feature is a self-contained module under `src/modules/<feature>/`:
 
 ```
-src/<feature>/
+src/modules/<feature>/
 ├── <feature>.module.ts       # Wires the controller + providers, imports TenancyModule
 ├── <feature>.service.ts      # Business logic; injects PrismaService
 ├── <feature>.controller.ts   # Thin HTTP layer (params → service → envelope)
@@ -86,13 +86,13 @@ The **error** envelope (from `AllExceptionsFilter`) is always `{ "message": "…
 
 ### Prisma access
 
-`PrismaService` (in `src/prisma/`) extends `PrismaClient` and manages its lifecycle (`$connect` on `onModuleInit`, `$disconnect` on `onModuleDestroy`). Inject it into any service:
+`PrismaService` (in `src/core/database/`, imported as `@core/database/prisma.service`) extends `PrismaClient` and manages its lifecycle (`$connect` on `onModuleInit`, `$disconnect` on `onModuleDestroy`). Inject it into any service:
 
 ```typescript
 constructor(private readonly prisma: PrismaService) {}
 ```
 
-The schema (`prisma/schema.prisma`) is **snake_case in the DB** but **camelCase in the client** (`@map`/`@@map`). Services translate the Prisma camelCase rows back to the **snake_case API contract** the SPA consumes via the shared `toSnakeKeys` generic in `src/common/to-snake-keys.ts` — imported by the `invitations`, `members`, `orgs`, `permissions`, `projects`, `roles`, and `todos` services. It is shallow by design: shape the row explicitly with a Prisma `select` (flattening any relations) before mapping, and `Date` values pass through untouched.
+The schema (`prisma/schema.prisma`) is **snake_case in the DB** but **camelCase in the client** (`@map`/`@@map`). Services translate the Prisma camelCase rows back to the **snake_case API contract** the SPA consumes via the shared `toSnakeKeys` generic in `src/shared/utils/to-snake-keys.ts` (`@shared/utils/to-snake-keys`) — imported by the `invitations`, `members`, `orgs`, `permissions`, `projects`, `roles`, and `todos` services. It is shallow by design: shape the row explicitly with a Prisma `select` (flattening any relations) before mapping, and `Date` values pass through untouched.
 
 ### Request context
 
@@ -106,7 +106,7 @@ req.permissions // ["todos:create", ...] merged org + project permissions
 
 ## Adding a New Resource: Step-by-Step Tutorial
 
-Let's walk through adding a project-scoped **Categories** resource, mirroring the built-in `todos` module. Categories live under a project, so they follow the same tenant hierarchy: `/api/orgs/:org_id/projects/:project_id/categories`.
+Let's walk through adding a project-scoped **Categories** resource, mirroring the built-in `todos` module. Categories live under a project, so they follow the same tenant hierarchy: `/api/v1/orgs/:org_id/projects/:project_id/categories`.
 
 ### Step 1: Plan the resource
 
@@ -121,11 +121,11 @@ Let's walk through adding a project-scoped **Categories** resource, mirroring th
 
 **Endpoints** (all authenticated, permission-gated):
 
-- `GET    /api/orgs/:org_id/projects/:project_id/categories` — list (paginated)
-- `POST   /api/orgs/:org_id/projects/:project_id/categories` — create
-- `GET    /api/orgs/:org_id/projects/:project_id/categories/:category_id` — read
-- `PUT    /api/orgs/:org_id/projects/:project_id/categories/:category_id` — update
-- `DELETE /api/orgs/:org_id/projects/:project_id/categories/:category_id` — delete
+- `GET    /api/v1/orgs/:org_id/projects/:project_id/categories` — list (paginated)
+- `POST   /api/v1/orgs/:org_id/projects/:project_id/categories` — create
+- `GET    /api/v1/orgs/:org_id/projects/:project_id/categories/:category_id` — read
+- `PUT    /api/v1/orgs/:org_id/projects/:project_id/categories/:category_id` — update
+- `DELETE /api/v1/orgs/:org_id/projects/:project_id/categories/:category_id` — delete
 
 ### Step 2: Add the Prisma model
 
@@ -158,9 +158,9 @@ corepack pnpm db:generate   # prisma generate — refresh the typed client
 
 ### Step 3: Create the DTOs
 
-Request validation lives in `class-validator` DTOs under `src/categories/dto/`. The global `ValidationPipe` rejects unknown fields and transforms types automatically.
+Request validation lives in `class-validator` DTOs under `src/modules/categories/dto/`. The global `ValidationPipe` rejects unknown fields and transforms types automatically.
 
-`src/categories/dto/category-body.dto.ts`:
+`src/modules/categories/dto/category-body.dto.ts`:
 
 ```typescript
 import { IsHexColor, IsOptional, IsString, MaxLength, MinLength } from "class-validator"
@@ -177,11 +177,11 @@ export class CategoryBodyDto {
 }
 ```
 
-`src/categories/dto/list-categories.dto.ts` — extend the shared pagination DTO and narrow the sortable columns:
+`src/modules/categories/dto/list-categories.dto.ts` — extend the shared pagination DTO and narrow the sortable columns:
 
 ```typescript
 import { IsIn, IsOptional } from "class-validator"
-import { PaginationQueryDto } from "../../common/pagination/pagination.dto"
+import { PaginationQueryDto } from "@shared/pagination/pagination.dto"
 
 const SORTABLE = ["created_at", "name"] as const
 
@@ -198,14 +198,14 @@ export class ListCategoriesDto extends PaginationQueryDto {
 
 Inject `PrismaService` and `PaginationService`. **Scope every query by `projectId`** — that is what enforces tenant isolation. Translate Prisma's camelCase rows back to the snake_case API contract with the shared `toSnakeKeys` helper — do not hand-roll a per-module converter.
 
-`src/categories/categories.service.ts`:
+`src/modules/categories/categories.service.ts`:
 
 ```typescript
 import { Injectable, NotFoundException } from "@nestjs/common"
 import { randomUUID } from "crypto"
-import { PrismaService } from "../prisma/prisma.service"
-import { PaginationService } from "../common/pagination/pagination.service"
-import { toSnakeKeys } from "../common/to-snake-keys"
+import { PrismaService } from "@core/database/prisma.service"
+import { PaginationService } from "@shared/pagination/pagination.service"
+import { toSnakeKeys } from "@shared/utils/to-snake-keys"
 import { CategoryBodyDto } from "./dto/category-body.dto"
 import { ListCategoriesDto } from "./dto/list-categories.dto"
 
@@ -315,7 +315,7 @@ export class CategoriesService {
 
 The controller applies the guard stack via `@ProjectScoped()`, declares the required permission per handler, and reads context with param decorators. Validate UUID path params with `ParseUUIDPipe`.
 
-`src/categories/categories.controller.ts`:
+`src/modules/categories/categories.controller.ts`:
 
 ```typescript
 import {
@@ -332,10 +332,10 @@ import {
 import { CategoriesService } from "./categories.service"
 import { CategoryBodyDto } from "./dto/category-body.dto"
 import { ListCategoriesDto } from "./dto/list-categories.dto"
-import { CurrentUser } from "../common/decorators/current-user.decorator"
-import { CurrentProject } from "../common/decorators/current-project.decorator"
-import { RequirePermission } from "../common/decorators/require-permission.decorator"
-import { ProjectScoped } from "../tenancy/scoped.decorators"
+import { CurrentUser } from "@shared/decorators/current-user.decorator"
+import { CurrentProject } from "@shared/decorators/current-project.decorator"
+import { RequirePermission } from "@shared/decorators/require-permission.decorator"
+import { ProjectScoped } from "@tenancy/scoped.decorators"
 
 @Controller("orgs/:org_id/projects/:project_id/categories")
 @ProjectScoped()
@@ -392,14 +392,14 @@ export class CategoriesController {
 
 ### Step 6: Wire the module
 
-`src/categories/categories.module.ts` — import `TenancyModule` (it exports the guards + `MembershipService`) and provide `PaginationService`:
+`src/modules/categories/categories.module.ts` — import `TenancyModule` (it exports the guards + `MembershipService`) and provide `PaginationService`:
 
 ```typescript
 import { Module } from "@nestjs/common"
 import { CategoriesService } from "./categories.service"
 import { CategoriesController } from "./categories.controller"
-import { TenancyModule } from "../tenancy/tenancy.module"
-import { PaginationService } from "../common/pagination/pagination.service"
+import { TenancyModule } from "@tenancy/tenancy.module"
+import { PaginationService } from "@shared/pagination/pagination.service"
 
 @Module({
   imports: [TenancyModule],
@@ -412,7 +412,7 @@ export class CategoriesModule {}
 Then register it in `src/app.module.ts`:
 
 ```typescript
-import { CategoriesModule } from "./categories/categories.module"
+import { CategoriesModule } from "@modules/categories/categories.module"
 
 @Module({
   imports: [
@@ -430,7 +430,7 @@ export class AppModule {}
 New permission names must be added in **two** places so they exist in the DB and are granted to the right system roles:
 
 1. `prisma/seed.ts` — add each name to `PERMISSION_NAMES` and a human description to `PERMISSION_DESCRIPTIONS`.
-2. `src/orgs/system-roles.ts` — add each name to `ALL_PERMISSIONS`, and to the per-role lists in `SYSTEM_ROLE_PERMISSIONS` (e.g. grant `categories:read` to `viewer`/`member`, the write permissions to `member`/`admin`/`owner`).
+2. `src/modules/orgs/system-roles.ts` — add each name to `ALL_PERMISSIONS`, and to the per-role lists in `SYSTEM_ROLE_PERMISSIONS` (e.g. grant `categories:read` to `viewer`/`member`, the write permissions to `member`/`admin`/`owner`).
 
 Then re-seed (idempotent upsert):
 
@@ -454,7 +454,7 @@ import { INestApplication } from "@nestjs/common"
 import request from "supertest"
 import { AppModule } from "../src/app.module"
 import { createTestApp } from "./create-test-app"
-import { PrismaService } from "../src/prisma/prisma.service"
+import { PrismaService } from "@core/database/prisma.service"
 import { truncateAll, seedPermissions } from "./setup-e2e"
 import { signupAndSignin, createOrg, getRoleId } from "./factory"
 
@@ -487,17 +487,17 @@ corepack pnpm test   # jest --config test/jest-e2e.json (real PostgreSQL from .e
 
 ```bash
 # 1. Sign in — server sets httpOnly cookies
-curl -X POST http://localhost:3000/api/auth/signin \
+curl -X POST http://localhost:3000/api/v1/auth/signin \
   -H "Content-Type: application/json" -c cookies.txt \
   -d '{"email":"you@example.com","password":"yourpassword"}'
 
 # 2. Create a category (cookies sent automatically)
-curl -X POST http://localhost:3000/api/orgs/ORG_ID/projects/PROJECT_ID/categories \
+curl -X POST http://localhost:3000/api/v1/orgs/ORG_ID/projects/PROJECT_ID/categories \
   -H "Content-Type: application/json" -b cookies.txt \
   -d '{"name":"Work","color":"#3B82F6"}'
 
 # 3. List categories (paginated)
-curl "http://localhost:3000/api/orgs/ORG_ID/projects/PROJECT_ID/categories?page=1&limit=20" \
+curl "http://localhost:3000/api/v1/orgs/ORG_ID/projects/PROJECT_ID/categories?page=1&limit=20" \
   -b cookies.txt
 ```
 
@@ -527,10 +527,10 @@ corepack pnpm db:seed        # prisma db seed — idempotent upsert of the 17 ca
 
 ### Authentication flow
 
-1. **Signup** (`POST /api/auth/signup`) — provide `name`, `email`, `password`, `confirmation_password`. Email is trimmed/lowercased and must be unique (it is the login identifier); `name` is a display name. Password is hashed with Argon2. Pending invitations for that email are backfilled (best-effort).
-2. **Signin** (`POST /api/auth/signin`) — verifies email + password, stores the refresh-token hash, sets `access_token` (15min) and `refresh_token` (7d) httpOnly cookies, returns `{ id, name, email }`. After 5 failed attempts the account is locked for 15 minutes.
+1. **Signup** (`POST /api/v1/auth/signup`) — provide `name`, `email`, `password`, `confirmation_password`. Email is trimmed/lowercased and must be unique (it is the login identifier); `name` is a display name. Password is hashed with Argon2. Pending invitations for that email are backfilled (best-effort).
+2. **Signin** (`POST /api/v1/auth/signin`) — verifies email + password, stores the refresh-token hash, sets `access_token` (15min) and `refresh_token` (7d) httpOnly cookies, returns `{ id, name, email }`. After 5 failed attempts the account is locked for 15 minutes.
 3. **Protected routes** — the browser sends the `access_token` cookie automatically; `JwtAuthGuard` verifies it and sets `req.user = { id }`.
-4. **Refresh** (`POST /api/auth/refresh`) — rotates both tokens (revokes the old refresh token, stores the new hash) and sets new cookies.
+4. **Refresh** (`POST /api/v1/auth/refresh`) — rotates both tokens (revokes the old refresh token, stores the new hash) and sets new cookies.
 
 ### Making a route public
 
@@ -541,8 +541,8 @@ Global `JwtAuthGuard` protects everything by default. Opt a handler out with `@P
 Apply one composite decorator from `src/tenancy/scoped.decorators.ts` on the controller — `@OrgScoped(permission?)` for `/orgs/:org_id/...` routes, `@ProjectScoped(permission?)` for nested `/:project_id/...` routes — and declare the permission per method:
 
 ```typescript
-import { ProjectScoped } from "../tenancy/scoped.decorators"
-import { RequirePermission } from "../common/decorators/require-permission.decorator"
+import { ProjectScoped } from "@tenancy/scoped.decorators"
+import { RequirePermission } from "@shared/decorators/require-permission.decorator"
 
 @Controller("orgs/:org_id/projects/:project_id/categories")
 @ProjectScoped()
@@ -671,7 +671,7 @@ Fetch related rows with Prisma `select`/`include` rather than hand-written joins
 
 ### Security
 
-1. **Environment variables** — never commit `.env`; use strong, distinct JWT secrets (≥32 chars), validated at startup by `src/config/env.validation.ts` (fail-fast).
+1. **Environment variables** — never commit `.env`; use strong, distinct JWT secrets (≥32 chars), validated at startup by `src/core/config/env.validation.ts` (fail-fast).
 2. **Database** — restrict the DB user's privileges, enable SSL for production connections, and keep `DATABASE_URL` out of source control.
 3. **API** — rate limiting is on by default (`@nestjs/throttler`); keep dependencies patched with `corepack pnpm audit`; always serve over HTTPS in production.
 
@@ -694,7 +694,7 @@ Fetch related rows with Prisma `select`/`include` rather than hand-written joins
 
 **`403 Forbidden` on a valid route**
 
-- The handler's `@RequirePermission(...)` name isn't in `req.permissions`. Confirm the permission is granted to the caller's role in `src/orgs/system-roles.ts` and seeded in `prisma/seed.ts`, then re-seed.
+- The handler's `@RequirePermission(...)` name isn't in `req.permissions`. Confirm the permission is granted to the caller's role in `src/modules/orgs/system-roles.ts` and seeded in `prisma/seed.ts`, then re-seed.
 
 **`404` on a resource you know exists**
 
