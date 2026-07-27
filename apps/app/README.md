@@ -127,15 +127,19 @@ corepack pnpm format
 
 ## Project structure
 
-The annotated `src/` tree and the layer architecture — API service → store → composable →
-component — are documented in [`AGENTS.md`](AGENTS.md#architecture-overview), along with the
-[store](AGENTS.md#store-catalog), [composable](AGENTS.md#composable-catalog), and
-[API service](AGENTS.md#api-service-catalog) catalogs.
+The layer architecture — view → composable → store → api service → HTTP client — is documented in
+[`AGENTS.md`](AGENTS.md#layered-architecture). What lives in each directory is best read straight
+off `ls src/<layer>/`; `AGENTS.md` records only the contracts the filenames do not reveal, under
+[Stores](AGENTS.md#stores), [Composables](AGENTS.md#composables), and
+[API Service Layer](AGENTS.md#api-service-layer).
 
 ## Code style
 
-Prettier plus Oxlint and ESLint. Run `corepack pnpm lint` and `corepack pnpm format` from this
-directory. Conventions are documented in [`AGENTS.md`](AGENTS.md#code-style).
+Prettier plus Oxlint and ESLint, all configured in this directory — the config files are
+authoritative. Note that `corepack pnpm lint` here is `run-s lint:*`, which **auto-fixes** with both
+linters, and `format` is scoped to `src/`, so `*.md` in this package has no Prettier owner. The
+naming conventions that are not mechanically enforced are in
+[`AGENTS.md`](AGENTS.md#file-naming).
 
 ## Browser DevTools Setup
 
