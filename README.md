@@ -9,6 +9,20 @@ A production-ready monorepo for building multi-tenant SaaS applications. Combine
 | `apps/api` | NestJS 11, PostgreSQL, Prisma      | REST API with auth, RBAC, multi-tenancy |
 | `apps/app` | Vue 3, Pinia, Ant Design Vue, Vite | Single-page app consuming the API       |
 
+## Documentation map
+
+This file orients you and gets the stack running. Everything else is owned by a per-app doc:
+
+| Doc                                                        | Answers                                                     |
+| ---------------------------------------------------------- | ----------------------------------------------------------- |
+| [`apps/api/README.md`](apps/api/README.md)                 | Run the API, endpoint tables, every environment variable    |
+| [`apps/api/AGENTS.md`](apps/api/AGENTS.md)                 | How the API is built — modules, guards, envelope, structure |
+| [`apps/api/TEMPLATE_GUIDE.md`](apps/api/TEMPLATE_GUIDE.md) | Extend the API — worked resource walkthrough                |
+| [`apps/app/README.md`](apps/app/README.md)                 | Run the SPA                                                 |
+| [`apps/app/AGENTS.md`](apps/app/AGENTS.md)                 | How the SPA is built — stores, composables, HTTP client     |
+| [`apps/app/TEMPLATE_GUIDE.md`](apps/app/TEMPLATE_GUIDE.md) | Extend the SPA — worked feature walkthrough                 |
+| [`AGENTS.md`](AGENTS.md)                                   | Workspace-level facts and invariants                        |
+
 ## Architecture at a glance
 
 ```
@@ -24,7 +38,8 @@ Organization
 
 ## Prerequisites
 
-- Node.js `>=24.0.0`
+- Node.js `>=24.0.0` — declared in `apps/api/package.json` and `apps/app/package.json`; the root
+  package declares no `engines`, so a version check run at the repo root enforces nothing.
 - Corepack (bundled with Node 24+)
 - PostgreSQL (for the API)
 
@@ -41,49 +56,21 @@ For production deployment:
 corepack pnpm install
 ```
 
+pnpm is pinned to `pnpm@11.15.1` by the root `package.json`'s `packageManager` field and activated
+by Corepack — no global pnpm install is needed, and no other version should be used.
+
 ## Environment setup
 
-### API (`apps/api`)
-
 ```bash
+cp .env.example .env              # Docker Compose stack (production topology)
 cp apps/api/.env.example apps/api/.env
-```
-
-Required variables:
-
-```bash
-DATABASE_URL=postgresql://user:pass@localhost/dbname
-ACCESS_TOKEN_SECRET=<at-least-32-characters>
-REFRESH_TOKEN_SECRET=<at-least-32-characters>
-JWT_ISSUER=https://api.example.com
-JWT_AUDIENCE=https://api.example.com
-```
-
-Optional (with defaults):
-
-```bash
-NODE_ENV=development
-PORT=3000
-ACCESS_TOKEN_EXPIRES_IN=15m
-REFRESH_TOKEN_EXPIRES_IN=7d
-CORS_ALLOWED_ORIGINS=http://localhost:8080
-APP_BASE_URL=http://localhost:8080
-RATE_LIMIT_AUTH_MAX=10
-RATE_LIMIT_GENERAL_MAX=1000
-LOG_LEVEL=info
-CLEANUP_ENABLED=true
-# SWAGGER_ENABLED=true  # leave unset: derives to true outside production, false in production
-```
-
-### App (`apps/app`)
-
-```bash
 cp apps/app/.env.example apps/app/.env
 ```
 
-```bash
-VITE_API_BASE_URL=http://localhost:3000/api
-```
+`DATABASE_URL`, `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET`, `JWT_ISSUER`, and `JWT_AUDIENCE` have
+no defaults — the API refuses to boot without them, and rejects the shipped `changeme_…` secrets by
+design. Every variable, its default, and its validation constraint is documented in
+[`apps/api/README.md`](apps/api/README.md#configuration).
 
 ## Database setup
 
@@ -91,8 +78,8 @@ Run Prisma migrations and (optional) seed data:
 
 ```bash
 cd apps/api
-npm run db:migrate   # prisma migrate deploy
-npm run db:seed      # prisma db seed — inserts the 17 canonical permissions idempotently
+corepack pnpm db:migrate   # prisma migrate deploy
+corepack pnpm db:seed      # prisma db seed — inserts the 17 canonical permissions idempotently
 ```
 
 Migrations never run automatically — apply them explicitly on every environment.
@@ -110,51 +97,27 @@ corepack pnpm dev:app   # http://localhost:8080
 
 ## Scripts
 
-| Command       | Description                    |
-| ------------- | ------------------------------ |
-| `pnpm dev`    | Start both apps in watch mode  |
-| `pnpm build`  | Build both apps                |
-| `pnpm lint`   | Lint both apps                 |
-| `pnpm test`   | Run all tests (API + app)      |
-| `pnpm format` | Format both apps with Prettier |
-
-Append `:api` or `:app` to target a single workspace (e.g. `pnpm test:api`).
+Every root script — the full list, the `:api` / `:app` suffix rule, and the Turborepo caveats that
+come with them — is documented in [`AGENTS.md`](AGENTS.md#root-commands).
 
 ## API overview
 
-### Authentication endpoints (public)
+### Authentication endpoints
 
-| Method | Path                                              | Description                                                                   |
-| ------ | ------------------------------------------------- | ----------------------------------------------------------------------------- |
-| POST   | `/api/auth/signup`                                | Register — returns `{ id, name, email }`                                      |
-| POST   | `/api/auth/signin`                                | Login — sets httpOnly auth cookies, returns user info                         |
-| POST   | `/api/auth/refresh`                               | Rotate tokens via httpOnly cookie                                             |
-| POST   | `/api/auth/logout`                                | Revoke refresh token, clear cookies                                           |
-| POST   | `/api/auth/forgot-password`                       | Request a reset link — always 200, never reveals whether the account exists   |
-| POST   | `/api/auth/reset-password`                        | Consume a single-use 64-hex reset token and set a new password                |
-| GET    | `/api/invitations/:invitation_id/preview?token=…` | Preview an invitation while logged out — the raw token is the only credential |
+| Method | Path                                              | Description                                                                    |
+| ------ | ------------------------------------------------- | ------------------------------------------------------------------------------ |
+| POST   | `/api/auth/signup`                                | Register — returns `{ id, name, email }`                                       |
+| POST   | `/api/auth/signin`                                | Login — sets httpOnly auth cookies, returns user info                          |
+| GET    | `/api/auth/me`                                    | Current session — **requires the `access_token` cookie**                       |
+| POST   | `/api/auth/refresh`                               | Rotate tokens — **requires the `refresh_token` cookie**                        |
+| POST   | `/api/auth/logout`                                | Revoke refresh token, clear cookies — **requires the `refresh_token` cookie**  |
+| POST   | `/api/auth/forgot-password`                       | Request a reset link — always 200, never reveals whether the account exists    |
+| POST   | `/api/auth/reset-password`                        | Consume a single-use 64-hex reset token and set a new password                 |
+| GET    | `/api/invitations/:invitation_id/preview?token=…` | Preview an invitation while logged out — the raw token is the only credential  |
 
-### Protected endpoints (authenticated via httpOnly `access_token` cookie)
-
-```
-GET  /api/invitations                              # User's pending invitations
-GET  /api/permissions                              # Permission reference list
-
-POST /api/orgs                                     # Create org
-GET  /api/orgs/:org_id                             # Get org
-GET  /api/orgs/:org_id/members                     # List members
-POST /api/orgs/:org_id/invitations                 # Invite to org
-POST /api/orgs/:org_id/invitations/:id/resend      # Reissue link (new token, resets expiry)
-
-GET  /api/orgs/:org_id/projects                    # List projects
-POST /api/orgs/:org_id/projects                    # Create project
-
-GET  /api/orgs/:org_id/projects/:project_id/todos  # List todos (paginated)
-POST /api/orgs/:org_id/projects/:project_id/todos  # Create todo
-
-GET  /api/orgs/:org_id/roles                       # List roles
-POST /api/orgs/:org_id/roles                       # Create custom role
-```
+Every route not listed above is authenticated and permission-gated. The full table — path, method,
+required permission, and pagination support — is in
+[`apps/api/README.md`](apps/api/README.md#api-endpoints), derived from the controllers themselves.
 
 Health checks (no auth, not rate-limited, outside the `/api` prefix):
 
@@ -164,7 +127,7 @@ GET /health/ready   # readiness — database probe; 200 ready, 503 not_ready
 GET /health         # combined check; 200 healthy, 503 unhealthy
 ```
 
-All three return `{ status, timestamp }`. `/health/ready` and `/health` also include `uptime` and `database` outside production; `/health/live` never does — it is a fixed, dependency-free response. The container healthchecks in both compose files probe `/health/live` from inside the `api` container.
+All three answer with the standard envelope — `{ message, data }` — where `data` is at minimum `{ status, timestamp }` and `message` mirrors `data.status` (`alive`; `ready` / `not_ready`; `healthy` / `unhealthy`). Outside production, `/health/ready` and `/health` add `uptime` and `database` (`"ok"` or `"error"`) to `data`; in production those two fields are omitted. `/health/live` never includes them — it is a fixed, dependency-free response that never touches the database. The container healthchecks in both compose files probe `/health/live` from inside the `api` container.
 
 Note that the production edge nginx publishes health with an **exact** match (`location = /health`), so only `https://api.<DOMAIN>/health` is reachable from outside; the `live`/`ready` sub-paths are internal-only unless you widen that `location` to a prefix match. The local HTTP stack already uses a prefix match, so all three work there.
 
@@ -174,24 +137,10 @@ The OpenAPI document is generated from the controllers and DTOs at boot by `@nes
 
 ### Response format
 
-```json
-{
-  "message": "OK",
-  "data": { ... },
-  "pagination": {
-    "current_page": 1,
-    "total_pages": 5,
-    "total_items": 42,
-    "items_per_page": 10,
-    "has_next_page": true,
-    "has_previous_page": false,
-    "next_page": 2,
-    "previous_page": null
-  }
-}
-```
-
-Errors come back as `{ "message": "…", "data": null, "request_id": "…" }` with the failing request's correlation id.
+Every response is `{ message, data, request_id }`, with `pagination` added on list endpoints and
+`data: null` on errors. The envelope's fields, and how the transform interceptor and the exception
+filter produce it, are documented in
+[`apps/api/AGENTS.md`](apps/api/AGENTS.md#response-envelope).
 
 ### Authentication cookies
 
@@ -215,30 +164,18 @@ Four behaviors are deliberate design decisions, not omissions — don't "fix" th
 
 ## Testing
 
-### API (`apps/api`)
-
 ```bash
-corepack pnpm test:api
+corepack pnpm test        # both apps
+corepack pnpm test:api    # Jest against real PostgreSQL from apps/api/.env.test
+corepack pnpm test:app    # Vitest + jsdom
 ```
 
-Tests require a PostgreSQL test database. Copy the committed test template:
-
-```bash
-cp apps/api/.env.test.example apps/api/.env.test
-# Adjust DATABASE_URL to point at your test database
-```
-
-`.env.test.example` ships valid dummy secrets and generous rate limits — the app boots from it as-is. Do **not** copy `.env.example` for tests: its `changeme_…` secrets are rejected by env validation at startup by design.
-
-The suite is a single Jest e2e run (`jest --config test/jest-e2e.json`) that boots the real NestJS app with Supertest against real PostgreSQL (no mocks), applies migrations, seeds the permissions, and truncates tables between tests. It exercises every module end to end — auth, health, orgs, roles, members, projects, todos, permissions, and invitations.
-
-### App (`apps/app`)
-
-```bash
-corepack pnpm test:app
-```
-
-Vitest with jsdom and `@vue/test-utils`. Tests mock exactly one application boundary — `@/utils/http` — and exercise the real composables, stores, and API service layer, so a wrong argument order anywhere in the chain fails the test. (`vue-router` and Ant Design Vue's `message` are stubbed only as environment shims.)
+`apps/api` needs a live PostgreSQL and a populated `apps/api/.env.test` — copy
+`apps/api/.env.test.example`, which boots as-is, and point its `DATABASE_URL` at a test database.
+Do **not** copy `.env.example` for tests: its `changeme_…` secrets are rejected by env validation on
+purpose. Test layout, fixtures, and the database lifecycle are documented in
+[`apps/api/AGENTS.md`](apps/api/AGENTS.md#testing) and
+[`apps/app/AGENTS.md`](apps/app/AGENTS.md#testing).
 
 ## Deployment
 
@@ -303,6 +240,22 @@ docker compose -f docker-compose.local.yml down -v        # …and wipe the post
 
 Database data persists across restarts in the named `postgres_data` volume; `down -v` deletes it. Production has no bundled database — point `DATABASE_URL` at a managed/external PostgreSQL instance.
 
+**The `POSTGRES_*` interpolation trap.** The `postgres` service reads `POSTGRES_USER`,
+`POSTGRES_PASSWORD`, and `POSTGRES_DB`, but `DATABASE_URL` is a separate opaque string — Compose
+does not build one from the other. Changing a `POSTGRES_*` value without editing `DATABASE_URL` to
+match leaves the API authenticating with the old credentials against a database that no longer
+accepts them. Two details make this easy to get wrong:
+
+- The `${POSTGRES_*}` interpolations are resolved by Compose from the shell or from a `.env` file at
+  the compose root — **not** from `.env.local`, which is only handed to the `api` container via
+  `env_file`. Setting `POSTGRES_PASSWORD` in `.env.local` changes nothing; the literal defaults in
+  `docker-compose.local.yml` (`pg_user` / `pg_password` / `fullstack_template`) stay in force.
+- The host in `DATABASE_URL` must be `postgres` — the compose service name — not `localhost`. From
+  inside the `api` container, `localhost` is the API itself.
+
+Credentials are baked into the volume on first boot, so changing them after the fact also needs
+`docker compose -f docker-compose.local.yml down -v` to re-initialize the database.
+
 ### First deploy
 
 **1. Place Let's Encrypt certificates**
@@ -357,22 +310,23 @@ docker compose run --rm api sh -c "node_modules/.bin/prisma db seed"
 
 ### Environment variables
 
-| Variable               | Required | Description                                                                                                                                                                             |
-| ---------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DOMAIN`               | Yes      | Registrable domain. Production derives `app.<DOMAIN>` (SPA) and `api.<DOMAIN>` (API) from it.                                                                                           |
-| `DATABASE_URL`         | Yes      | PostgreSQL connection string                                                                                                                                                            |
-| `ACCESS_TOKEN_SECRET`  | Yes      | JWT secret, min 32 chars                                                                                                                                                                |
-| `REFRESH_TOKEN_SECRET` | Yes      | JWT secret, min 32 chars, must differ from access secret                                                                                                                                |
-| `JWT_ISSUER`           | Yes      | e.g. `https://api.yourdomain.com`                                                                                                                                                       |
-| `JWT_AUDIENCE`         | Yes      | e.g. `https://app.yourdomain.com`                                                                                                                                                       |
-| `CORS_ALLOWED_ORIGINS` | No       | Defaults to `http://localhost:8080`. Set to `https://app.yourdomain.com` in production.                                                                                                 |
-| `APP_BASE_URL`         | No\*     | Public SPA origin used to build invitation accept links. Defaults to `http://localhost:8080` — set `https://app.<DOMAIN>` in production, `http://localhost` for the local Docker stack. |
-| `SWAGGER_ENABLED`      | No       | Serves the generated OpenAPI spec and Swagger UI at `/api/docs`. Defaults to `false` when `NODE_ENV=production`, `true` otherwise.                                                      |
-| `CLEANUP_ENABLED`      | No       | Runs the nightly cleanup cron job that prunes expired refresh/reset tokens and dead invitations. Defaults to `true`.                                                                    |
+The stack refuses to start without these. Everything else is optional and defaulted.
 
-\* Optional to the validator, effectively required in production: the default produces invitation links pointing at `localhost`.
+| Variable               | Description                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| `DOMAIN`               | Registrable domain. Production derives `app.<DOMAIN>` (SPA) and `api.<DOMAIN>` (API) from it.     |
+| `DATABASE_URL`         | PostgreSQL connection string                                                                      |
+| `ACCESS_TOKEN_SECRET`  | JWT secret, min 32 chars                                                                          |
+| `REFRESH_TOKEN_SECRET` | JWT secret, min 32 chars, must differ from access secret                                          |
+| `JWT_ISSUER`           | e.g. `https://api.yourdomain.com`                                                                 |
+| `JWT_AUDIENCE`         | e.g. `https://api.yourdomain.com` — the audience is the API that validates the token, not the SPA |
 
-See `.env.example` for the full list.
+`DOMAIN` is consumed by the edge nginx templates, not by the API's env validation; the other five are
+validated at API startup. Two more matter in production even though they are optional:
+`CORS_ALLOWED_ORIGINS` must name `https://app.<DOMAIN>`, and `APP_BASE_URL` must be the public SPA
+origin or invitation links point at `localhost`. The complete table — every variable, its default,
+and its validation constraint — is in [`apps/api/README.md`](apps/api/README.md#configuration), and
+`.env.example` is the operator-facing template.
 
 ---
 
@@ -395,7 +349,7 @@ fullstack-template/
 │   │   │   └── users, permissions, orgs, roles, members, projects, todos, invitations, health/
 │   │   ├── prisma/
 │   │   │   ├── schema.prisma       # 12 domain models (@map/@@map keep the DB snake_case)
-│   │   │   ├── migrations/         # Prisma migrations (0_init baseline + subsequent)
+│   │   │   ├── migrations/         # Prisma migrations (single 0_init baseline)
 │   │   │   └── seed.ts             # Idempotent seed of the 17 canonical permissions
 │   │   └── test/                   # Jest e2e suite (Supertest against real PostgreSQL)
 │   │
@@ -407,7 +361,9 @@ fullstack-template/
 │           ├── views/              # Routed page components
 │           ├── components/         # Reusable UI components
 │           ├── router/             # Vue Router + auth guards
-│           └── utils/              # Fetch client, localStorage helpers
+│           ├── utils/              # Fetch client, localStorage helpers
+│           ├── theme/              # antd.js — design tokens fed to ConfigProvider
+│           └── assets/             # app.css + design-system/ (tokens, web fonts)
 │
 ├── package.json                    # Monorepo root
 ├── pnpm-workspace.yaml
@@ -416,24 +372,14 @@ fullstack-template/
 
 ## Adding a new resource
 
-See [`apps/api/CLAUDE.md`](apps/api/CLAUDE.md) for the full recipe. In short:
-
-1. **Module/service/controller**: `nest g module <resource>` (+ service, + controller), or add them by hand under `src/<resource>/`
-2. **Prisma**: add the model to `prisma/schema.prisma` with an `org_id`/`project_id` FK for tenant scoping, then `prisma migrate dev`
-3. **Service**: inject `PrismaService`, scope every query by `org.id`/`project.id`
-4. **Controller**: `@Controller("orgs/:org_id/projects/:project_id/<resource>")`, `@UseGuards(OrgGuard, ProjectGuard, PermissionsGuard)`, `@RequirePermission("<name>")` per handler; return `{ message, data, pagination? }`
-5. **Permissions**: add any new permission names to `prisma/seed.ts` (`PERMISSION_NAMES`) and to `src/orgs/system-roles.ts` (`SYSTEM_ROLE_PERMISSIONS`)
+The recipe — module, Prisma model, tenant-scoped service, guarded controller, seeded permissions —
+is in [`apps/api/AGENTS.md`](apps/api/AGENTS.md#adding-a-new-resource). The worked walkthrough is
+[`apps/api/TEMPLATE_GUIDE.md`](apps/api/TEMPLATE_GUIDE.md); the SPA-side counterpart is
+[`apps/app/TEMPLATE_GUIDE.md`](apps/app/TEMPLATE_GUIDE.md).
 
 ## Code style
 
-- **Formatter**: Prettier — no semicolons, 2-space indent, 100-char width
-- **Linter**: Oxlint (API), Oxlint + ESLint (app)
-- **Modules**: API is TypeScript (NestJS, compiled to `dist/`); the app is ES modules (`"type": "module"`)
-- **File naming**: kebab-case
-
-Run before committing:
-
-```bash
-corepack pnpm lint
-corepack pnpm format
-```
+Prettier and Oxlint, configured per package. Run `corepack pnpm lint` and `corepack pnpm format`
+from the root. Conventions are documented in
+[`apps/api/AGENTS.md`](apps/api/AGENTS.md#code-style) and
+[`apps/app/AGENTS.md`](apps/app/AGENTS.md#code-style).
