@@ -11,6 +11,7 @@
       "outputs": ["dist/**"],
       "env": [
         "DATABASE_URL",
+        "REDIS_URL",
         "ACCESS_TOKEN_SECRET",
         "REFRESH_TOKEN_SECRET",
         "ACCESS_TOKEN_EXPIRES_IN",
@@ -36,6 +37,7 @@
       "outputs": ["coverage/**"],
       "env": [
         "DATABASE_URL",
+        "REDIS_URL",
         "ACCESS_TOKEN_SECRET",
         "REFRESH_TOKEN_SECRET",
         "ACCESS_TOKEN_EXPIRES_IN",
