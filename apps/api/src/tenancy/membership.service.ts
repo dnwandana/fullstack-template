@@ -1,15 +1,19 @@
 import { Injectable } from "@nestjs/common"
 import { PrismaService } from "@core/database/prisma.service"
 
-// PERFORMANCE SEAM: every org-scoped request costs 2 queries here (resolveOrg)
-// and project-scoped requests 2 more (resolveProject) — it is the hot path
-// traces will flag first. When that day comes, add a short-TTL cache keyed on
-// (userId, orgId) INSIDE this service; guards and controllers must not grow
-// their own caches.
+/**
+ * Resolves org/project membership and permissions for the tenancy guards. PERFORMANCE SEAM — 2
+ * queries per org-scoped request, 2 more per project-scoped one, the hot path traces flag first.
+ * Cache inside this service keyed on (userId, orgId); guards and controllers must not grow caches.
+ */
 @Injectable()
 export class MembershipService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Resolve a user's org membership. `found` is reported apart from `org` so `OrgGuard` can tell an
+   * unknown org (404) from a real org the caller is not in (403) — `org` is `null` in both cases.
+   */
   async resolveOrg(
     userId: string,
     orgId: string,
@@ -41,6 +45,11 @@ export class MembershipService {
     return { org: { id: orgId, role_name: membership.role.name }, found: true, permissions }
   }
 
+  /**
+   * Resolve a project inside the org and merge its role's permissions into `orgPermissions`
+   * (deduped). A missing project yields `project: null` with `orgPermissions` handed straight back;
+   * a caller with no project membership keeps exactly the org permissions.
+   */
   async resolveProject(
     userId: string,
     orgId: string,

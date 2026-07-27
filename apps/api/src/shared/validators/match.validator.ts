@@ -1,5 +1,6 @@
 import { registerDecorator, ValidationArguments, ValidationOptions } from "class-validator"
 
+/** Validate that a property equals a sibling property's value, e.g. a password confirmation. */
 export function Match(property: string, validationOptions?: ValidationOptions) {
   return (object: object, propertyName: string): void => {
     registerDecorator({

@@ -1,10 +1,9 @@
 import { ApiProperty } from "@nestjs/swagger"
 import type { PaginationMeta } from "@fullstack/contracts"
 
-// `implements` is load-bearing: PaginationMeta stays the single definition of the
-// envelope, and this class fails to compile if it gains a field. Without the
-// class there is no runtime type for the Swagger plugin to describe, because
-// interfaces erase.
+// `implements` is load-bearing: PaginationMeta stays the single definition and this class fails to
+// compile if it gains a field. The class exists at all because interfaces erase, leaving the
+// Swagger plugin no runtime type to describe.
 export class PaginationMetaResponse implements PaginationMeta {
   @ApiProperty() current_page!: number
   @ApiProperty() total_pages!: number
