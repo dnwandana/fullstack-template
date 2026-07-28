@@ -4,6 +4,7 @@
  * which are passed to every API call.
  */
 
+import type { Envelope, PaginatedEnvelope, PaginationMeta, Todo, Wire } from "@fullstack/contracts"
 import { defineStore } from "pinia"
 import { ref, computed } from "vue"
 import { message } from "ant-design-vue"
@@ -14,6 +15,8 @@ import {
   updateTodo as apiUpdateTodo,
   deleteTodo as apiDeleteTodo,
   deleteTodos as apiDeleteTodos,
+  type TodoInput,
+  type TodoListParams,
 } from "@/api/todos"
 
 export const useTodosStore = defineStore("todos", () => {
@@ -22,12 +25,12 @@ export const useTodosStore = defineStore("todos", () => {
   // ---------------------------------------------------------------------------
 
   // Multi-tenant context — must be set via setContext() before any API call
-  const orgId = ref(null)
-  const projectId = ref(null)
+  const orgId = ref<string | null>(null)
+  const projectId = ref<string | null>(null)
 
-  const todos = ref([])
-  const currentTodo = ref(null)
-  const pagination = ref({
+  const todos = ref<Wire<Todo>[]>([])
+  const currentTodo = ref<Wire<Todo> | null>(null)
+  const pagination = ref<PaginationMeta>({
     current_page: 1,
     total_pages: 0,
     total_items: 0,
@@ -38,7 +41,7 @@ export const useTodosStore = defineStore("todos", () => {
     previous_page: null,
   })
   const loading = ref(false)
-  const selectedIds = ref([])
+  const selectedIds = ref<string[]>([])
 
   // Sort params
   const sortBy = ref("updated_at")
@@ -51,10 +54,10 @@ export const useTodosStore = defineStore("todos", () => {
   // Getters
   // ---------------------------------------------------------------------------
 
-  /** @returns {boolean} Whether any todos are currently selected */
+  /** Whether any todos are currently selected */
   const hasSelected = computed(() => selectedIds.value.length > 0)
 
-  /** @returns {number} The number of currently selected todos */
+  /** The number of currently selected todos */
   const selectedCount = computed(() => selectedIds.value.length)
 
   // ---------------------------------------------------------------------------
@@ -62,14 +65,20 @@ export const useTodosStore = defineStore("todos", () => {
   // ---------------------------------------------------------------------------
 
   /**
+   * Read the multi-tenant context for an API call. The refs are null until `setContext` runs;
+   * `String()` reproduces exactly what the JavaScript version sent in that case — a literal
+   * `/orgs/null/...` URL — rather than silently changing the failure mode to an empty segment.
+   */
+  function ctx(): { org: string; project: string } {
+    return { org: String(orgId.value), project: String(projectId.value) }
+  }
+
+  /**
    * Set the multi-tenant context for all todo operations.
    * This must be called before performing any API-based action so that
    * requests are scoped to the correct organisation and project.
-   * @param {string} org - Organisation UUID
-   * @param {string} project - Project UUID
-   * @returns {void}
    */
-  function setContext(org, project) {
+  function setContext(org: string, project: string): void {
     orgId.value = org
     projectId.value = project
   }
@@ -78,18 +87,12 @@ export const useTodosStore = defineStore("todos", () => {
    * Fetch a paginated list of todos from the API.
    * Falls back to the current pagination / sort / search state when
    * individual params are not provided.
-   * @param {Object} [params={}] - Optional query parameter overrides
-   * @param {number} [params.page] - Page number to fetch
-   * @param {number} [params.limit] - Number of items per page
-   * @param {string} [params.sort_by] - Field name to sort by
-   * @param {string} [params.sort_order] - Sort direction ("asc" or "desc")
-   * @returns {Promise<Object>} The API response data
    */
-  async function fetchTodos(params = {}) {
+  async function fetchTodos(params: TodoListParams = {}): Promise<PaginatedEnvelope<Wire<Todo>[]>> {
     loading.value = true
     try {
       // Build the query object, merging explicit params with stored defaults
-      const query = {
+      const query: TodoListParams = {
         page: params.page || pagination.value.current_page,
         limit: params.limit || pagination.value.items_per_page,
         sort_by: params.sort_by || sortBy.value,
@@ -101,7 +104,8 @@ export const useTodosStore = defineStore("todos", () => {
         query.search = searchQuery.value
       }
 
-      const response = await apiGetTodos(orgId.value, projectId.value, query)
+      const { org, project } = ctx()
+      const response = await apiGetTodos(org, project, query)
 
       todos.value = response.data.data
       pagination.value = response.data.pagination
@@ -127,13 +131,12 @@ export const useTodosStore = defineStore("todos", () => {
   /**
    * Fetch a single todo by its ID.
    * The result is stored in `currentTodo` for detail views.
-   * @param {string} todoId - UUID of the todo to fetch
-   * @returns {Promise<Object>} The API response data
    */
-  async function fetchTodoById(todoId) {
+  async function fetchTodoById(todoId: string): Promise<Envelope<Wire<Todo>>> {
     loading.value = true
     try {
-      const response = await apiGetTodoById(orgId.value, projectId.value, todoId)
+      const { org, project } = ctx()
+      const response = await apiGetTodoById(org, project, todoId)
       currentTodo.value = response.data.data
       return response.data
     } catch (error) {
@@ -147,13 +150,12 @@ export const useTodosStore = defineStore("todos", () => {
 
   /**
    * Create a new todo and refresh the list.
-   * @param {Object} data - Todo payload (title, description, etc.)
-   * @returns {Promise<Object>} The API response data for the created todo
    */
-  async function createTodo(data) {
+  async function createTodo(data: TodoInput): Promise<Envelope<Wire<Todo>>> {
     loading.value = true
     try {
-      const response = await apiCreateTodo(orgId.value, projectId.value, data)
+      const { org, project } = ctx()
+      const response = await apiCreateTodo(org, project, data)
       message.success("Todo created successfully!")
       // Refresh the list so the new item appears immediately
       await fetchTodos()
@@ -165,14 +167,12 @@ export const useTodosStore = defineStore("todos", () => {
 
   /**
    * Update an existing todo and refresh the list.
-   * @param {string} todoId - UUID of the todo to update
-   * @param {Object} data - Fields to update
-   * @returns {Promise<Object>} The API response data for the updated todo
    */
-  async function updateTodo(todoId, data) {
+  async function updateTodo(todoId: string, data: TodoInput): Promise<Envelope<Wire<Todo>>> {
     loading.value = true
     try {
-      const response = await apiUpdateTodo(orgId.value, projectId.value, todoId, data)
+      const { org, project } = ctx()
+      const response = await apiUpdateTodo(org, project, todoId, data)
       message.success("Todo updated successfully!")
       // Refresh the list to reflect the changes
       await fetchTodos()
@@ -184,13 +184,12 @@ export const useTodosStore = defineStore("todos", () => {
 
   /**
    * Delete a single todo by ID and refresh the list.
-   * @param {string} todoId - UUID of the todo to delete
-   * @returns {Promise<Object>} The API response data
    */
-  async function deleteTodo(todoId) {
+  async function deleteTodo(todoId: string): Promise<Envelope<null>> {
     loading.value = true
     try {
-      const response = await apiDeleteTodo(orgId.value, projectId.value, todoId)
+      const { org, project } = ctx()
+      const response = await apiDeleteTodo(org, project, todoId)
       message.success("Todo deleted successfully!")
       // Refresh the list to remove the deleted item
       await fetchTodos()
@@ -202,13 +201,10 @@ export const useTodosStore = defineStore("todos", () => {
 
   /**
    * Delete multiple todos in a single request.
-   * Uses the provided IDs array, or falls back to the current selection.
-   * @param {string[]|null} [ids=null] - Array of todo UUIDs to delete.
-   *   When null, the current `selectedIds` are used.
-   * @returns {Promise<Object|undefined>} The API response data, or undefined
-   *   if there was nothing to delete
+   * Uses the provided IDs array, or falls back to the current selection when
+   * `ids` is null. Resolves to undefined when there was nothing to delete.
    */
-  async function bulkDelete(ids = null) {
+  async function bulkDelete(ids: string[] | null = null): Promise<Envelope<null> | undefined> {
     const idsToDelete = ids || selectedIds.value
     if (idsToDelete.length === 0) {
       return
@@ -216,7 +212,8 @@ export const useTodosStore = defineStore("todos", () => {
 
     loading.value = true
     try {
-      const response = await apiDeleteTodos(orgId.value, projectId.value, idsToDelete)
+      const { org, project } = ctx()
+      const response = await apiDeleteTodos(org, project, idsToDelete)
       message.success(`${idsToDelete.length} todo(s) deleted successfully!`)
       // Clear selection and refresh the list
       selectedIds.value = []
@@ -230,10 +227,8 @@ export const useTodosStore = defineStore("todos", () => {
   /**
    * Toggle the selection state of a single todo.
    * If the todo is already selected it will be deselected, and vice versa.
-   * @param {string} todoId - UUID of the todo to toggle
-   * @returns {void}
    */
-  function toggleSelection(todoId) {
+  function toggleSelection(todoId: string): void {
     const index = selectedIds.value.indexOf(todoId)
     if (index === -1) {
       // Not currently selected — add it
@@ -246,45 +241,37 @@ export const useTodosStore = defineStore("todos", () => {
 
   /**
    * Select all todos on the current page.
-   * @returns {void}
    */
-  function selectAll() {
+  function selectAll(): void {
     selectedIds.value = todos.value.map((todo) => todo.id)
   }
 
   /**
    * Clear all todo selections.
-   * @returns {void}
    */
-  function clearSelection() {
+  function clearSelection(): void {
     selectedIds.value = []
   }
 
   /**
    * Set the sort field and order used when fetching todos.
-   * @param {string} field - The field name to sort by (e.g. "updated_at")
-   * @param {string} order - Sort direction ("asc" or "desc")
-   * @returns {void}
    */
-  function setSort(field, order) {
+  function setSort(field: string, order: string): void {
     sortBy.value = field
     sortOrder.value = order
   }
 
   /**
    * Set the search query used to filter todos.
-   * @param {string} query - Search term to filter by title
-   * @returns {void}
    */
-  function setSearch(query) {
+  function setSearch(query: string): void {
     searchQuery.value = query
   }
 
   /**
    * Clear the currently viewed single todo.
-   * @returns {void}
    */
-  function clearCurrentTodo() {
+  function clearCurrentTodo(): void {
     currentTodo.value = null
   }
 
@@ -292,9 +279,8 @@ export const useTodosStore = defineStore("todos", () => {
    * Reset all store state back to its initial defaults.
    * Used when navigating away from a project context so that
    * stale data from a previous org/project is not visible.
-   * @returns {void}
    */
-  function clearAll() {
+  function clearAll(): void {
     todos.value = []
     currentTodo.value = null
     pagination.value = {

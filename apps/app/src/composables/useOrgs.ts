@@ -5,11 +5,12 @@
  */
 
 import { ref, computed } from "vue"
+import type { Org, Wire } from "@fullstack/contracts"
+import type { OrgInput } from "@/api/orgs"
 import { useOrgsStore } from "@/stores/orgs"
 
 /**
  * Composable for managing organization CRUD operations and modal UI state.
- * @returns {Object} Reactive state, computed properties, validation rules, and actions
  */
 export function useOrgs() {
   const orgsStore = useOrgsStore()
@@ -18,11 +19,11 @@ export function useOrgs() {
   // Modal state
   // ---------------------------------------------------------------------------
 
-  /** @type {import('vue').Ref<boolean>} Whether the create/edit modal is visible */
+  /** Whether the create/edit modal is visible */
   const isModalVisible = ref(false)
 
-  /** @type {import('vue').Ref<Object|null>} The organization being edited, or null for create mode */
-  const editingOrg = ref(null)
+  /** The organization being edited, or null for create mode */
+  const editingOrg = ref<Wire<Org> | null>(null)
 
   // ---------------------------------------------------------------------------
   // Validation rules
@@ -41,7 +42,6 @@ export function useOrgs() {
   /**
    * Whether the modal is in edit mode (as opposed to create mode).
    * Determined by checking if an organization is loaded for editing.
-   * @type {import('vue').ComputedRef<boolean>}
    */
   const isEditing = computed(() => !!editingOrg.value)
 
@@ -53,7 +53,7 @@ export function useOrgs() {
    * Open the modal in create mode.
    * Resets editingOrg so the form starts empty.
    */
-  function openCreateModal() {
+  function openCreateModal(): void {
     editingOrg.value = null
     isModalVisible.value = true
   }
@@ -61,9 +61,8 @@ export function useOrgs() {
   /**
    * Open the modal in edit mode with a shallow clone of the given organization.
    * Cloning prevents the form from mutating the store state directly.
-   * @param {Object} org - The organization object to edit
    */
-  function openEditModal(org) {
+  function openEditModal(org: Wire<Org>): void {
     editingOrg.value = { ...org }
     isModalVisible.value = true
   }
@@ -71,7 +70,7 @@ export function useOrgs() {
   /**
    * Close the modal and reset the editing state.
    */
-  function closeModal() {
+  function closeModal(): void {
     isModalVisible.value = false
     editingOrg.value = null
   }
@@ -80,13 +79,15 @@ export function useOrgs() {
    * Handle form submission for both create and update operations.
    * Delegates to the appropriate store action based on whether we are editing
    * an existing organization or creating a new one, then closes the modal.
-   * @param {Object} formData - The form data to submit
-   * @param {string} formData.name - Organization name (required)
-   * @param {string} [formData.description] - Optional description
+   * The ref is read into a local because control-flow analysis cannot narrow
+   * `editingOrg.value` through the `isEditing` computed. The local is
+   * behaviour-identical: `isEditing` is exactly `!!editingOrg.value`, and
+   * nothing awaits between the two reads.
    */
-  async function handleSubmit(formData) {
-    if (isEditing.value) {
-      await orgsStore.updateOrg(editingOrg.value.id, formData)
+  async function handleSubmit(formData: OrgInput): Promise<void> {
+    const editing = editingOrg.value
+    if (editing) {
+      await orgsStore.updateOrg(editing.id, formData)
     } else {
       await orgsStore.createOrg(formData)
     }

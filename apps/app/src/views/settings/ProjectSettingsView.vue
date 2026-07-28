@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * ProjectSettingsView — General settings for a project.
  *
@@ -30,8 +30,8 @@ const authStore = useAuthStore()
 const projectsStore = useProjectsStore()
 
 // Extract orgId and projectId from route params — these scope all operations
-const orgId = route.params.orgId
-const projectId = route.params.projectId
+const orgId = String(route.params.orgId)
+const projectId = String(route.params.projectId)
 
 // ---------------------------------------------------------------------------
 // Composable instances
@@ -75,7 +75,7 @@ watch(
  * Uses the projects store directly since the composable handleSubmit
  * is designed for modal-based create/edit flows.
  */
-async function handleSave() {
+async function handleSave(): Promise<void> {
   saving.value = true
   try {
     await projectsStore.updateProject(orgId, projectId, formState)
@@ -88,7 +88,7 @@ async function handleSave() {
  * Delete the project and navigate back to the org's projects list.
  * Called after user confirms via Popconfirm.
  */
-async function handleDeleteProject() {
+async function handleDeleteProject(): Promise<void> {
   await deleteProject(orgId, projectId)
   router.push(`/orgs/${orgId}`)
 }
@@ -100,7 +100,10 @@ async function handleDeleteProject() {
 onMounted(async () => {
   await fetchOrgById(orgId)
   await fetchProjectById(orgId, projectId)
-  loadPermissions(orgId, authStore.currentUser.id)
+  // TODO(ts-migration): this read was unguarded and would have thrown on a null user. `?.` matches
+  // the other views. No observable change — `usePermissions` names the parameter `_userId` and
+  // discards it.
+  loadPermissions(orgId, authStore.currentUser?.id)
 })
 </script>
 

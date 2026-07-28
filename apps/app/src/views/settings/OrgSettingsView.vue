@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * OrgSettingsView — General settings for an organization (name, description, delete).
  *
@@ -22,7 +22,7 @@ const authStore = useAuthStore()
 const orgsStore = useOrgsStore()
 
 // Extract orgId from route params — this scopes all settings operations
-const orgId = route.params.orgId
+const orgId = String(route.params.orgId)
 
 const { currentOrg, fetchOrgById, deleteOrg } = useOrgs()
 const { can, loadPermissions } = usePermissions()
@@ -58,7 +58,7 @@ watch(
  * Uses the orgs store directly since the composable handleSubmit
  * is designed for modal-based create/edit flows.
  */
-async function handleSave() {
+async function handleSave(): Promise<void> {
   saving.value = true
   try {
     await orgsStore.updateOrg(orgId, formState)
@@ -71,7 +71,7 @@ async function handleSave() {
  * Delete the organization and navigate back to the orgs list.
  * Called after user confirms via Popconfirm.
  */
-async function handleDeleteOrg() {
+async function handleDeleteOrg(): Promise<void> {
   await deleteOrg(orgId)
   router.push("/orgs")
 }
@@ -82,7 +82,10 @@ async function handleDeleteOrg() {
 
 onMounted(async () => {
   await fetchOrgById(orgId)
-  loadPermissions(orgId, authStore.currentUser.id)
+  // TODO(ts-migration): this read was unguarded and would have thrown on a null user. `?.` matches
+  // the other views. No observable change — `usePermissions` names the parameter `_userId` and
+  // discards it.
+  loadPermissions(orgId, authStore.currentUser?.id)
 })
 </script>
 

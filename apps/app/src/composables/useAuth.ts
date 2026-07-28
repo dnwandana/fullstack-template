@@ -2,6 +2,7 @@
  * Auth composable - form handling and validation for authentication
  */
 
+import type { Rule } from "ant-design-vue/es/form"
 import { ref, reactive } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { useAuthStore } from "@/stores/auth"
@@ -15,12 +16,8 @@ import { useAuthStore } from "@/stores/auth"
  * honoured: a single leading slash, no protocol-relative `//` form, and no
  * backslash variant that browsers normalize into one. Anything else, including
  * an array (a repeated query key), falls back.
- *
- * @param {*} redirect - Raw `redirect` query value, of any shape
- * @param {string} fallback - Destination used when redirect is absent or unsafe
- * @returns {string} A safe path to navigate to
  */
-function safeRedirect(redirect, fallback) {
+function safeRedirect(redirect: unknown, fallback: string): string {
   if (typeof redirect !== "string" || !redirect.startsWith("/")) {
     return fallback
   }
@@ -47,23 +44,23 @@ export function useAuth() {
   const error = ref("")
 
   // Validation rules for Ant Design forms
-  const nameRules = [
+  const nameRules: Rule[] = [
     { required: true, whitespace: true, message: "Please enter your name" },
     { max: 100, message: "Name must be at most 100 characters" },
   ]
 
-  const emailRules = [
+  const emailRules: Rule[] = [
     { required: true, message: "Please enter your email" },
     { type: "email", message: "Please enter a valid email address" },
     { max: 255, message: "Email must be at most 255 characters" },
   ]
 
-  const passwordRules = [
+  const passwordRules: Rule[] = [
     { required: true, message: "Please enter your password" },
     { min: 8, message: "Password must be at least 8 characters" },
   ]
 
-  const confirmation_passwordRules = [
+  const confirmation_passwordRules: Rule[] = [
     { required: true, message: "Please confirm your password" },
     {
       validator: async (_rule, value) => {
@@ -79,13 +76,13 @@ export function useAuth() {
    * Honours a `?redirect=` query param so an invite link survives the detour
    * through the login page
    */
-  async function handleSignin() {
+  async function handleSignin(): Promise<void> {
     error.value = ""
     try {
       await authStore.signin(formState.email, formState.password)
       router.push(safeRedirect(route.query.redirect, "/orgs"))
     } catch (err) {
-      error.value = err.message
+      error.value = err instanceof Error ? err.message : String(err)
     }
   }
 
@@ -94,7 +91,7 @@ export function useAuth() {
    * Signup does not establish a session, so the user is sent on to /login —
    * carrying any `?redirect=` with them so the invitation stays redeemable
    */
-  async function handleSignup() {
+  async function handleSignup(): Promise<void> {
     error.value = ""
     try {
       await authStore.signup(
@@ -106,14 +103,14 @@ export function useAuth() {
       const redirect = safeRedirect(route.query.redirect, "")
       router.push({ path: "/login", query: redirect ? { redirect } : {} })
     } catch (err) {
-      error.value = err.message
+      error.value = err instanceof Error ? err.message : String(err)
     }
   }
 
   /**
    * Handle logout
    */
-  function handleLogout() {
+  function handleLogout(): void {
     authStore.logout()
     router.push("/login")
   }
@@ -121,7 +118,7 @@ export function useAuth() {
   /**
    * Reset form state
    */
-  function resetForm() {
+  function resetForm(): void {
     formState.name = ""
     formState.email = ""
     formState.password = ""
@@ -133,6 +130,13 @@ export function useAuth() {
     // State
     formState,
     error,
+    // TODO(ts-migration): these three passthroughs are non-reactive snapshots.
+    // Pinia unwraps refs on the store instance, so `authStore.loading` reads as
+    // `boolean` (not `Ref<boolean>`) and is captured once at composable setup —
+    // LoginView's `:loading="loading"` can therefore never flip to true. Types
+    // confirm it: `loading` and `isAuthenticated` infer `boolean`, `currentUser`
+    // infers `StoredUser | null`. Pre-existing; fixing it needs `storeToRefs` or
+    // `computed()` wrappers, which is a behavior change and out of scope here.
     loading: authStore.loading,
     isAuthenticated: authStore.isAuthenticated,
     currentUser: authStore.currentUser,

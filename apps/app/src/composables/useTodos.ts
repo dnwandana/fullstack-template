@@ -6,12 +6,13 @@
  */
 
 import { ref, computed } from "vue"
+import type { Todo, Wire } from "@fullstack/contracts"
+import type { TodoInput } from "@/api/todos"
 import { useTodosStore } from "@/stores/todos"
 
 /**
  * Composable for managing todo CRUD operations, modal UI state,
  * pagination, sorting, searching, and multi-tenant context.
- * @returns {Object} Reactive state, computed properties, validation rules, and actions
  */
 export function useTodos() {
   const todosStore = useTodosStore()
@@ -20,11 +21,11 @@ export function useTodos() {
   // Modal state
   // ---------------------------------------------------------------------------
 
-  /** @type {import('vue').Ref<boolean>} Whether the create/edit modal is visible */
+  /** Whether the create/edit modal is visible */
   const isModalVisible = ref(false)
 
-  /** @type {import('vue').Ref<Object|null>} The todo being edited, or null for create mode */
-  const editingTodo = ref(null)
+  /** The todo being edited, or null for create mode */
+  const editingTodo = ref<Wire<Todo> | null>(null)
 
   // ---------------------------------------------------------------------------
   // Validation rules
@@ -43,7 +44,6 @@ export function useTodos() {
   /**
    * Whether the modal is in edit mode (as opposed to create mode).
    * Determined by checking if a todo is loaded for editing.
-   * @type {import('vue').ComputedRef<boolean>}
    */
   const isEditing = computed(() => !!editingTodo.value)
 
@@ -55,10 +55,8 @@ export function useTodos() {
    * Set the multi-tenant context for todo operations.
    * Must be called before performing any API-based action so that
    * requests are scoped to the correct organization and project.
-   * @param {string} orgId - Organization UUID
-   * @param {string} projectId - Project UUID
    */
-  function setContext(orgId, projectId) {
+  function setContext(orgId: string, projectId: string): void {
     todosStore.setContext(orgId, projectId)
   }
 
@@ -67,7 +65,7 @@ export function useTodos() {
    * Resets the store to its initial defaults, including the multi-tenant
    * context, pagination, sort, search, and selection state.
    */
-  function clearAll() {
+  function clearAll(): void {
     todosStore.clearAll()
   }
 
@@ -75,7 +73,7 @@ export function useTodos() {
    * Open the modal in create mode.
    * Resets editingTodo so the form starts empty.
    */
-  function openCreateModal() {
+  function openCreateModal(): void {
     editingTodo.value = null
     isModalVisible.value = true
   }
@@ -83,9 +81,8 @@ export function useTodos() {
   /**
    * Open the modal in edit mode with a shallow clone of the given todo.
    * Cloning prevents the form from mutating the store state directly.
-   * @param {Object} todo - The todo object to edit
    */
-  function openEditModal(todo) {
+  function openEditModal(todo: Wire<Todo>): void {
     editingTodo.value = { ...todo }
     isModalVisible.value = true
   }
@@ -93,7 +90,7 @@ export function useTodos() {
   /**
    * Close the modal and reset the editing state.
    */
-  function closeModal() {
+  function closeModal(): void {
     isModalVisible.value = false
     editingTodo.value = null
   }
@@ -102,13 +99,15 @@ export function useTodos() {
    * Handle form submission for both create and update operations.
    * Delegates to the appropriate store action based on whether we are editing
    * an existing todo or creating a new one, then closes the modal.
-   * @param {Object} formData - The form data to submit
-   * @param {string} formData.title - Todo title (required)
-   * @param {string} [formData.description] - Optional description
+   * The ref is read into a local because control-flow analysis cannot narrow
+   * `editingTodo.value` through the `isEditing` computed. The local is
+   * behaviour-identical: `isEditing` is exactly `!!editingTodo.value`, and
+   * nothing awaits between the two reads.
    */
-  async function handleSubmit(formData) {
-    if (isEditing.value) {
-      await todosStore.updateTodo(editingTodo.value.id, formData)
+  async function handleSubmit(formData: TodoInput): Promise<void> {
+    const editing = editingTodo.value
+    if (editing) {
+      await todosStore.updateTodo(editing.id, formData)
     } else {
       await todosStore.createTodo(formData)
     }
@@ -117,28 +116,23 @@ export function useTodos() {
 
   /**
    * Handle page or page size change by fetching the requested page.
-   * @param {number} page - New page number
-   * @param {number} pageSize - New page size (items per page)
    */
-  function handlePageChange(page, pageSize) {
+  function handlePageChange(page: number, pageSize: number): void {
     todosStore.fetchTodos({ page, limit: pageSize })
   }
 
   /**
    * Handle sort change by updating the sort params and re-fetching from page 1.
-   * @param {string} field - The field name to sort by (e.g. "updated_at")
-   * @param {string} order - Sort direction ("asc" or "desc")
    */
-  function handleSortChange(field, order) {
+  function handleSortChange(field: string, order: string): void {
     todosStore.setSort(field, order)
     todosStore.fetchTodos({ page: 1 })
   }
 
   /**
    * Handle search by updating the search query and re-fetching from page 1.
-   * @param {string} value - Search term to filter todos by title
    */
-  function handleSearch(value) {
+  function handleSearch(value: string): void {
     todosStore.setSearch(value)
     todosStore.fetchTodos({ page: 1 })
   }
@@ -146,18 +140,17 @@ export function useTodos() {
   /**
    * Handle row selection change from the table component.
    * Replaces the current selection with the provided row keys.
-   * @param {string[]} selectedRowKeys - Array of selected todo IDs
+   * AntD types row keys as `string | number`; every key here is a todo UUID, so `String` is
+   * identity — the map exists to satisfy the store's `string[]`, not to convert anything.
    */
-  function handleSelectionChange(selectedRowKeys) {
-    todosStore.selectedIds = selectedRowKeys
+  function handleSelectionChange(selectedRowKeys: (string | number)[]): void {
+    todosStore.selectedIds = selectedRowKeys.map(String)
   }
 
   /**
    * Check if a specific todo is currently selected.
-   * @param {string} todoId - UUID of the todo to check
-   * @returns {boolean} True if the todo is in the selected list
    */
-  function isSelected(todoId) {
+  function isSelected(todoId: string): boolean {
     return todosStore.selectedIds.includes(todoId)
   }
 

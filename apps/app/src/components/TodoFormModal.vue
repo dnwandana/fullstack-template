@@ -1,23 +1,26 @@
-<script setup>
+<script setup lang="ts">
 import { reactive, watch } from "vue"
 import { Form, Modal, Input, Checkbox } from "ant-design-vue"
+import type { Rule } from "ant-design-vue/es/form"
+import type { Todo, Wire } from "@fullstack/contracts"
+import type { TodoInput } from "@/api/todos"
 
-const props = defineProps({
-  visible: {
-    type: Boolean,
-    default: false,
-  },
-  todo: {
-    type: Object,
-    default: null,
-  },
-  loading: {
-    type: Boolean,
-    default: false,
-  },
+interface Props {
+  visible?: boolean
+  todo?: Wire<Todo> | null
+  loading?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  visible: false,
+  todo: null,
+  loading: false,
 })
 
-const emit = defineEmits(["submit", "cancel"])
+const emit = defineEmits<{
+  submit: [payload: TodoInput]
+  cancel: []
+}>()
 
 // Form state
 const formState = reactive({
@@ -27,7 +30,7 @@ const formState = reactive({
 })
 
 // Validation rules
-const rules = reactive({
+const rules = reactive<Record<string, Rule[]>>({
   title: [
     { required: true, message: "Please enter a title" },
     { max: 255, message: "Title cannot exceed 255 characters" },

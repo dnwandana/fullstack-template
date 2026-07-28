@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * OrgFormModal — Modal form for creating or editing an organization.
  *
@@ -14,23 +14,26 @@
 
 import { reactive, watch, computed } from "vue"
 import { Form, Modal, Input } from "ant-design-vue"
+import type { Rule } from "ant-design-vue/es/form"
+import type { Org, Wire } from "@fullstack/contracts"
+import type { OrgInput } from "@/api/orgs"
 
-const props = defineProps({
-  visible: {
-    type: Boolean,
-    default: false,
-  },
-  org: {
-    type: Object,
-    default: null,
-  },
-  loading: {
-    type: Boolean,
-    default: false,
-  },
+interface Props {
+  visible?: boolean
+  org?: Wire<Org> | null
+  loading?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  visible: false,
+  org: null,
+  loading: false,
 })
 
-const emit = defineEmits(["submit", "cancel"])
+const emit = defineEmits<{
+  submit: [payload: OrgInput]
+  cancel: []
+}>()
 
 // Reactive form state bound to template inputs
 const formState = reactive({
@@ -39,7 +42,7 @@ const formState = reactive({
 })
 
 // Validation rules — name is required with a max length
-const rules = reactive({
+const rules = reactive<Record<string, Rule[]>>({
   name: [
     { required: true, message: "Please enter an organization name" },
     { max: 100, message: "Name cannot exceed 100 characters" },

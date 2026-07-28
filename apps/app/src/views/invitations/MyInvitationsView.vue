@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * MyInvitationsView — Displays the current user's received invitations in a table.
  *
@@ -14,6 +14,8 @@
 import { h, onMounted } from "vue"
 import { useRouter } from "vue-router"
 import { Table, Button, Tag, Typography, Space, Empty, Skeleton, Popconfirm } from "ant-design-vue"
+import type { ColumnsType } from "ant-design-vue/es/table"
+import type { MyInvitation, Wire } from "@fullstack/contracts"
 import { useInvitations } from "@/composables/useInvitations"
 
 const router = useRouter()
@@ -28,20 +30,21 @@ const { myInvitations, loading, fetchMyInvitations, handleDecline } = useInvitat
  * explains that the link is the credential. It deliberately does NOT render
  * `invalid`: the invitation is fine, the browser just isn't carrying its code.
  *
- * @param {Object} invitation - Invitation row from the table
- * @returns {void}
+ * Takes the id rather than the row: its only caller is the `#bodyCell` slot, whose `record` AntD
+ * declares as `Record<string, any>` — a type that satisfies no named row shape. Reading `.id` off
+ * it matches the sibling `handleDecline(record.id)` call and needs no cast.
  */
-function goToInvite(invitation) {
-  router.push({ name: "InviteAccept", params: { invitationId: invitation.id } })
+function goToInvite(invitationId: string): void {
+  router.push({ name: "InviteAccept", params: { invitationId } })
 }
 
 /**
  * Map invitation status strings to Ant Design Tag color names.
  * Used in the Status column's customRender to visually differentiate states.
- * @param {string} status - The invitation status (pending, accepted, declined)
- * @returns {string} Ant Design Tag color
+ * `status` is a plain string, not a union: the database column carries no constraint, so the
+ * trailing "default" is a reachable branch rather than dead code.
  */
-function getStatusColor(status) {
+function getStatusColor(status: string): string {
   if (status === "pending") {
     return "blue"
   }
@@ -56,10 +59,10 @@ function getStatusColor(status) {
 
 /**
  * Format an ISO date string into a user-friendly locale representation.
- * @param {string} dateString - ISO 8601 date string
- * @returns {string} Formatted date string
+ * The falsy guard stays even though `expires_at` is non-nullable — it also covers the empty
+ * string, and dropping it would be a behaviour change.
  */
-function formatDate(dateString) {
+function formatDate(dateString: string): string {
   if (!dateString) {
     return "-"
   }
@@ -67,7 +70,8 @@ function formatDate(dateString) {
 }
 
 /** Table column definitions for the invitations table */
-const columns = [
+// TODO(ts-migration): org_name / project_name are available on the row and would read better here.
+const columns: ColumnsType<Wire<MyInvitation>> = [
   {
     title: "Organization",
     dataIndex: "org_id",
@@ -153,7 +157,7 @@ onMounted(() => {
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'actions'">
           <Space v-if="record.status === 'pending'">
-            <Button type="primary" size="small" @click="goToInvite(record)">
+            <Button type="primary" size="small" @click="goToInvite(record.id)">
               Open invitation
             </Button>
             <Popconfirm

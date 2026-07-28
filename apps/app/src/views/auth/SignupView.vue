@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { Card, Form, Input, Button, Typography, Alert, Space } from "ant-design-vue"
@@ -31,12 +31,12 @@ onMounted(() => {
 })
 
 // Handle form submit
-async function onFinish() {
+async function onFinish(): Promise<void> {
   await handleSignup()
 }
 
 // Navigate to login
-function goToLogin() {
+function goToLogin(): void {
   router.push("/login")
 }
 </script>

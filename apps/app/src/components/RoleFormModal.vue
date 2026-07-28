@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * RoleFormModal — Modal form for creating or editing a role with permissions.
  *
@@ -18,37 +18,42 @@
 
 import { reactive, watch, computed } from "vue"
 import { Form, Modal, Input, Checkbox, Typography } from "ant-design-vue"
+import type { Rule } from "ant-design-vue/es/form"
+import type { Permission, Role, Wire } from "@fullstack/contracts"
+import type { RoleFormInput } from "@/api/roles"
 
-const props = defineProps({
-  visible: {
-    type: Boolean,
-    default: false,
-  },
-  role: {
-    type: Object,
-    default: null,
-  },
-  permissions: {
-    type: Array,
-    default: () => [],
-  },
-  loading: {
-    type: Boolean,
-    default: false,
-  },
+interface Props {
+  visible?: boolean
+  role?: Wire<Role> | null
+  permissions?: Wire<Permission>[]
+  loading?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  visible: false,
+  role: null,
+  permissions: () => [],
+  loading: false,
 })
 
-const emit = defineEmits(["submit", "cancel"])
+const emit = defineEmits<{
+  submit: [payload: RoleFormInput]
+  cancel: []
+}>()
 
 // Reactive form state — selectedPermissions holds an array of permission IDs
-const formState = reactive({
+const formState = reactive<{
+  name: string
+  description: string
+  selectedPermissions: string[]
+}>({
   name: "",
   description: "",
   selectedPermissions: [],
 })
 
 // Validation rules — name is required, at least one permission must be selected
-const rules = reactive({
+const rules = reactive<Record<string, Rule[]>>({
   name: [{ required: true, message: "Please enter a role name" }],
   selectedPermissions: [
     {
@@ -95,10 +100,10 @@ watch(
  * Group permissions by their `resource` field so the template can render
  * them as labelled sections (e.g. "organization", "project", "todo").
  *
- * @returns {Record<string, Array>} — keyed by resource name
+ * Keyed by resource name.
  */
 const groupedPermissions = computed(() => {
-  const groups = {}
+  const groups: Record<string, Wire<Permission>[]> = {}
   for (const perm of props.permissions) {
     if (!groups[perm.resource]) {
       groups[perm.resource] = []

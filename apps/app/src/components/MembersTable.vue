@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * MembersTable — Displays organization or project members in an Ant Design table.
  *
@@ -20,47 +20,42 @@
 
 import { h, computed } from "vue"
 import { Table, Tag, Select, Button, Space, Popconfirm } from "ant-design-vue"
+import type { ColumnsType } from "ant-design-vue/es/table"
 import { DeleteOutlined } from "@ant-design/icons-vue"
+import type { Role, Wire } from "@fullstack/contracts"
+import type { MemberRow } from "@/composables/useMembers"
 
-const props = defineProps({
-  members: {
-    type: Array,
-    required: true,
-  },
-  roles: {
-    type: Array,
-    default: () => [],
-  },
-  loading: {
-    type: Boolean,
-    default: false,
-  },
-  canUpdateRole: {
-    type: Boolean,
-    default: false,
-  },
-  canRemove: {
-    type: Boolean,
-    default: false,
-  },
+interface Props {
+  members: MemberRow[]
+  roles?: Wire<Role>[]
+  loading?: boolean
+  canUpdateRole?: boolean
+  canRemove?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  roles: () => [],
+  loading: false,
+  canUpdateRole: false,
+  canRemove: false,
 })
 
-const emit = defineEmits(["roleChange", "remove"])
+const emit = defineEmits<{
+  roleChange: [payload: { userId: string; roleId: string }]
+  remove: [userId: string]
+}>()
 
 /**
  * Handle role change from the Select dropdown.
- * @param {string} userId - The user whose role is changing
- * @param {string} roleId - The newly selected role ID
  */
-function handleRoleChange(userId, roleId) {
+function handleRoleChange(userId: string, roleId: string): void {
   emit("roleChange", { userId, roleId })
 }
 
 /**
  * Handle member removal after Popconfirm confirmation.
- * @param {string} userId - The user being removed
  */
-function handleRemove(userId) {
+function handleRemove(userId: string): void {
   emit("remove", userId)
 }
 
@@ -68,8 +63,8 @@ function handleRemove(userId) {
  * Table column definitions.
  * The Actions column is conditionally included based on the canRemove prop.
  */
-const columns = computed(() => {
-  const cols = [
+const columns = computed<ColumnsType<MemberRow>>(() => {
+  const cols: ColumnsType<MemberRow> = [
     {
       title: "Name",
       dataIndex: "name",
@@ -101,7 +96,7 @@ const columns = computed(() => {
             {
               value: record.role_id,
               style: { width: "140px" },
-              onChange: (value) => handleRoleChange(record.user_id, value),
+              onChange: (value: unknown) => handleRoleChange(record.user_id, String(value)),
             },
             () =>
               props.roles.map((role) =>

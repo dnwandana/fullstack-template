@@ -2,6 +2,7 @@
  * Organizations store - manages organization state and operations
  */
 
+import type { Envelope, Org, Wire } from "@fullstack/contracts"
 import { defineStore } from "pinia"
 import { ref } from "vue"
 import { message } from "ant-design-vue"
@@ -11,21 +12,21 @@ import {
   createOrg as apiCreateOrg,
   updateOrg as apiUpdateOrg,
   deleteOrg as apiDeleteOrg,
+  type OrgInput,
 } from "@/api/orgs"
 
 export const useOrgsStore = defineStore("orgs", () => {
   // State
-  const orgs = ref([])
-  const currentOrg = ref(null)
+  const orgs = ref<Wire<Org>[]>([])
+  const currentOrg = ref<Wire<Org> | null>(null)
   const loading = ref(false)
 
   // Actions
 
   /**
    * Fetch all organizations the current user belongs to
-   * @returns {Promise<Array>} List of organizations
    */
-  async function fetchOrgs() {
+  async function fetchOrgs(): Promise<Envelope<Wire<Org>[]> | undefined> {
     loading.value = true
     try {
       const response = await apiGetOrgs()
@@ -40,10 +41,8 @@ export const useOrgsStore = defineStore("orgs", () => {
 
   /**
    * Fetch a single organization by its ID
-   * @param {string} orgId - Organization UUID
-   * @returns {Promise<Object>} Organization details
    */
-  async function fetchOrgById(orgId) {
+  async function fetchOrgById(orgId: string): Promise<Envelope<Wire<Org>> | undefined> {
     loading.value = true
     try {
       const response = await apiGetOrg(orgId)
@@ -58,12 +57,8 @@ export const useOrgsStore = defineStore("orgs", () => {
 
   /**
    * Create a new organization and refresh the list
-   * @param {Object} data - Organization data
-   * @param {string} data.name - Organization name (required)
-   * @param {string} [data.description] - Optional description
-   * @returns {Promise<Object>} Created organization
    */
-  async function createOrg(data) {
+  async function createOrg(data: OrgInput): Promise<Envelope<Wire<Org>> | undefined> {
     loading.value = true
     try {
       const response = await apiCreateOrg(data)
@@ -80,13 +75,11 @@ export const useOrgsStore = defineStore("orgs", () => {
 
   /**
    * Update an existing organization
-   * @param {string} orgId - Organization UUID
-   * @param {Object} data - Updated organization data
-   * @param {string} data.name - Organization name (required)
-   * @param {string} [data.description] - Optional description
-   * @returns {Promise<Object>} Updated organization
    */
-  async function updateOrg(orgId, data) {
+  async function updateOrg(
+    orgId: string,
+    data: OrgInput,
+  ): Promise<Envelope<Wire<Org>> | undefined> {
     loading.value = true
     try {
       const response = await apiUpdateOrg(orgId, data)
@@ -103,10 +96,8 @@ export const useOrgsStore = defineStore("orgs", () => {
 
   /**
    * Delete an organization and refresh the list
-   * @param {string} orgId - Organization UUID
-   * @returns {Promise<Object>} Deletion response
    */
-  async function deleteOrg(orgId) {
+  async function deleteOrg(orgId: string): Promise<Envelope<null> | undefined> {
     loading.value = true
     try {
       const response = await apiDeleteOrg(orgId)
@@ -125,7 +116,7 @@ export const useOrgsStore = defineStore("orgs", () => {
    * Clear the currently selected organization
    * Used when navigating away from an org detail view
    */
-  function clearCurrentOrg() {
+  function clearCurrentOrg(): void {
     currentOrg.value = null
   }
 

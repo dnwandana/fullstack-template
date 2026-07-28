@@ -28,7 +28,22 @@
  */
 
 import { createRouter, createWebHistory } from "vue-router"
+import type { NavigationGuard, RouteRecordRaw } from "vue-router"
 import { useAuthStore } from "@/stores/auth"
+
+declare module "vue-router" {
+  interface RouteMeta {
+    /** Redirect unauthenticated users to /login. */
+    requiresAuth?: boolean
+    /** Redirect authenticated users to /orgs. */
+    requiresGuest?: boolean
+    /**
+     * Permission name this route requires. SideNav hides nav items whose permission the user
+     * lacks; route-level enforcement is not implemented — the field is declarative.
+     */
+    permission?: string
+  }
+}
 
 /**
  * Build a `beforeEnter` guard that upgrades legacy `?tab=` links to real routes.
@@ -37,13 +52,14 @@ import { useAuthStore } from "@/stores/auth"
  * `?tab=general` and unrecognised values have to fall through to the settings
  * page itself. Returning `undefined` from a guard is the only way to say
  * "proceed unchanged".
- *
- * @param {Record<string, string>} tabRoutes - tab query value → target route name
- * @returns {import('vue-router').NavigationGuard}
  */
-function redirectLegacyTab(tabRoutes) {
+function redirectLegacyTab(tabRoutes: Record<string, string>): NavigationGuard {
   return (to) => {
-    const target = tabRoutes[to.query.tab]
+    // `to.query.tab` is `string | null | (string | null)[]` and cannot index a
+    // `Record<string, string>`. The `""` fallback preserves today's behavior exactly:
+    // indexing with `null` or with an array both yield `undefined`, and so does `""`.
+    const tab = typeof to.query.tab === "string" ? to.query.tab : ""
+    const target = tabRoutes[tab]
     if (target) {
       return { name: target, params: to.params }
     }
@@ -55,8 +71,7 @@ function redirectLegacyTab(tabRoutes) {
   }
 }
 
-/** @type {import('vue-router').RouteRecordRaw[]} */
-const routes = [
+const routes: RouteRecordRaw[] = [
   // ── Auth routes (public / guest-only) ────────────────────────────────
   {
     path: "/login",
@@ -98,8 +113,9 @@ const routes = [
   },
   {
     // Roles gate on org:read, not org:manage_roles — GET /orgs/:org_id/roles
-    // requires only org:read (apps/api/src/routes/roles.js:21). Editing is
-    // gated separately, in-template, on org:manage_roles.
+    // requires only org:read (`RolesController.list` in apps/api, which carries
+    // `@RequirePermission("org:read")`). Editing is gated separately,
+    // in-template, on org:manage_roles.
     path: "/orgs/:orgId/roles",
     name: "OrgRoles",
     component: () => import("@/views/orgs/OrgRolesView.vue"),

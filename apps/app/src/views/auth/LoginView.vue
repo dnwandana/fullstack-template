@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { useRouter } from "vue-router"
 import { Card, Form, Input, Button, Typography, Alert, Space } from "ant-design-vue"
 import { MailOutlined, LockOutlined } from "@ant-design/icons-vue"
@@ -8,12 +8,12 @@ const router = useRouter()
 const { formState, error, loading, emailRules, passwordRules, handleSignin } = useAuth()
 
 // Handle form submit
-async function onFinish() {
+async function onFinish(): Promise<void> {
   await handleSignin()
 }
 
 // Navigate to signup
-function goToSignup() {
+function goToSignup(): void {
   router.push("/signup")
 }
 </script>

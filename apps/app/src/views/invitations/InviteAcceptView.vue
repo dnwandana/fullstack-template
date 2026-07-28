@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * Public invitation landing page.
  *
@@ -12,6 +12,7 @@
 import { ref, computed, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { Card, Button, Result, Spin, Typography, Space } from "ant-design-vue"
+import type { InvitationPreview, Wire } from "@fullstack/contracts"
 import { useAuthStore } from "@/stores/auth"
 import { useInvitations } from "@/composables/useInvitations"
 
@@ -20,9 +21,14 @@ const router = useRouter()
 const authStore = useAuthStore()
 const { previewInvitation, handleAccept } = useInvitations()
 
-const invitationId = route.params.invitationId
+// The route is `/invite/:invitationId`, so the id is always present and every consumer wants a
+// plain string — `String()` rather than `paramToString`, which exists for the params that may
+// legitimately be absent.
+const invitationId = String(route.params.invitationId)
+// `route.query.token` stays raw so the `if (!token)` and `if (token)` checks below behave exactly
+// as they do today — including for a repeated `?token=`, which arrives as an array and is truthy.
 const token = route.query.token
-const preview = ref(null)
+const preview = ref<Wire<InvitationPreview> | null>(null)
 const loaded = ref(false)
 const accepting = ref(false)
 
@@ -70,7 +76,7 @@ const scopeLabel = computed(() =>
 // straight through to the invalid state.
 onMounted(async () => {
   if (token) {
-    preview.value = await previewInvitation(invitationId, token)
+    preview.value = await previewInvitation(invitationId, String(token))
   }
   loaded.value = true
 })
@@ -78,20 +84,18 @@ onMounted(async () => {
 /**
  * Send a brand-new invitee to signup, preserving the invite link so they land
  * back here once they can authenticate
- * @returns {void}
  */
-function goToSignup() {
+function goToSignup(): void {
   router.push({
     path: "/signup",
-    query: { redirect: route.fullPath, email: preview.value.invitee_email },
+    query: { redirect: route.fullPath, email: preview.value?.invitee_email },
   })
 }
 
 /**
  * Send an existing user to signin, preserving the invite link
- * @returns {void}
  */
-function goToLogin() {
+function goToLogin(): void {
   router.push({ path: "/login", query: { redirect: route.fullPath } })
 }
 
@@ -100,12 +104,13 @@ function goToLogin() {
  * Only navigates on success — the invitation can be revoked, expire, or be
  * accepted in another tab between the preview load and this click, and
  * redirecting anyway would imply a membership the user never got
- * @returns {Promise<void>}
  */
-async function onAccept() {
+async function onAccept(): Promise<void> {
   accepting.value = true
   try {
-    const result = await handleAccept(invitationId, token)
+    // TODO(ts-migration): a duplicated `?token=` used to POST `{ token: [...] }` and now POSTs the
+    // comma-joined string. Both are rejected by AcceptInvitationDto, so no reachable flow changes.
+    const result = await handleAccept(invitationId, String(token))
     if (result) {
       router.push("/orgs")
     }
@@ -116,9 +121,8 @@ async function onAccept() {
 
 /**
  * Sign out of the wrong account and return via signin
- * @returns {Promise<void>}
  */
-async function switchAccount() {
+async function switchAccount(): Promise<void> {
   await authStore.logout()
   goToLogin()
 }
@@ -155,23 +159,23 @@ async function switchAccount() {
       <Result
         v-else-if="state === 'handled'"
         status="info"
-        :title="`This invitation was already ${preview.status}`"
+        :title="`This invitation was already ${preview?.status}`"
       />
 
       <template v-else>
         <Typography.Title :level="4" style="text-align: center">
-          {{ preview.inviter_name }} invited you to {{ scopeLabel }}
+          {{ preview?.inviter_name }} invited you to {{ scopeLabel }}
         </Typography.Title>
         <Typography.Paragraph style="text-align: center">
-          as <strong>{{ preview.role_name }}</strong>
+          as <strong>{{ preview?.role_name }}</strong>
         </Typography.Paragraph>
         <Typography.Paragraph type="secondary" style="text-align: center">
-          {{ preview.invitee_email }}
+          {{ preview?.invitee_email }}
         </Typography.Paragraph>
 
         <Space v-if="state === 'guest'" direction="vertical" style="width: 100%">
           <Button
-            v-if="preview.requires_signup"
+            v-if="preview?.requires_signup"
             type="primary"
             block
             size="large"
@@ -182,7 +186,7 @@ async function switchAccount() {
           <Button v-else type="primary" block size="large" @click="goToLogin">
             Sign in &amp; join
           </Button>
-          <Button v-if="preview.requires_signup" block @click="goToLogin">
+          <Button v-if="preview?.requires_signup" block @click="goToLogin">
             I already have an account
           </Button>
         </Space>
@@ -190,7 +194,7 @@ async function switchAccount() {
         <Space v-else-if="state === 'wrong-account'" direction="vertical" style="width: 100%">
           <Typography.Text type="warning">
             You are signed in as {{ authStore.currentUser?.email }}, but this invitation is for
-            {{ preview.invitee_email }}.
+            {{ preview?.invitee_email }}.
           </Typography.Text>
           <Button block @click="switchAccount">Switch account</Button>
         </Space>

@@ -5,6 +5,13 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
 import { message } from "ant-design-vue"
+import type {
+  Envelope,
+  OrgMember,
+  PaginatedEnvelope,
+  ProjectMember,
+  Wire,
+} from "@fullstack/contracts"
 import {
   getOrgMembers as apiGetOrgMembers,
   updateOrgMemberRole as apiUpdateOrgMemberRole,
@@ -20,18 +27,18 @@ import { useTenantStore } from "@/stores/tenant"
 
 export const useMembersStore = defineStore("members", () => {
   // State
-  const orgMembers = ref([])
-  const projectMembers = ref([])
+  const orgMembers = ref<Wire<OrgMember>[]>([])
+  const projectMembers = ref<Wire<ProjectMember>[]>([])
   const loading = ref(false)
 
   // Actions
 
   /**
    * Fetch all members of an organization
-   * @param {string} orgId - Organization UUID
-   * @returns {Promise<Object>} API response data
    */
-  async function fetchOrgMembers(orgId) {
+  async function fetchOrgMembers(
+    orgId: string,
+  ): Promise<PaginatedEnvelope<Wire<OrgMember>[]> | undefined> {
     loading.value = true
     try {
       const response = await apiGetOrgMembers(orgId)
@@ -47,12 +54,12 @@ export const useMembersStore = defineStore("members", () => {
   /**
    * Update the role assigned to an organization member
    * Applies the returned membership row in place — no list refetch
-   * @param {string} orgId - Organization UUID
-   * @param {string} userId - User UUID of the member to update
-   * @param {string} roleId - New role UUID to assign
-   * @returns {Promise<Object>} API response data
    */
-  async function updateOrgMemberRole(orgId, userId, roleId) {
+  async function updateOrgMemberRole(
+    orgId: string,
+    userId: string,
+    roleId: string,
+  ): Promise<Envelope<Wire<OrgMember>> | undefined> {
     loading.value = true
     try {
       const response = await apiUpdateOrgMemberRole(orgId, userId, roleId)
@@ -79,11 +86,11 @@ export const useMembersStore = defineStore("members", () => {
   /**
    * Remove a member from an organization
    * Refreshes the org members list after a successful removal
-   * @param {string} orgId - Organization UUID
-   * @param {string} userId - User UUID of the member to remove
-   * @returns {Promise<Object>} API response data
    */
-  async function removeOrgMember(orgId, userId) {
+  async function removeOrgMember(
+    orgId: string,
+    userId: string,
+  ): Promise<Envelope<null> | undefined> {
     loading.value = true
     try {
       const response = await apiRemoveOrgMember(orgId, userId)
@@ -100,11 +107,11 @@ export const useMembersStore = defineStore("members", () => {
 
   /**
    * Fetch all members of a project
-   * @param {string} orgId - Organization UUID that owns the project
-   * @param {string} projectId - Project UUID
-   * @returns {Promise<Object>} API response data
    */
-  async function fetchProjectMembers(orgId, projectId) {
+  async function fetchProjectMembers(
+    orgId: string,
+    projectId: string,
+  ): Promise<PaginatedEnvelope<Wire<ProjectMember>[]> | undefined> {
     loading.value = true
     try {
       const response = await apiGetProjectMembers(orgId, projectId)
@@ -120,13 +127,13 @@ export const useMembersStore = defineStore("members", () => {
   /**
    * Update the role assigned to a project member
    * Applies the returned membership row in place — no list refetch
-   * @param {string} orgId - Organization UUID that owns the project
-   * @param {string} projectId - Project UUID
-   * @param {string} userId - User UUID of the member to update
-   * @param {string} roleId - New role UUID to assign
-   * @returns {Promise<Object>} API response data
    */
-  async function updateProjectMemberRole(orgId, projectId, userId, roleId) {
+  async function updateProjectMemberRole(
+    orgId: string,
+    projectId: string,
+    userId: string,
+    roleId: string,
+  ): Promise<Envelope<Wire<ProjectMember>> | undefined> {
     loading.value = true
     try {
       const response = await apiUpdateProjectMemberRole(orgId, projectId, userId, roleId)
@@ -153,12 +160,12 @@ export const useMembersStore = defineStore("members", () => {
   /**
    * Remove a member from a project
    * Refreshes the project members list after a successful removal
-   * @param {string} orgId - Organization UUID that owns the project
-   * @param {string} projectId - Project UUID
-   * @param {string} userId - User UUID of the member to remove
-   * @returns {Promise<Object>} API response data
    */
-  async function removeProjectMember(orgId, projectId, userId) {
+  async function removeProjectMember(
+    orgId: string,
+    projectId: string,
+    userId: string,
+  ): Promise<Envelope<null> | undefined> {
     loading.value = true
     try {
       const response = await apiRemoveProjectMember(orgId, projectId, userId)
@@ -177,7 +184,7 @@ export const useMembersStore = defineStore("members", () => {
    * Clear organization members state
    * Used when navigating away from an org context to avoid stale data
    */
-  function clearOrgMembers() {
+  function clearOrgMembers(): void {
     orgMembers.value = []
   }
 
@@ -185,7 +192,7 @@ export const useMembersStore = defineStore("members", () => {
    * Clear project members state
    * Used when navigating away from a project context to avoid stale data
    */
-  function clearProjectMembers() {
+  function clearProjectMembers(): void {
     projectMembers.value = []
   }
 

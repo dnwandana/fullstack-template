@@ -4,6 +4,8 @@
  */
 
 import { ref, computed } from "vue"
+import type { Role, Wire } from "@fullstack/contracts"
+import type { RoleFormInput } from "@/api/roles"
 import { useRolesStore } from "@/stores/roles"
 
 export function useRoles() {
@@ -11,7 +13,7 @@ export function useRoles() {
 
   // Local state for the create/edit role modal
   const isModalVisible = ref(false)
-  const editingRole = ref(null)
+  const editingRole = ref<Wire<Role> | null>(null)
 
   // Derived state: true when editing an existing role, false when creating
   const isEditing = computed(() => !!editingRole.value)
@@ -22,9 +24,8 @@ export function useRoles() {
   /**
    * Open the modal for creating a new role
    * Resets editingRole to null to indicate creation mode
-   * @returns {void}
    */
-  function openCreateModal() {
+  function openCreateModal(): void {
     editingRole.value = null
     isModalVisible.value = true
   }
@@ -32,19 +33,16 @@ export function useRoles() {
   /**
    * Open the modal for editing an existing role
    * Clones the role object to avoid mutating store state directly
-   * @param {Object} role - Role object to edit
-   * @returns {void}
    */
-  function openEditModal(role) {
+  function openEditModal(role: Wire<Role>): void {
     editingRole.value = { ...role }
     isModalVisible.value = true
   }
 
   /**
    * Close the modal and reset editing state
-   * @returns {void}
    */
-  function closeModal() {
+  function closeModal(): void {
     isModalVisible.value = false
     editingRole.value = null
   }
@@ -52,16 +50,13 @@ export function useRoles() {
   /**
    * Handle form submission for creating or updating a role
    * Determines the correct store action based on whether we are editing or creating
-   * @param {string} orgId - Organization UUID
-   * @param {Object} formData - Role form data
-   * @param {string} formData.name - Role name
-   * @param {string} [formData.description] - Optional role description
-   * @param {string[]} formData.permissions - Array of permission UUIDs to assign
-   * @returns {Promise<void>}
    */
-  async function handleSubmit(orgId, formData) {
-    if (isEditing.value) {
-      await rolesStore.updateRole(orgId, editingRole.value.id, formData)
+  async function handleSubmit(orgId: string, formData: RoleFormInput): Promise<void> {
+    // Read the ref into a local first: narrowing through the `isEditing` computed does not carry
+    // over to `editingRole.value`, which would still be `Wire<Role> | null` at the call below.
+    const editing = editingRole.value
+    if (editing) {
+      await rolesStore.updateRole(orgId, editing.id, formData)
     } else {
       await rolesStore.createRole(orgId, formData)
     }

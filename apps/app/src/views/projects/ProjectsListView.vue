@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * ProjectsListView — Displays projects belonging to a specific organization.
  *
@@ -21,13 +21,14 @@ import { useProjects } from "@/composables/useProjects"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 import ProjectFormModal from "@/components/ProjectFormModal.vue"
+import type { ProjectInput } from "@/api/projects"
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 
 // Extract orgId from route params — this scopes all project operations
-const orgId = route.params.orgId
+const orgId = String(route.params.orgId)
 
 const { currentOrg, fetchOrgById } = useOrgs()
 
@@ -46,18 +47,16 @@ const { can, loadPermissions } = usePermissions()
 
 /**
  * Navigate to the todos list for a specific project within this org.
- * @param {string} projectId - Project UUID to navigate to
  */
-function viewTodos(projectId) {
+function viewTodos(projectId: string): void {
   router.push(`/orgs/${orgId}/projects/${projectId}`)
 }
 
 /**
  * Wrapper around the projects composable handleSubmit that injects the orgId.
  * The composable expects (orgId, formData) because projects are org-scoped.
- * @param {Object} formData - Form data from ProjectFormModal (name, description)
  */
-async function onSubmit(formData) {
+async function onSubmit(formData: ProjectInput): Promise<void> {
   await handleSubmit(orgId, formData)
 }
 
@@ -65,7 +64,10 @@ async function onSubmit(formData) {
 onMounted(async () => {
   fetchOrgById(orgId)
   fetchProjects(orgId)
-  loadPermissions(orgId, authStore.currentUser.id)
+  // TODO(ts-migration): this read was unguarded and would have thrown on a null user. `?.` matches
+  // the other five views. No observable change — `usePermissions` names the parameter `_userId` and
+  // discards it.
+  loadPermissions(orgId, authStore.currentUser?.id)
 })
 </script>
 

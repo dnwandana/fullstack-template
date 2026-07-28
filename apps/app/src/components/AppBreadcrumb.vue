@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * AppBreadcrumb — org / project / page trail.
  *
@@ -10,13 +10,20 @@
 
 import { computed } from "vue"
 import { useRoute } from "vue-router"
+import type { RouteLocationRaw } from "vue-router"
 import { useTenantStore } from "@/stores/tenant"
 
 const route = useRoute()
 const tenant = useTenantStore()
 
+interface Crumb {
+  label: string
+  /** `null` on the crumb for the page you are already on — it is not a link. */
+  to: RouteLocationRaw | null
+}
+
 /** Route name → final crumb label. Routes absent here add no page crumb. */
-const PAGE_LABELS = {
+const PAGE_LABELS: Record<string, string> = {
   OrgMembers: "Members",
   OrgRoles: "Roles",
   OrgInvitations: "Invitations",
@@ -27,8 +34,8 @@ const PAGE_LABELS = {
   TodoDetail: "Todo",
 }
 
-const crumbs = computed(() => {
-  const trail = []
+const crumbs = computed<Crumb[]>(() => {
+  const trail: Crumb[] = []
   const orgId = tenant.currentOrgId
   if (!orgId) return trail
 
@@ -47,7 +54,7 @@ const crumbs = computed(() => {
 
   // ProjectsList and TodosList are already the targets of the crumbs above;
   // adding a page crumb for them would repeat the trail's own last link.
-  const pageLabel = PAGE_LABELS[route.name]
+  const pageLabel = typeof route.name === "string" ? PAGE_LABELS[route.name] : undefined
   if (pageLabel) trail.push({ label: pageLabel, to: null })
 
   // The final crumb is where you already are, so it is never a link.

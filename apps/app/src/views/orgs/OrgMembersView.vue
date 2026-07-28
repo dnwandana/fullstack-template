@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * OrgMembersView — organization members list with inline role change and removal.
  *
@@ -20,7 +20,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 
 // Captured once at setup — this view remounts when :orgId changes.
-const orgId = route.params.orgId
+const orgId = String(route.params.orgId)
 
 const membersComposable = useMembers()
 const rolesComposable = useRoles()
@@ -31,13 +31,11 @@ const { roles, fetchRoles } = rolesComposable
 
 const membersLoading = computed(() => membersComposable.loading.value)
 
-/** @param {{ userId: string, roleId: string }} payload */
-function onMemberRoleChange({ userId, roleId }) {
+function onMemberRoleChange({ userId, roleId }: { userId: string; roleId: string }): void {
   handleRoleChange(orgId, userId, roleId, "org")
 }
 
-/** @param {string} userId */
-function onMemberRemove(userId) {
+function onMemberRemove(userId: string): void {
   handleRemove(orgId, userId, "org")
 }
 

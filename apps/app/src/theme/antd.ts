@@ -2,7 +2,7 @@
  * Ant Design Vue theme configuration.
  *
  * Maps the claude-design token system onto ConfigProvider. Every value is
- * annotated with the design-system custom property it mirrors; antd.test.js
+ * annotated with the design-system custom property it mirrors; antd.test.ts
  * asserts the two still agree.
  *
  * Component token names follow an OLDER antd v5 schema than the current React
@@ -11,7 +11,9 @@
  * Verify any addition the same way.
  */
 
-export const antdTheme = {
+import type { ThemeConfig } from "ant-design-vue/es/config-provider/context"
+
+export const antdTheme: ThemeConfig = {
   token: {
     colorPrimary: "#0e7c72", // --teal-500
     colorSuccess: "#2f855a", // --green-500
@@ -31,6 +33,17 @@ export const antdTheme = {
     colorTextQuaternary: "#98a1ab", // --gray-400
 
     fontFamily: '"IBM Plex Sans", system-ui, -apple-system, sans-serif',
+    // TODO(ts-migration): `fontFamilyCode` is a dead token. Annotating this object as
+    // ThemeConfig surfaced that the name appears NOWHERE in the installed
+    // ant-design-vue 4.2.6 — not in its seed/alias token interfaces and not in any
+    // component style. antd React added it to the seed in a later 5.x than this port
+    // tracks, so per the header note above it is silently dropped and no antd surface
+    // renders IBM Plex Mono from it. theme/antd.test.ts only asserts the literal, so it
+    // passes while the token does nothing. Left in place verbatim: removing it is a
+    // behaviour question (pick the real mechanism, e.g. a CSS rule on `code`/`pre`) and
+    // would fail that test, so it is out of scope for a type-only migration.
+    // @ts-expect-error — not in 4.2.6's AliasToken; kept deliberately, see above. This
+    // directive self-clears (as an unused-directive error) if an antd upgrade adds it.
     fontFamilyCode: '"IBM Plex Mono", ui-monospace, monospace',
 
     wireframe: false,

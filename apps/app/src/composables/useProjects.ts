@@ -5,13 +5,14 @@
  */
 
 import { ref, computed } from "vue"
+import type { Project, Wire } from "@fullstack/contracts"
+import type { ProjectInput } from "@/api/projects"
 import { useProjectsStore } from "@/stores/projects"
 
 /**
  * Composable for managing project CRUD operations and modal UI state.
  * Projects are always scoped to an organization, so most actions require
  * an orgId parameter.
- * @returns {Object} Reactive state, computed properties, validation rules, and actions
  */
 export function useProjects() {
   const projectsStore = useProjectsStore()
@@ -20,11 +21,11 @@ export function useProjects() {
   // Modal state
   // ---------------------------------------------------------------------------
 
-  /** @type {import('vue').Ref<boolean>} Whether the create/edit modal is visible */
+  /** Whether the create/edit modal is visible */
   const isModalVisible = ref(false)
 
-  /** @type {import('vue').Ref<Object|null>} The project being edited, or null for create mode */
-  const editingProject = ref(null)
+  /** The project being edited, or null for create mode */
+  const editingProject = ref<Wire<Project> | null>(null)
 
   // ---------------------------------------------------------------------------
   // Validation rules
@@ -43,7 +44,6 @@ export function useProjects() {
   /**
    * Whether the modal is in edit mode (as opposed to create mode).
    * Determined by checking if a project is loaded for editing.
-   * @type {import('vue').ComputedRef<boolean>}
    */
   const isEditing = computed(() => !!editingProject.value)
 
@@ -55,7 +55,7 @@ export function useProjects() {
    * Open the modal in create mode.
    * Resets editingProject so the form starts empty.
    */
-  function openCreateModal() {
+  function openCreateModal(): void {
     editingProject.value = null
     isModalVisible.value = true
   }
@@ -63,9 +63,8 @@ export function useProjects() {
   /**
    * Open the modal in edit mode with a shallow clone of the given project.
    * Cloning prevents the form from mutating the store state directly.
-   * @param {Object} project - The project object to edit
    */
-  function openEditModal(project) {
+  function openEditModal(project: Wire<Project>): void {
     editingProject.value = { ...project }
     isModalVisible.value = true
   }
@@ -73,7 +72,7 @@ export function useProjects() {
   /**
    * Close the modal and reset the editing state.
    */
-  function closeModal() {
+  function closeModal(): void {
     isModalVisible.value = false
     editingProject.value = null
   }
@@ -83,14 +82,15 @@ export function useProjects() {
    * Delegates to the appropriate store action based on whether we are editing
    * an existing project or creating a new one, then closes the modal.
    * Projects are scoped to an organization, so orgId is always required.
-   * @param {string} orgId - Organization UUID that owns this project
-   * @param {Object} formData - The form data to submit
-   * @param {string} formData.name - Project name (required)
-   * @param {string} [formData.description] - Optional description
+   * The ref is read into a local because control-flow analysis cannot narrow
+   * `editingProject.value` through the `isEditing` computed. The local is
+   * behaviour-identical: `isEditing` is exactly `!!editingProject.value`, and
+   * nothing awaits between the two reads.
    */
-  async function handleSubmit(orgId, formData) {
-    if (isEditing.value) {
-      await projectsStore.updateProject(orgId, editingProject.value.id, formData)
+  async function handleSubmit(orgId: string, formData: ProjectInput): Promise<void> {
+    const editing = editingProject.value
+    if (editing) {
+      await projectsStore.updateProject(orgId, editing.id, formData)
     } else {
       await projectsStore.createProject(orgId, formData)
     }

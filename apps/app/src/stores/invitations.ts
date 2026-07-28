@@ -5,6 +5,16 @@
 import { defineStore } from "pinia"
 import { ref, computed } from "vue"
 import { message } from "ant-design-vue"
+import type {
+  Envelope,
+  InvitationListItem,
+  InvitationPreview,
+  InvitationWithToken,
+  MyInvitation,
+  PaginatedEnvelope,
+  Wire,
+} from "@fullstack/contracts"
+import type { InviteInput } from "@/api/invitations"
 import {
   inviteToOrg as apiInviteToOrg,
   inviteToProject as apiInviteToProject,
@@ -19,20 +29,19 @@ import {
 
 export const useInvitationsStore = defineStore("invitations", () => {
   // State
-  const orgInvitations = ref([])
-  const myInvitations = ref([])
+  const orgInvitations = ref<Wire<InvitationListItem>[]>([])
+  const myInvitations = ref<Wire<MyInvitation>[]>([])
   const loading = ref(false)
   // Accept URL of the most recently issued invitation link. The template ships
   // no mail provider, so the admin is the delivery mechanism — this keeps the
   // freshly minted link available to the UI right after inviting.
-  const lastAcceptUrl = ref(null)
+  const lastAcceptUrl = ref<string | null>(null)
 
   // Getters
 
   /**
    * Count of the current user's pending invitations
    * Used for badge/notification display in the UI
-   * @returns {number} Number of invitations with "pending" status
    */
   const pendingCount = computed(() => {
     return myInvitations.value.filter((i) => i.status === "pending").length
@@ -42,10 +51,10 @@ export const useInvitationsStore = defineStore("invitations", () => {
 
   /**
    * Fetch all invitations for an organization (admin view)
-   * @param {string} orgId - Organization UUID
-   * @returns {Promise<Object>} API response data
    */
-  async function fetchOrgInvitations(orgId) {
+  async function fetchOrgInvitations(
+    orgId: string,
+  ): Promise<PaginatedEnvelope<Wire<InvitationListItem>[]> | undefined> {
     loading.value = true
     try {
       const response = await apiListOrgInvitations(orgId)
@@ -60,9 +69,8 @@ export const useInvitationsStore = defineStore("invitations", () => {
 
   /**
    * Fetch all pending invitations for the currently authenticated user
-   * @returns {Promise<Object>} API response data
    */
-  async function fetchMyInvitations() {
+  async function fetchMyInvitations(): Promise<Envelope<Wire<MyInvitation>[]> | undefined> {
     loading.value = true
     try {
       const response = await apiListMyInvitations()
@@ -78,13 +86,11 @@ export const useInvitationsStore = defineStore("invitations", () => {
   /**
    * Invite a user to an organization
    * Refreshes the org invitations list after a successful invite
-   * @param {string} orgId - Organization UUID
-   * @param {Object} data - Invitation data
-   * @param {string} data.role_id - Role UUID to assign to the invited user
-   * @param {string} data.email - Email address of the user to invite
-   * @returns {Promise<Object>} API response data
    */
-  async function inviteToOrg(orgId, data) {
+  async function inviteToOrg(
+    orgId: string,
+    data: InviteInput,
+  ): Promise<Envelope<Wire<InvitationWithToken>> | undefined> {
     loading.value = true
     try {
       const response = await apiInviteToOrg(orgId, data)
@@ -103,14 +109,12 @@ export const useInvitationsStore = defineStore("invitations", () => {
   /**
    * Invite a user to a project within an organization
    * Refreshes the org invitations list after a successful invite
-   * @param {string} orgId - Organization UUID that owns the project
-   * @param {string} projectId - Project UUID
-   * @param {Object} data - Invitation data
-   * @param {string} data.role_id - Role UUID to assign to the invited user
-   * @param {string} data.email - Email address of the user to invite
-   * @returns {Promise<Object>} API response data
    */
-  async function inviteToProject(orgId, projectId, data) {
+  async function inviteToProject(
+    orgId: string,
+    projectId: string,
+    data: InviteInput,
+  ): Promise<Envelope<Wire<InvitationWithToken>> | undefined> {
     loading.value = true
     try {
       const response = await apiInviteToProject(orgId, projectId, data)
@@ -129,11 +133,11 @@ export const useInvitationsStore = defineStore("invitations", () => {
   /**
    * Accept a pending invitation
    * Refreshes the user's invitations list after acceptance
-   * @param {string} invitationId - Invitation UUID to accept
-   * @param {string} token - Raw invitation token from the invite link
-   * @returns {Promise<Object|null>} API response data, or null if acceptance failed
    */
-  async function acceptInvitation(invitationId, token) {
+  async function acceptInvitation(
+    invitationId: string,
+    token: string,
+  ): Promise<Envelope<null> | null> {
     loading.value = true
     try {
       const response = await apiAcceptInvitation(invitationId, token)
@@ -156,11 +160,11 @@ export const useInvitationsStore = defineStore("invitations", () => {
    * Fetch public context for an invitation link (works logged out)
    * Returns null rather than throwing so callers can render an "invalid link"
    * state without distinguishing a bad token from a missing invitation
-   * @param {string} invitationId - Invitation UUID
-   * @param {string} token - Raw invitation token
-   * @returns {Promise<Object|null>} Invitation context, or null if invalid
    */
-  async function previewInvitation(invitationId, token) {
+  async function previewInvitation(
+    invitationId: string,
+    token: string,
+  ): Promise<Wire<InvitationPreview> | null> {
     loading.value = true
     try {
       const response = await apiPreviewInvitation(invitationId, token)
@@ -176,10 +180,8 @@ export const useInvitationsStore = defineStore("invitations", () => {
   /**
    * Decline a pending invitation
    * Refreshes the user's invitations list after decline
-   * @param {string} invitationId - Invitation UUID to decline
-   * @returns {Promise<Object>} API response data
    */
-  async function declineInvitation(invitationId) {
+  async function declineInvitation(invitationId: string): Promise<Envelope<null> | undefined> {
     loading.value = true
     try {
       const response = await apiDeclineInvitation(invitationId)
@@ -197,11 +199,11 @@ export const useInvitationsStore = defineStore("invitations", () => {
   /**
    * Revoke an invitation from an organization (admin action)
    * Refreshes the org invitations list after revocation
-   * @param {string} orgId - Organization UUID
-   * @param {string} invitationId - Invitation UUID to revoke
-   * @returns {Promise<Object>} API response data
    */
-  async function revokeInvitation(orgId, invitationId) {
+  async function revokeInvitation(
+    orgId: string,
+    invitationId: string,
+  ): Promise<Envelope<null> | undefined> {
     loading.value = true
     try {
       const response = await apiRevokeInvitation(orgId, invitationId)
@@ -219,11 +221,11 @@ export const useInvitationsStore = defineStore("invitations", () => {
   /**
    * Reissue an invitation, returning a fresh accept link
    * The previously issued link stops working
-   * @param {string} orgId - Organization UUID
-   * @param {string} invitationId - Invitation UUID
-   * @returns {Promise<Object|null>} { token, accept_url, ... } or null on failure
    */
-  async function resendInvitation(orgId, invitationId) {
+  async function resendInvitation(
+    orgId: string,
+    invitationId: string,
+  ): Promise<Wire<InvitationWithToken> | null> {
     loading.value = true
     try {
       const response = await apiResendInvitation(orgId, invitationId)
@@ -244,7 +246,7 @@ export const useInvitationsStore = defineStore("invitations", () => {
    * Clear organization invitations state
    * Used when navigating away from an org context to avoid stale data
    */
-  function clearOrgInvitations() {
+  function clearOrgInvitations(): void {
     orgInvitations.value = []
   }
 
@@ -252,7 +254,7 @@ export const useInvitationsStore = defineStore("invitations", () => {
    * Clear the current user's invitations state
    * Used when logging out to avoid stale data
    */
-  function clearMyInvitations() {
+  function clearMyInvitations(): void {
     myInvitations.value = []
   }
 

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * InvitationsTable — Displays a list of invitations in an Ant Design table.
  *
@@ -21,37 +21,36 @@
  */
 
 import { h, computed } from "vue"
+import type { VNode } from "vue"
 import { Table, Tag, Button, Space, Popconfirm } from "ant-design-vue"
+import type { ColumnsType } from "ant-design-vue/es/table"
+import type { InvitationListItem, Wire } from "@fullstack/contracts"
 
-const props = defineProps({
-  invitations: {
-    type: Array,
-    default: () => [],
-  },
-  loading: {
-    type: Boolean,
-    default: false,
-  },
-  canRevoke: {
-    type: Boolean,
-    default: false,
-  },
-  canResend: {
-    type: Boolean,
-    default: false,
-  },
+interface Props {
+  invitations?: Wire<InvitationListItem>[]
+  loading?: boolean
+  canRevoke?: boolean
+  canResend?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  invitations: () => [],
+  loading: false,
+  canRevoke: false,
+  canResend: false,
 })
 
-const emit = defineEmits(["revoke", "resend"])
+const emit = defineEmits<{
+  revoke: [invitationId: string]
+  resend: [invitationId: string]
+}>()
 
 /**
  * Display status for an invitation row.
  * `expired` is derived, not stored — nothing writes that status to the
  * database, so a stale row stays `pending` forever without this.
- * @param {Object} record - The invitation row
- * @returns {string} The status to show the user
  */
-function displayStatus(record) {
+function displayStatus(record: Wire<InvitationListItem>): string {
   if (record.status === "pending" && new Date(record.expires_at) < new Date()) {
     return "expired"
   }
@@ -62,10 +61,8 @@ function displayStatus(record) {
  * Map a display status to an Ant Design Tag color.
  * There is deliberately no "revoked" branch — revoking hard-deletes the row,
  * so that status can never be observed.
- * @param {string} status - The display status
- * @returns {string} Ant Design tag color name
  */
-function statusColor(status) {
+function statusColor(status: string): string {
   if (status === "accepted") return "green"
   if (status === "declined") return "red"
   if (status === "expired") return "default"
@@ -74,17 +71,15 @@ function statusColor(status) {
 
 /**
  * Handle invitation revocation after Popconfirm confirmation.
- * @param {string} invitationId - The invitation being revoked
  */
-function handleRevoke(invitationId) {
+function handleRevoke(invitationId: string): void {
   emit("revoke", invitationId)
 }
 
 /**
  * Handle a request for a fresh invitation link.
- * @param {string} invitationId - The invitation being reissued
  */
-function handleResend(invitationId) {
+function handleResend(invitationId: string): void {
   emit("resend", invitationId)
 }
 
@@ -93,8 +88,8 @@ function handleResend(invitationId) {
  * The Actions column is conditionally included based on the canRevoke and
  * canResend props.
  */
-const columns = computed(() => {
-  const cols = [
+const columns = computed<ColumnsType<Wire<InvitationListItem>>>(() => {
+  const cols: ColumnsType<Wire<InvitationListItem>> = [
     {
       title: "Invitee",
       key: "invitee",
@@ -162,7 +157,7 @@ const columns = computed(() => {
         if (record.status !== "pending") {
           return null
         }
-        const actions = []
+        const actions: VNode[] = []
 
         if (props.canResend) {
           actions.push(

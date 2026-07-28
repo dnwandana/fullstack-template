@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * ProjectSwitcher — top-bar project dropdown (artboard 05).
  *
@@ -33,8 +33,7 @@ watch(
   { immediate: true },
 )
 
-/** @param {string} projectId */
-function selectProject(projectId) {
+function selectProject(projectId: string): void {
   open.value = false
   if (projectId === tenant.currentProjectId) return
   router.push({
@@ -54,7 +53,10 @@ defineExpose({ selectProject })
     </button>
 
     <template #overlay>
-      <Menu :selected-keys="[tenant.currentProjectId]" @click="({ key }) => selectProject(key)">
+      <Menu
+        :selected-keys="tenant.currentProjectId ? [tenant.currentProjectId] : []"
+        @click="({ key }) => selectProject(String(key))"
+      >
         <Menu.Item v-for="project in projects" :key="project.id">
           {{ project.name }}
         </Menu.Item>

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * OrgRolesView — organization roles list with create, edit and delete.
  *
@@ -9,8 +9,11 @@
 import { computed, onMounted } from "vue"
 import { useRoute } from "vue-router"
 import { Button, Space, Popconfirm, Table, Tag, Typography } from "ant-design-vue"
+import type { ColumnsType } from "ant-design-vue/es/table"
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons-vue"
+import type { Role, Wire } from "@fullstack/contracts"
 
+import type { RoleFormInput } from "@/api/roles"
 import { useRoles } from "@/composables/useRoles"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
@@ -18,7 +21,7 @@ import RoleFormModal from "@/components/RoleFormModal.vue"
 
 const route = useRoute()
 const authStore = useAuthStore()
-const orgId = route.params.orgId
+const orgId = String(route.params.orgId)
 
 const rolesComposable = useRoles()
 const { can, loadPermissions } = usePermissions()
@@ -27,7 +30,7 @@ const { roles, allPermissions, fetchRoles, fetchAllPermissions, deleteRole } = r
 const rolesLoading = computed(() => rolesComposable.loading.value)
 
 /** Column definitions for the roles table */
-const roleColumns = [
+const roleColumns: ColumnsType<Wire<Role>> = [
   { title: "Name", dataIndex: "name", key: "name" },
   {
     title: "Description",
@@ -45,9 +48,20 @@ const roleColumns = [
   { title: "Actions", key: "actions", width: 160 },
 ]
 
-/** @param {Object} formData - Role form data from RoleFormModal */
-function onRoleSubmit(formData) {
+/** Role form data from RoleFormModal */
+function onRoleSubmit(formData: RoleFormInput): void {
   rolesComposable.handleSubmit(orgId, formData)
+}
+
+// TODO(ts-migration): the template used to pass the `#bodyCell` slot's `record` straight to
+// `openEditModal`. AntD hard-types that slot prop as `Record<string, any>` — it is not generic over
+// the table's row type — so the row arrives untyped at the slot boundary. Looking the row up in
+// `roles`, which is the table's own `data-source`, recovers the same object without an assertion.
+function editRole(roleId: string): void {
+  const role = roles.value.find((candidate) => candidate.id === roleId)
+  if (role) {
+    rolesComposable.openEditModal(role)
+  }
 }
 
 onMounted(() => {
@@ -89,11 +103,7 @@ onMounted(() => {
         <template v-if="column.key === 'actions'">
           <!-- System roles cannot be edited or deleted -->
           <Space v-if="!record.is_system">
-            <Button
-              v-if="can('org:manage_roles')"
-              size="small"
-              @click="rolesComposable.openEditModal(record)"
-            >
+            <Button v-if="can('org:manage_roles')" size="small" @click="editRole(record.id)">
               <template #icon><EditOutlined /></template>
               Edit
             </Button>

@@ -5,31 +5,31 @@
 import { defineStore } from "pinia"
 import { ref } from "vue"
 import { message } from "ant-design-vue"
+import type { Envelope, Permission, Role, Wire } from "@fullstack/contracts"
 import {
   getRoles as apiGetRoles,
   getRole as apiGetRole,
   createRole as apiCreateRole,
   updateRole as apiUpdateRole,
   deleteRole as apiDeleteRole,
+  type RoleFormInput,
 } from "@/api/roles"
 import { getPermissions as apiGetPermissions } from "@/api/permissions"
 import { useTenantStore } from "@/stores/tenant"
 
 export const useRolesStore = defineStore("roles", () => {
   // State
-  const roles = ref([])
-  const currentRole = ref(null)
-  const allPermissions = ref([])
+  const roles = ref<Wire<Role>[]>([])
+  const currentRole = ref<Wire<Role> | null>(null)
+  const allPermissions = ref<Wire<Permission>[]>([])
   const loading = ref(false)
 
   // Actions
 
   /**
    * Fetch all roles for an organization (system + custom)
-   * @param {string} orgId - Organization UUID
-   * @returns {Promise<Object>} API response data
    */
-  async function fetchRoles(orgId) {
+  async function fetchRoles(orgId: string): Promise<Envelope<Wire<Role>[]> | undefined> {
     loading.value = true
     try {
       const response = await apiGetRoles(orgId)
@@ -44,11 +44,11 @@ export const useRolesStore = defineStore("roles", () => {
 
   /**
    * Fetch a single role by ID with its assigned permissions
-   * @param {string} orgId - Organization UUID
-   * @param {string} roleId - Role UUID
-   * @returns {Promise<Object>} API response data
    */
-  async function fetchRoleById(orgId, roleId) {
+  async function fetchRoleById(
+    orgId: string,
+    roleId: string,
+  ): Promise<Envelope<Wire<Role>> | undefined> {
     loading.value = true
     try {
       const response = await apiGetRole(orgId, roleId)
@@ -64,14 +64,11 @@ export const useRolesStore = defineStore("roles", () => {
   /**
    * Create a new custom role in an organization
    * Refreshes the roles list after a successful creation
-   * @param {string} orgId - Organization UUID
-   * @param {Object} data - Role data
-   * @param {string} data.name - Role name (required)
-   * @param {string} [data.description] - Optional role description
-   * @param {string[]} data.permissions - Array of permission UUIDs to assign
-   * @returns {Promise<Object>} API response data
    */
-  async function createRole(orgId, data) {
+  async function createRole(
+    orgId: string,
+    data: RoleFormInput,
+  ): Promise<Envelope<Wire<Role>> | undefined> {
     loading.value = true
     try {
       const response = await apiCreateRole(orgId, data)
@@ -89,15 +86,12 @@ export const useRolesStore = defineStore("roles", () => {
   /**
    * Update an existing role in an organization
    * Refreshes the roles list after a successful update
-   * @param {string} orgId - Organization UUID
-   * @param {string} roleId - Role UUID to update
-   * @param {Object} data - Updated role data
-   * @param {string} data.name - Role name (required)
-   * @param {string} [data.description] - Optional role description
-   * @param {string[]} data.permissions - Array of permission UUIDs to assign
-   * @returns {Promise<Object>} API response data
    */
-  async function updateRole(orgId, roleId, data) {
+  async function updateRole(
+    orgId: string,
+    roleId: string,
+    data: RoleFormInput,
+  ): Promise<Envelope<Wire<Role>> | undefined> {
     loading.value = true
     try {
       const response = await apiUpdateRole(orgId, roleId, data)
@@ -121,11 +115,8 @@ export const useRolesStore = defineStore("roles", () => {
   /**
    * Delete a custom role from an organization
    * Refreshes the roles list after a successful deletion
-   * @param {string} orgId - Organization UUID
-   * @param {string} roleId - Role UUID to delete
-   * @returns {Promise<Object>} API response data
    */
-  async function deleteRole(orgId, roleId) {
+  async function deleteRole(orgId: string, roleId: string): Promise<Envelope<null> | undefined> {
     loading.value = true
     try {
       const response = await apiDeleteRole(orgId, roleId)
@@ -143,9 +134,8 @@ export const useRolesStore = defineStore("roles", () => {
   /**
    * Fetch all available permissions in the system
    * Used when creating or editing roles to populate the permissions selector
-   * @returns {Promise<Object>} API response data
    */
-  async function fetchAllPermissions() {
+  async function fetchAllPermissions(): Promise<Envelope<Wire<Permission>[]> | undefined> {
     loading.value = true
     try {
       const response = await apiGetPermissions()
@@ -162,7 +152,7 @@ export const useRolesStore = defineStore("roles", () => {
    * Clear roles and currentRole state
    * Used when navigating away from an org context to avoid stale data
    */
-  function clearRoles() {
+  function clearRoles(): void {
     roles.value = []
     currentRole.value = null
   }

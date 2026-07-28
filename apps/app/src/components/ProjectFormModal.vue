@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * ProjectFormModal — Modal form for creating or editing a project.
  *
@@ -14,23 +14,26 @@
 
 import { reactive, watch, computed } from "vue"
 import { Form, Modal, Input } from "ant-design-vue"
+import type { Rule } from "ant-design-vue/es/form"
+import type { Project, Wire } from "@fullstack/contracts"
+import type { ProjectInput } from "@/api/projects"
 
-const props = defineProps({
-  visible: {
-    type: Boolean,
-    default: false,
-  },
-  project: {
-    type: Object,
-    default: null,
-  },
-  loading: {
-    type: Boolean,
-    default: false,
-  },
+interface Props {
+  visible?: boolean
+  project?: Wire<Project> | null
+  loading?: boolean
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  visible: false,
+  project: null,
+  loading: false,
 })
 
-const emit = defineEmits(["submit", "cancel"])
+const emit = defineEmits<{
+  submit: [payload: ProjectInput]
+  cancel: []
+}>()
 
 // Reactive form state bound to template inputs
 const formState = reactive({
@@ -39,7 +42,7 @@ const formState = reactive({
 })
 
 // Validation rules — name is required with a max length
-const rules = reactive({
+const rules = reactive<Record<string, Rule[]>>({
   name: [
     { required: true, message: "Please enter a project name" },
     { max: 100, message: "Name cannot exceed 100 characters" },

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { onMounted, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import {
@@ -21,9 +21,9 @@ const route = useRoute()
 const router = useRouter()
 
 // Extract multi-tenant identifiers and todo ID from route params
-const orgId = route.params.orgId
-const projectId = route.params.projectId
-const todoId = route.params.id
+const orgId = String(route.params.orgId)
+const projectId = String(route.params.projectId)
+const todoId = String(route.params.id)
 
 const {
   currentTodo,
@@ -48,7 +48,10 @@ onMounted(async () => {
   setContext(orgId, projectId)
 
   // Load user permissions for this org to gate UI actions
-  loadPermissions(orgId, authStore.currentUser.id)
+  // TODO(ts-migration): this read was unguarded and would have thrown on a null user. `?.` matches
+  // the other views. No observable change — `usePermissions` names the parameter `_userId` and
+  // discards it.
+  loadPermissions(orgId, authStore.currentUser?.id)
 
   // Fetch the individual todo
   await fetchTodoById(todoId)
@@ -65,25 +68,25 @@ watch(
 )
 
 // Navigate back to the project-level todos list
-function goBack() {
+function goBack(): void {
   router.push(`/orgs/${orgId}/projects/${projectId}`)
 }
 
 // Handle edit
-function handleEdit() {
+function handleEdit(): void {
   if (currentTodo.value) {
     openEditModal(currentTodo.value)
   }
 }
 
 // Handle delete, then redirect back to project
-async function handleDelete() {
+async function handleDelete(): Promise<void> {
   await deleteTodo(todoId)
   router.push(`/orgs/${orgId}/projects/${projectId}`)
 }
 
 // Format date
-function formatDate(dateString) {
+function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleString()
 }
 </script>
@@ -151,6 +154,10 @@ function formatDate(dateString) {
         {{ currentTodo.title }}
       </Typography.Title>
 
+      <!-- @vue-expect-error TODO(ts-migration): `column="1"` passes the string "1", but AntD's
+           `getColumn` only honours a number or a breakpoint object and silently falls back to 3 —
+           so this grid has always rendered 3 columns per row, not 1. Fixing it (`:column="1"`)
+           would change the rendered layout, so the bug is recorded rather than fixed. -->
       <Descriptions bordered column="1" style="margin-top: 16px">
         <Descriptions.Item label="Status">
           <Tag v-if="currentTodo.is_completed" color="success">Completed</Tag>

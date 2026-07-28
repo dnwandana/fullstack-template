@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * AppShell — sider + top bar + breadcrumb + routed content.
  *
@@ -7,6 +7,7 @@
  */
 
 import { ref, computed, watch, onMounted, onUnmounted } from "vue"
+import type { Ref } from "vue"
 import { useRoute, RouterView } from "vue-router"
 import { Layout, Drawer } from "ant-design-vue"
 import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons-vue"
@@ -43,7 +44,7 @@ onMounted(() => {
 // next navigation remounts a view. loadPermissions is idempotent, so the
 // views' own onMounted calls stay harmless no-ops.
 watch(
-  () => [tenant.currentOrgId, tenant.permissionsReady],
+  (): [string | null, boolean] => [tenant.currentOrgId, tenant.permissionsReady],
   ([orgId, ready]) => {
     if (orgId && !ready) tenant.loadPermissions(orgId)
   },
@@ -65,16 +66,16 @@ function toggleCollapsed() {
   localStorage.setItem(STORAGE_KEY, String(preferCollapsed.value))
 }
 
-const teardown = []
+const teardown: (() => void)[] = []
 
 // Read synchronously (during setup, before the first render) rather than
 // from onMounted: the effective viewport is needed for the very first paint
 // — e.g. so the sider never flashes before the drawer takes over below
 // 768px — and only the "change" subscription needs cleanup on unmount.
-function track(query, target) {
+function track(query: string, target: Ref<boolean>): void {
   const mql = window.matchMedia(query)
   target.value = mql.matches
-  const onChange = (event) => (target.value = event.matches)
+  const onChange = (event: MediaQueryListEvent) => (target.value = event.matches)
   mql.addEventListener("change", onChange)
   teardown.push(() => mql.removeEventListener("change", onChange))
 }

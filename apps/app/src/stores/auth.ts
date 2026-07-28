@@ -2,6 +2,7 @@
  * Auth store - manages authentication state
  */
 
+import type { Envelope, User, Wire } from "@fullstack/contracts"
 import { defineStore } from "pinia"
 import { ref, computed } from "vue"
 import { message } from "ant-design-vue"
@@ -11,11 +12,14 @@ import {
   logout as apiLogout,
   getMe as apiGetMe,
 } from "@/api/auth"
-import { setUserData, clearUserData } from "@/utils/storage"
+// A value import, not `import type`: the catch blocks below need the runtime
+// class for `instanceof`.
+import { HttpError } from "@/utils/http"
+import { setUserData, clearUserData, type StoredUser } from "@/utils/storage"
 
 export const useAuthStore = defineStore("auth", () => {
   // State
-  const user = ref(null)
+  const user = ref<StoredUser | null>(null)
   const loading = ref(false)
 
   // Getters
@@ -28,7 +32,7 @@ export const useAuthStore = defineStore("auth", () => {
    * Initialize auth state from localStorage
    * Called on app startup
    */
-  async function initAuth() {
+  async function initAuth(): Promise<void> {
     try {
       const response = await apiGetMe()
       const userData = response.data.data
@@ -42,19 +46,22 @@ export const useAuthStore = defineStore("auth", () => {
 
   /**
    * Register a new user
-   * @param {string} name
-   * @param {string} email
-   * @param {string} password
-   * @param {string} confirmation_password
    */
-  async function signup(name, email, password, confirmation_password) {
+  async function signup(
+    name: string,
+    email: string,
+    password: string,
+    confirmation_password: string,
+  ): Promise<Envelope<Wire<User>>> {
     loading.value = true
     try {
       const response = await apiSignup(name, email, password, confirmation_password)
       message.success("Account created successfully! Please sign in.")
       return response.data
     } catch (error) {
-      const errorMsg = error.response?.data?.message || "Signup failed. Please try again."
+      const errorMsg =
+        (error instanceof HttpError ? error.response.data?.message : undefined) ||
+        "Signup failed. Please try again."
       throw new Error(errorMsg, { cause: error })
     } finally {
       loading.value = false
@@ -63,10 +70,8 @@ export const useAuthStore = defineStore("auth", () => {
 
   /**
    * Sign in user with credentials
-   * @param {string} email
-   * @param {string} password
    */
-  async function signin(email, password) {
+  async function signin(email: string, password: string): Promise<Envelope<Wire<User>>> {
     loading.value = true
     try {
       const response = await apiSignin(email, password)
@@ -79,7 +84,9 @@ export const useAuthStore = defineStore("auth", () => {
       message.success("Signed in successfully!")
       return response.data
     } catch (error) {
-      const errorMsg = error.response?.data?.message || "Sign in failed. Please try again."
+      const errorMsg =
+        (error instanceof HttpError ? error.response.data?.message : undefined) ||
+        "Sign in failed. Please try again."
       throw new Error(errorMsg, { cause: error })
     } finally {
       loading.value = false
@@ -89,7 +96,7 @@ export const useAuthStore = defineStore("auth", () => {
   /**
    * Logout user and clear all auth data
    */
-  async function logout() {
+  async function logout(): Promise<void> {
     try {
       await apiLogout()
     } catch {
@@ -106,8 +113,8 @@ export const useAuthStore = defineStore("auth", () => {
     user.value = null
 
     try {
-      // Imported at call time, not at module scope: stores/tenant.js imports the
-      // router singleton and router/index.js imports this store, so a static
+      // Imported at call time, not at module scope: stores/tenant.ts imports the
+      // router singleton and router/index.ts imports this store, so a static
       // import here would close a module cycle.
       const { useTenantStore } = await import("@/stores/tenant")
       useTenantStore().clear()

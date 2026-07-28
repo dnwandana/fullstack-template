@@ -2,7 +2,7 @@
  * Application base styles and utility vocabulary.
  *
  * Loaded AFTER ant-design-vue/dist/reset.css and the design-system tokens.
- * See main.js — that order is load-bearing.
+ * See main.ts — that order is load-bearing.
  */
 
 body {

@@ -1,5 +1,5 @@
-<script setup>
-import { h, onMounted, ref } from "vue"
+<script setup lang="ts">
+import { computed, h, onMounted, ref } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import {
   Table,
@@ -13,7 +13,9 @@ import {
   Skeleton,
   Input,
 } from "ant-design-vue"
+import type { ColumnsType } from "ant-design-vue/es/table"
 import { PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons-vue"
+import type { Todo, Wire } from "@fullstack/contracts"
 import { useTodos } from "@/composables/useTodos"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
@@ -23,8 +25,8 @@ const route = useRoute()
 const router = useRouter()
 
 // Extract multi-tenant identifiers from route params
-const orgId = route.params.orgId
-const projectId = route.params.projectId
+const orgId = String(route.params.orgId)
+const projectId = String(route.params.projectId)
 
 const {
   todos,
@@ -56,7 +58,7 @@ const { can, loadPermissions } = usePermissions()
 const authStore = useAuthStore()
 
 // Table columns
-const columns = [
+const columns: ColumnsType<Wire<Todo>> = [
   {
     title: "Title",
     dataIndex: "title",
@@ -103,10 +105,15 @@ const columns = [
 ]
 
 // Row selection config
-const rowSelection = {
-  selectedRowKeys: selectedIds,
+// TODO(ts-migration): this was a plain object holding the `selectedIds` computed itself, which
+// AntD's `TableRowSelection` declares as `Key[]`. A plain object is not ref-unwrapped by the
+// template, so AntD received the ref and only worked by accident — `useMergedState` calls
+// `ref(initValue)`, which passes an existing ref straight through. Wrapping the object in a
+// `computed` hands AntD the plain `string[]` it documents while keeping the same reactivity.
+const rowSelection = computed(() => ({
+  selectedRowKeys: selectedIds.value,
   onChange: handleSelectionChange,
-}
+}))
 
 // Sort options
 const sortByOptions = [
@@ -120,39 +127,51 @@ const sortOrderOptions = [
 ]
 
 // Navigate to todo detail using multi-tenant route
-function viewTodo(id) {
+function viewTodo(id: string): void {
   router.push(`/orgs/${orgId}/projects/${projectId}/todos/${id}`)
 }
 
+// Handle edit
+// TODO(ts-migration): the template used to pass the `#bodyCell` slot's `record` straight to
+// `openEditModal`. AntD hard-types that slot prop as `Record<string, any>` — it is not generic over
+// the table's row type — so the row arrives untyped at the slot boundary. Looking the row up in
+// `todos`, which is the table's own `data-source`, recovers the same object without an assertion.
+function editTodo(id: string): void {
+  const todo = todos.value.find((candidate) => candidate.id === id)
+  if (todo) {
+    openEditModal(todo)
+  }
+}
+
 // Handle delete with confirmation
-async function handleDelete(id) {
+async function handleDelete(id: string): Promise<void> {
   await deleteTodo(id)
 }
 
 // Handle bulk delete
-async function handleBulkDelete() {
+async function handleBulkDelete(): Promise<void> {
   await bulkDelete()
 }
 
 // Search input value (local ref for two-way binding)
 const searchValue = ref("")
 
-function onSearch(value) {
+function onSearch(value: string): void {
   handleSearch(value)
 }
 
-function clearSearch() {
+function clearSearch(): void {
   searchValue.value = ""
   handleSearch("")
 }
 
 // Handle sort by change
-function onSortByChange(value) {
+function onSortByChange(value: string): void {
   handleSortChange(value, sortOrder.value)
 }
 
 // Handle sort order change
-function onSortOrderChange(value) {
+function onSortOrderChange(value: string): void {
   handleSortChange(sortBy.value, value)
 }
 
@@ -162,7 +181,10 @@ onMounted(async () => {
   setContext(orgId, projectId)
 
   // Load user permissions for this org to gate UI actions
-  loadPermissions(orgId, authStore.currentUser.id)
+  // TODO(ts-migration): this read was unguarded and would have thrown on a null user. `?.` matches
+  // the other views. No observable change — `usePermissions` names the parameter `_userId` and
+  // discards it.
+  loadPermissions(orgId, authStore.currentUser?.id)
 
   // Fetch the todos list
   fetchTodos()
@@ -191,14 +213,14 @@ onMounted(async () => {
           :options="sortByOptions"
           style="width: 140px"
           placeholder="Sort by"
-          @change="onSortByChange"
+          @change="(value) => onSortByChange(String(value))"
         />
         <Select
           :value="sortOrder"
           :options="sortOrderOptions"
           style="width: 130px"
           placeholder="Order"
-          @change="onSortOrderChange"
+          @change="(value) => onSortOrderChange(String(value))"
         />
 
         <!-- Bulk delete (only visible when items are selected and user has delete permission) -->
@@ -271,7 +293,7 @@ onMounted(async () => {
               v-if="can('todos:update')"
               type="text"
               size="small"
-              @click="openEditModal(record)"
+              @click="editTodo(record.id)"
             >
               <template #icon>
                 <EditOutlined />

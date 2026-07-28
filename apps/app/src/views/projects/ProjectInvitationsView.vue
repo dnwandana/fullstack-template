@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * ProjectInvitationsView — invite people into a project.
  *
@@ -18,12 +18,13 @@ import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 import InviteFormModal from "@/components/InviteFormModal.vue"
 import InvitationsTable from "@/components/InvitationsTable.vue"
+import type { InviteInput } from "@/api/invitations"
 
 const route = useRoute()
 const authStore = useAuthStore()
 
-const orgId = route.params.orgId
-const projectId = route.params.projectId
+const orgId = String(route.params.orgId)
+const projectId = String(route.params.projectId)
 
 const invitationsComposable = useInvitations()
 const rolesComposable = useRoles()
@@ -42,13 +43,12 @@ const { roles, fetchRoles } = rolesComposable
 
 const invitationsLoading = computed(() => invitationsComposable.loading.value)
 
-/** @param {Object} data - Invite payload from InviteFormModal */
-function onInviteSubmit(data) {
+/** Invite payload from InviteFormModal — sending is project-scoped. */
+function onInviteSubmit(data: InviteInput): void {
   handleInvite(orgId, data, "project", projectId)
 }
 
-/** @param {string} invitationId */
-function onRevoke(invitationId) {
+function onRevoke(invitationId: string): void {
   handleRevoke(orgId, invitationId)
 }
 

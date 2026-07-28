@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * OrgInvitationsView — sent invitations for an organization, with invite,
  * revoke and reissue.
@@ -12,6 +12,7 @@ import { useRoute } from "vue-router"
 import { Button, Typography, Modal, message } from "ant-design-vue"
 import { PlusOutlined } from "@ant-design/icons-vue"
 
+import type { InviteInput } from "@/api/invitations"
 import { useInvitations } from "@/composables/useInvitations"
 import { useRoles } from "@/composables/useRoles"
 import { usePermissions } from "@/composables/usePermissions"
@@ -21,7 +22,7 @@ import InvitationsTable from "@/components/InvitationsTable.vue"
 
 const route = useRoute()
 const authStore = useAuthStore()
-const orgId = route.params.orgId
+const orgId = String(route.params.orgId)
 
 const invitationsComposable = useInvitations()
 const rolesComposable = useRoles()
@@ -41,13 +42,12 @@ const { roles, fetchRoles } = rolesComposable
 
 const invitationsLoading = computed(() => invitationsComposable.loading.value)
 
-/** @param {Object} data - Invite payload from InviteFormModal */
-function onInviteSubmit(data) {
+/** Invite payload from InviteFormModal */
+function onInviteSubmit(data: InviteInput): void {
   handleInvite(orgId, data, "org")
 }
 
-/** @param {string} invitationId */
-function onRevoke(invitationId) {
+function onRevoke(invitationId: string): void {
   handleRevoke(orgId, invitationId)
 }
 
@@ -55,9 +55,8 @@ function onRevoke(invitationId) {
  * Reissue a pending invitation and put the fresh link on the clipboard.
  * The template ships no mail provider, so the admin delivers the link by hand —
  * and the raw token is only ever returned once, at the moment it is minted.
- * @param {string} invitationId - The invitation being reissued
  */
-async function onResend(invitationId) {
+async function onResend(invitationId: string): Promise<void> {
   const result = await handleResend(orgId, invitationId)
   if (!result?.accept_url) {
     return

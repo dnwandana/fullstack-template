@@ -1,5 +1,35 @@
+import type { ErrorEnvelope } from "@fullstack/contracts"
 import { message } from "ant-design-vue"
 import { clearUserData } from "./storage"
+
+export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE"
+
+/** Query-string values. Everything is stringified by `buildURL`. */
+export type QueryParams = Record<string, string | number | boolean | undefined>
+
+export interface RequestOptions {
+  body?: unknown
+  headers?: Record<string, string>
+  params?: QueryParams
+  timeout?: number
+  _retry?: boolean
+}
+
+/** The axios-shaped result `send` resolves to. `E` is the full envelope, not the payload. */
+export interface HttpResult<E> {
+  data: E
+  status: number
+}
+
+interface OriginalOptions extends RequestOptions {
+  method: HttpMethod
+  url: string
+}
+
+interface QueuedRequest {
+  resolve: (value: unknown) => void
+  reject: (reason?: unknown) => void
+}
 
 // ---------------------------------------------------------------------------
 // Config
@@ -38,7 +68,11 @@ const AUTH_PATHS = ["/login", "/signup"]
 // We attach a `response` property so existing store error handling works
 // without any changes.
 export class HttpError extends Error {
-  constructor(status, data, messageText) {
+  readonly status: number
+  readonly data: Partial<ErrorEnvelope> | null
+  readonly response: { data: Partial<ErrorEnvelope> | null; status: number }
+
+  constructor(status: number, data: Partial<ErrorEnvelope> | null, messageText: string) {
     super(messageText)
     this.name = "HttpError"
     this.status = status
@@ -52,9 +86,9 @@ export class HttpError extends Error {
 // ---------------------------------------------------------------------------
 
 let isRefreshing = false
-let failedQueue = []
+let failedQueue: QueuedRequest[] = []
 
-function processQueue(error, token = null) {
+function processQueue(error: unknown, token: boolean | null = null): void {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error)
@@ -65,7 +99,7 @@ function processQueue(error, token = null) {
   failedQueue = []
 }
 
-async function handleRefresh(originalOptions) {
+async function handleRefresh<E>(originalOptions: OriginalOptions): Promise<HttpResult<E>> {
   // If a refresh is already in flight, queue this request
   if (isRefreshing) {
     return new Promise((resolve, reject) => {
@@ -88,7 +122,7 @@ async function handleRefresh(originalOptions) {
     })
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
+      const errorData: Partial<ErrorEnvelope> = await response.json().catch(() => ({}))
       throw new HttpError(response.status, errorData, errorData.message || "Refresh failed")
     }
 
@@ -118,12 +152,12 @@ async function handleRefresh(originalOptions) {
 // URL builder
 // ---------------------------------------------------------------------------
 
-function buildURL(url, params) {
+function buildURL(url: string, params?: QueryParams): string {
   let fullURL = `${baseURL}${url}`
   if (params && Object.keys(params).length > 0) {
     const searchParams = new URLSearchParams()
     Object.entries(params).forEach(([key, value]) => {
-      searchParams.append(key, value)
+      searchParams.append(key, String(value))
     })
     fullURL += `?${searchParams.toString()}`
   }
@@ -134,7 +168,11 @@ function buildURL(url, params) {
 // Core send function
 // ---------------------------------------------------------------------------
 
-async function send(method, url, options = {}) {
+async function send<E>(
+  method: HttpMethod,
+  url: string,
+  options: RequestOptions = {},
+): Promise<HttpResult<E>> {
   const {
     body,
     headers: customHeaders = {},
@@ -155,7 +193,7 @@ async function send(method, url, options = {}) {
   const fullURL = buildURL(url, params)
 
   try {
-    const fetchOptions = { method, headers, signal: controller.signal }
+    const fetchOptions: RequestInit = { method, headers, signal: controller.signal }
     fetchOptions.credentials = "include"
     if (method !== "GET" && body) {
       fetchOptions.body = JSON.stringify(body)
@@ -165,7 +203,7 @@ async function send(method, url, options = {}) {
     clearTimeout(timeoutId)
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
+      const errorData: Partial<ErrorEnvelope> = await response.json().catch(() => ({}))
       const errorMessage = errorData.message || response.statusText || "An error occurred"
 
       // 401 handling — attempt token refresh (unless excluded endpoint or already retried)
@@ -187,12 +225,12 @@ async function send(method, url, options = {}) {
 
     // Return axios-compatible response shape: { data, status }
     // Stores access `response.data` and `response.data.data` — this preserves that.
-    const data = await response.json()
+    const data: E = await response.json()
     return { data, status: response.status }
   } catch (error) {
     clearTimeout(timeoutId)
 
-    if (error.name === "AbortError") {
+    if (error instanceof Error && error.name === "AbortError") {
       throw new HttpError(0, null, "Request timed out")
     }
 
@@ -208,19 +246,19 @@ async function send(method, url, options = {}) {
 export const request = {
   send,
 
-  get(url, params) {
-    return send("GET", url, { params })
+  get<E>(url: string, params?: QueryParams): Promise<HttpResult<E>> {
+    return send<E>("GET", url, { params })
   },
 
-  post(url, body) {
-    return send("POST", url, { body })
+  post<E>(url: string, body?: unknown): Promise<HttpResult<E>> {
+    return send<E>("POST", url, { body })
   },
 
-  put(url, body) {
-    return send("PUT", url, { body })
+  put<E>(url: string, body?: unknown): Promise<HttpResult<E>> {
+    return send<E>("PUT", url, { body })
   },
 
-  del(url, params) {
-    return send("DELETE", url, { params })
+  del<E>(url: string, params?: QueryParams): Promise<HttpResult<E>> {
+    return send<E>("DELETE", url, { params })
   },
 }

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * UserMenu — avatar dropdown with the signed-in user and a Logout action.
  *

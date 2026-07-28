@@ -2,6 +2,7 @@
  * Projects store - manages project state and operations within an organization
  */
 
+import type { Envelope, Project, Wire } from "@fullstack/contracts"
 import { defineStore } from "pinia"
 import { ref } from "vue"
 import { message } from "ant-design-vue"
@@ -11,22 +12,21 @@ import {
   createProject as apiCreateProject,
   updateProject as apiUpdateProject,
   deleteProject as apiDeleteProject,
+  type ProjectInput,
 } from "@/api/projects"
 
 export const useProjectsStore = defineStore("projects", () => {
   // State
-  const projects = ref([])
-  const currentProject = ref(null)
+  const projects = ref<Wire<Project>[]>([])
+  const currentProject = ref<Wire<Project> | null>(null)
   const loading = ref(false)
 
   // Actions
 
   /**
    * Fetch all projects for a given organization
-   * @param {string} orgId - Organization UUID
-   * @returns {Promise<Array>} List of projects
    */
-  async function fetchProjects(orgId) {
+  async function fetchProjects(orgId: string): Promise<Envelope<Wire<Project>[]> | undefined> {
     loading.value = true
     try {
       const response = await apiGetProjects(orgId)
@@ -41,11 +41,11 @@ export const useProjectsStore = defineStore("projects", () => {
 
   /**
    * Fetch a single project by its ID within an organization
-   * @param {string} orgId - Organization UUID
-   * @param {string} projectId - Project UUID
-   * @returns {Promise<Object>} Project details
    */
-  async function fetchProjectById(orgId, projectId) {
+  async function fetchProjectById(
+    orgId: string,
+    projectId: string,
+  ): Promise<Envelope<Wire<Project>> | undefined> {
     loading.value = true
     try {
       const response = await apiGetProject(orgId, projectId)
@@ -60,13 +60,11 @@ export const useProjectsStore = defineStore("projects", () => {
 
   /**
    * Create a new project within an organization and refresh the list
-   * @param {string} orgId - Organization UUID
-   * @param {Object} data - Project data
-   * @param {string} data.name - Project name (required)
-   * @param {string} [data.description] - Optional description
-   * @returns {Promise<Object>} Created project
    */
-  async function createProject(orgId, data) {
+  async function createProject(
+    orgId: string,
+    data: ProjectInput,
+  ): Promise<Envelope<Wire<Project>> | undefined> {
     loading.value = true
     try {
       const response = await apiCreateProject(orgId, data)
@@ -83,14 +81,12 @@ export const useProjectsStore = defineStore("projects", () => {
 
   /**
    * Update an existing project within an organization
-   * @param {string} orgId - Organization UUID
-   * @param {string} projectId - Project UUID
-   * @param {Object} data - Updated project data
-   * @param {string} data.name - Project name (required)
-   * @param {string} [data.description] - Optional description
-   * @returns {Promise<Object>} Updated project
    */
-  async function updateProject(orgId, projectId, data) {
+  async function updateProject(
+    orgId: string,
+    projectId: string,
+    data: ProjectInput,
+  ): Promise<Envelope<Wire<Project>> | undefined> {
     loading.value = true
     try {
       const response = await apiUpdateProject(orgId, projectId, data)
@@ -107,11 +103,11 @@ export const useProjectsStore = defineStore("projects", () => {
 
   /**
    * Delete a project within an organization and refresh the list
-   * @param {string} orgId - Organization UUID
-   * @param {string} projectId - Project UUID
-   * @returns {Promise<Object>} Deletion response
    */
-  async function deleteProject(orgId, projectId) {
+  async function deleteProject(
+    orgId: string,
+    projectId: string,
+  ): Promise<Envelope<null> | undefined> {
     loading.value = true
     try {
       const response = await apiDeleteProject(orgId, projectId)
@@ -130,7 +126,7 @@ export const useProjectsStore = defineStore("projects", () => {
    * Clear the currently selected project
    * Used when navigating away from a project detail view
    */
-  function clearCurrentProject() {
+  function clearCurrentProject(): void {
     currentProject.value = null
   }
 
@@ -138,7 +134,7 @@ export const useProjectsStore = defineStore("projects", () => {
    * Clear all project state (both list and current selection)
    * Used when switching between organizations to avoid stale data
    */
-  function clearProjects() {
+  function clearProjects(): void {
     projects.value = []
     currentProject.value = null
   }

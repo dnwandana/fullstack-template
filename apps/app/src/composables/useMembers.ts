@@ -4,31 +4,35 @@
  */
 
 import { ref, computed } from "vue"
+import type { OrgMember, ProjectMember, Wire } from "@fullstack/contracts"
 import { useMembersStore } from "@/stores/members"
+
+/** Which membership table an action targets. Exported — the member views pass it through. */
+export type MemberScope = "org" | "project"
+
+/** The modal edits either kind of membership row; both share user_id, role_id and role_name. */
+export type MemberRow = Wire<OrgMember> | Wire<ProjectMember>
 
 export function useMembers() {
   const membersStore = useMembersStore()
 
   // Local state for the role-change modal
   const isRoleModalVisible = ref(false)
-  const editingMember = ref(null)
+  const editingMember = ref<MemberRow | null>(null)
 
   /**
    * Open the role-change modal for a given member
    * Clones the member object to avoid mutating store state directly
-   * @param {Object} member - Member object whose role is being changed
-   * @returns {void}
    */
-  function openRoleModal(member) {
+  function openRoleModal(member: MemberRow): void {
     editingMember.value = { ...member }
     isRoleModalVisible.value = true
   }
 
   /**
    * Close the role-change modal and reset editing state
-   * @returns {void}
    */
-  function closeRoleModal() {
+  function closeRoleModal(): void {
     editingMember.value = null
     isRoleModalVisible.value = false
   }
@@ -36,18 +40,20 @@ export function useMembers() {
   /**
    * Handle changing a member's role at either the org or project scope
    * Delegates to the appropriate store action based on scope, then closes the modal
-   * @param {string} orgId - Organization UUID
-   * @param {string} userId - User UUID of the member to update
-   * @param {string} roleId - New role UUID to assign
-   * @param {string} scope - Either "org" or "project"
-   * @param {string} [projectId] - Project UUID (required when scope is "project")
-   * @returns {Promise<void>}
    */
-  async function handleRoleChange(orgId, userId, roleId, scope, projectId) {
+  async function handleRoleChange(
+    orgId: string,
+    userId: string,
+    roleId: string,
+    scope: MemberScope,
+    projectId?: string,
+  ): Promise<void> {
     if (scope === "org") {
       await membersStore.updateOrgMemberRole(orgId, userId, roleId)
     } else if (scope === "project") {
-      await membersStore.updateProjectMemberRole(orgId, projectId, userId, roleId)
+      // `projectId` is optional in the signature but required by this branch. `String()` keeps the
+      // missing-id request byte-identical to the JavaScript version rather than skipping the call.
+      await membersStore.updateProjectMemberRole(orgId, String(projectId), userId, roleId)
     }
     closeRoleModal()
   }
@@ -55,17 +61,19 @@ export function useMembers() {
   /**
    * Handle removing a member at either the org or project scope
    * Delegates to the appropriate store action based on scope
-   * @param {string} orgId - Organization UUID
-   * @param {string} userId - User UUID of the member to remove
-   * @param {string} scope - Either "org" or "project"
-   * @param {string} [projectId] - Project UUID (required when scope is "project")
-   * @returns {Promise<void>}
    */
-  async function handleRemove(orgId, userId, scope, projectId) {
+  async function handleRemove(
+    orgId: string,
+    userId: string,
+    scope: MemberScope,
+    projectId?: string,
+  ): Promise<void> {
     if (scope === "org") {
       await membersStore.removeOrgMember(orgId, userId)
     } else if (scope === "project") {
-      await membersStore.removeProjectMember(orgId, projectId, userId)
+      // `projectId` is optional in the signature but required by this branch. `String()` keeps the
+      // missing-id request byte-identical to the JavaScript version rather than skipping the call.
+      await membersStore.removeProjectMember(orgId, String(projectId), userId)
     }
   }
 

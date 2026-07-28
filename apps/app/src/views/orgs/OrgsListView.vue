@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * OrgsListView — Displays the current user's organizations in a responsive card grid.
  *
@@ -33,9 +33,8 @@ const {
 
 /**
  * Navigate to the projects list for a given organization.
- * @param {string} orgId - Organization UUID to navigate to
  */
-function viewProjects(orgId) {
+function viewProjects(orgId: string): void {
   router.push(`/orgs/${orgId}`)
 }
 

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * TopBar — 56px white header (artboard 05).
  *
@@ -16,7 +16,9 @@ import ProjectSwitcher from "./ProjectSwitcher.vue"
 import InvitationsBell from "./InvitationsBell.vue"
 import UserMenu from "./UserMenu.vue"
 
-defineEmits(["toggle-drawer"])
+defineEmits<{
+  "toggle-drawer": []
+}>()
 
 const tenant = useTenantStore()
 

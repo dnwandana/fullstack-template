@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * InvitationsBell — pending-invitation count, linking to /invitations.
  *

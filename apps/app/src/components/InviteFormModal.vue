@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * InviteFormModal — Modal form for inviting a member by email.
  *
@@ -14,30 +14,33 @@
 
 import { reactive } from "vue"
 import { Form, Modal, Input, Select } from "ant-design-vue"
+import type { Rule } from "ant-design-vue/es/form"
+import type { Role, Wire } from "@fullstack/contracts"
+import type { InviteInput } from "@/api/invitations"
 
-defineProps({
-  visible: {
-    type: Boolean,
-    default: false,
-  },
-  roles: {
-    type: Array,
-    default: () => [],
-  },
-  loading: {
-    type: Boolean,
-    default: false,
-  },
+interface Props {
+  visible?: boolean
+  roles?: Wire<Role>[]
+  loading?: boolean
+}
+
+withDefaults(defineProps<Props>(), {
+  visible: false,
+  roles: () => [],
+  loading: false,
 })
 
-const emit = defineEmits(["submit", "cancel"])
+const emit = defineEmits<{
+  submit: [payload: InviteInput]
+  cancel: []
+}>()
 
-const formState = reactive({
+const formState = reactive<{ email: string; role_id: string | undefined }>({
   email: "",
   role_id: undefined,
 })
 
-const rules = {
+const rules: Record<string, Rule[]> = {
   email: [
     { required: true, message: "Please enter an email address" },
     { type: "email", message: "Please enter a valid email address" },
@@ -52,6 +55,13 @@ const { validate, resetFields } = Form.useForm(formState, rules)
 async function handleOk() {
   try {
     await validate()
+    // TODO(ts-migration): `formState.role_id` is `string | undefined` because `undefined` is
+    // what `<a-select>` treats as "nothing selected", but `InviteInput.role_id` is `string`.
+    // The gap is unreachable at runtime — the `role_id` required rule makes `validate()` reject
+    // before this line when nothing is selected — but the compiler cannot see that invariant,
+    // and proving it would mean adding a guard, i.e. changing runtime behaviour.
+    // @ts-expect-error — see above. This directive self-clears (as an unused-directive error)
+    // if the emit payload or the form state type ever changes to make the assignment valid.
     emit("submit", { email: formState.email, role_id: formState.role_id })
   } catch {
     // Validation failed — field-level errors are shown by ant-design-vue

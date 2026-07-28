@@ -4,6 +4,9 @@
  */
 
 import { ref, computed } from "vue"
+import type { Envelope, InvitationWithToken, Wire } from "@fullstack/contracts"
+import type { InviteInput } from "@/api/invitations"
+import type { MemberScope } from "@/composables/useMembers"
 import { useInvitationsStore } from "@/stores/invitations"
 
 export function useInvitations() {
@@ -14,34 +17,34 @@ export function useInvitations() {
 
   /**
    * Open the invite modal
-   * @returns {void}
    */
-  function openInviteModal() {
+  function openInviteModal(): void {
     isInviteModalVisible.value = true
   }
 
   /**
    * Close the invite modal
-   * @returns {void}
    */
-  function closeInviteModal() {
+  function closeInviteModal(): void {
     isInviteModalVisible.value = false
   }
 
   /**
    * Handle sending an invitation at either the org or project scope
    * Delegates to the appropriate store action based on scope, then closes the modal
-   * @param {string} orgId - Organization UUID
-   * @param {Object} data - Invitation data (e.g., { role_id, email })
-   * @param {string} scope - Either "org" or "project"
-   * @param {string} [projectId] - Project UUID (required when scope is "project")
-   * @returns {Promise<void>}
    */
-  async function handleInvite(orgId, data, scope, projectId) {
+  async function handleInvite(
+    orgId: string,
+    data: InviteInput,
+    scope: MemberScope,
+    projectId?: string,
+  ): Promise<void> {
     if (scope === "org") {
       await invitationsStore.inviteToOrg(orgId, data)
     } else if (scope === "project") {
-      await invitationsStore.inviteToProject(orgId, projectId, data)
+      // `projectId` is optional in the signature but required by this branch. `String()` keeps the
+      // missing-id request byte-identical to the JavaScript version rather than skipping the call.
+      await invitationsStore.inviteToProject(orgId, String(projectId), data)
     }
     closeInviteModal()
   }
@@ -49,30 +52,23 @@ export function useInvitations() {
   /**
    * Handle accepting a pending invitation
    * The token comes from the invite link — it is the credential the API checks
-   * @param {string} invitationId - Invitation UUID to accept
-   * @param {string} token - Raw invitation token from the invite link
-   * @returns {Promise<Object|null>} API response data, or null if acceptance failed
+   * Resolves to null when acceptance failed, so callers can branch on the outcome
    */
-  async function handleAccept(invitationId, token) {
+  async function handleAccept(invitationId: string, token: string): Promise<Envelope<null> | null> {
     return invitationsStore.acceptInvitation(invitationId, token)
   }
 
   /**
    * Handle declining a pending invitation
-   * @param {string} invitationId - Invitation UUID to decline
-   * @returns {Promise<void>}
    */
-  async function handleDecline(invitationId) {
+  async function handleDecline(invitationId: string): Promise<void> {
     await invitationsStore.declineInvitation(invitationId)
   }
 
   /**
    * Handle revoking an invitation (admin action)
-   * @param {string} orgId - Organization UUID
-   * @param {string} invitationId - Invitation UUID to revoke
-   * @returns {Promise<void>}
    */
-  async function handleRevoke(orgId, invitationId) {
+  async function handleRevoke(orgId: string, invitationId: string): Promise<void> {
     await invitationsStore.revokeInvitation(orgId, invitationId)
   }
 
@@ -80,11 +76,11 @@ export function useInvitations() {
    * Handle reissuing an invitation (admin action)
    * Returns the fresh invitation so the caller can surface the new accept link,
    * which is the only place the raw token is ever exposed
-   * @param {string} orgId - Organization UUID
-   * @param {string} invitationId - Invitation UUID to resend
-   * @returns {Promise<Object|null>} Reissued invitation, or null on failure
    */
-  async function handleResend(orgId, invitationId) {
+  async function handleResend(
+    orgId: string,
+    invitationId: string,
+  ): Promise<Wire<InvitationWithToken> | null> {
     return invitationsStore.resendInvitation(orgId, invitationId)
   }
 

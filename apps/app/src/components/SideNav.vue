@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * SideNav — permission-derived navigation for the application shell.
  *
@@ -10,6 +10,7 @@
  */
 
 import { computed } from "vue"
+import type { Component } from "vue"
 import { useRoute } from "vue-router"
 import { Menu } from "ant-design-vue"
 import {
@@ -23,17 +24,26 @@ import {
 import { useTenantStore } from "@/stores/tenant"
 import { usePermissions } from "@/composables/usePermissions"
 
-defineProps({
-  collapsed: { type: Boolean, default: false },
-})
+withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
 
 const route = useRoute()
 const tenant = useTenantStore()
 const { can } = usePermissions()
 
+interface NavItem {
+  /** Route name — also what `selectedKeys` matches on. */
+  key: string
+  label: string
+  icon: Component
+  /** Mirrors the route's `meta.permission`; see 00-overview. */
+  permission: string
+  /** Extra route names that should keep this item lit. Defaults to `[key]`. */
+  matches?: string[]
+}
+
 // `key` is the route name, which is also what selectedKeys matches on.
 // `permission` mirrors the route's meta.permission — see 00-overview.
-const ORG_ITEMS = [
+const ORG_ITEMS: NavItem[] = [
   { key: "ProjectsList", label: "Projects", icon: ProjectOutlined, permission: "project:read" },
   { key: "OrgMembers", label: "Members", icon: TeamOutlined, permission: "org:read" },
   { key: "OrgRoles", label: "Roles", icon: SafetyCertificateOutlined, permission: "org:read" },
@@ -46,7 +56,7 @@ const ORG_ITEMS = [
   { key: "OrgSettings", label: "Settings", icon: SettingOutlined, permission: "org:update" },
 ]
 
-const PROJECT_ITEMS = [
+const PROJECT_ITEMS: NavItem[] = [
   {
     key: "TodosList",
     label: "Todos",
@@ -116,7 +126,7 @@ defineExpose({ items, selectedKeys })
 
 /* Ant's inline Menu draws its active bar on the RIGHT via a pseudo-element,
    and colorActiveBarBorderSize/colorActiveBarWidth address only that bar.
-   theme/antd.js sets colorActiveBarBorderSize: 0 to suppress it; the artboard's
+   theme/antd.ts sets colorActiveBarBorderSize: 0 to suppress it; the artboard's
    3px LEFT bar is drawn here. Fill, text colour and radius still come from the
    Menu tokens. */
 .side-nav :deep(.ant-menu-item-selected) {
