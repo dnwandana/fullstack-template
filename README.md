@@ -4,11 +4,11 @@ A production-ready monorepo for building multi-tenant SaaS applications. Combine
 
 ## What's inside
 
-| Package              | Stack                                 | Purpose                                 |
-| -------------------- | ------------------------------------- | --------------------------------------- |
-| `apps/api`           | NestJS 11, PostgreSQL, Prisma, Redis  | REST API with auth, RBAC, multi-tenancy |
-| `apps/app`           | Vue 3, Pinia, Ant Design Vue, Vite    | Single-page app consuming the API       |
-| `packages/contracts` | TypeScript declarations only, no deps | Response shapes shared by API and SPA   |
+| Package              | Stack                                          | Purpose                                 |
+| -------------------- | ---------------------------------------------- | --------------------------------------- |
+| `apps/api`           | NestJS 11, PostgreSQL, Prisma, Redis           | REST API with auth, RBAC, multi-tenancy |
+| `apps/app`           | Vue 3, TypeScript, Pinia, Ant Design Vue, Vite | Single-page app consuming the API       |
+| `packages/contracts` | TypeScript declarations only, no deps          | Response shapes shared by API and SPA   |
 
 ## Documentation map
 
@@ -106,6 +106,15 @@ corepack pnpm dev:app   # http://localhost:8080
 
 Every root script — the full list, the `:api` / `:app` suffix rule, and the Turborepo caveats that
 come with them — is documented in [`AGENTS.md`](AGENTS.md#commands).
+
+Type checking is the one worth repeating here, because it is what catches drift between the two
+apps' shared response contracts:
+
+```bash
+corepack pnpm typecheck       # both apps
+corepack pnpm typecheck:api   # tsc --noEmit
+corepack pnpm typecheck:app   # vue-tsc — templates and .vue SFCs included
+```
 
 ## API overview
 
@@ -393,12 +402,13 @@ fullstack-template/
 │           ├── components/         # Reusable UI components
 │           ├── router/             # Vue Router + auth guards
 │           ├── utils/              # Fetch client, localStorage helpers
-│           ├── theme/              # antd.js — design tokens fed to ConfigProvider
+│           ├── theme/              # antd.ts — design tokens fed to ConfigProvider
 │           └── assets/             # app.css + design-system/ (tokens, web fonts)
 │
 ├── packages/
 │   └── contracts/                  # @fullstack/contracts — dependency-free response-shape types
-│                                   #   the API `implements`; import type only, no runtime presence
+│                                   #   the API `implements` and the SPA reads as Wire<T>;
+│                                   #   import type only, no runtime presence
 │
 ├── .nvmrc                          # Node version pin (24) — mirrors engines.node everywhere
 ├── package.json                    # Monorepo root
@@ -419,11 +429,11 @@ Prettier and Oxlint, configured per package — the config files are authoritati
 convention is worth restating by hand.
 
 Two things to know before running either from the root. `corepack pnpm lint` **rewrites files**: in
-`apps/app` it is `run-s lint:*`, which auto-fixes with eslint and oxlint, while in `apps/api` it is
-a read-only `oxlint .` (the fixing variant there is the package-local `lint:fix`). And `format`
-coverage is asymmetric: `apps/api` runs `prettier --write .`, which reformats its markdown too,
-whereas `apps/app` scopes Prettier to `src/`. The root has no Prettier dependency of its own, so
-root markdown and `apps/app/*.md` have no formatter — edit them by hand.
+`apps/app` it is `run-s lint:*`, which auto-fixes with oxlint and then eslint, while in `apps/api`
+it is a read-only `oxlint .` (the fixing variant there is the package-local `lint:fix`). And
+`format` coverage is asymmetric: `apps/api` runs `prettier --write .`, which reformats its markdown
+too, whereas `apps/app` scopes Prettier to `src/`. The root has no Prettier dependency of its own,
+so root markdown and `apps/app/*.md` have no formatter — edit them by hand.
 
 The conventions that are *not* mechanically enforced are noted in
 [`apps/api/AGENTS.md`](apps/api/AGENTS.md#code-style) and

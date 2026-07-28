@@ -11,6 +11,7 @@ From the repository root, run:
 ```bash
 corepack pnpm dev:app
 corepack pnpm build:app
+corepack pnpm typecheck:app
 corepack pnpm lint:app
 ```
 
@@ -38,6 +39,7 @@ implements the same auth and todo contract and works as an alternative — see
 
 - **Developer Experience**
   - Fast HMR with Vite
+  - TypeScript under `strict`, with API response types shared from `@fullstack/contracts`
   - Dual-linting setup (oxlint + eslint)
   - Code formatting with Prettier
   - Vue DevTools integration (development only)
@@ -45,14 +47,15 @@ implements the same auth and todo contract and works as an alternative — see
 
 ## Tech Stack
 
-| Technology     | Purpose                                            |
-| -------------- | -------------------------------------------------- |
-| Vue 3          | Progressive JavaScript framework (Composition API) |
-| Vite           | Next-generation frontend tooling                   |
-| Pinia          | State management                                   |
-| Ant Design Vue | UI component library                               |
-| Fetch API      | Native HTTP client with cookie-based auth          |
-| Vue Router     | Client-side routing with guards                    |
+| Technology     | Purpose                                             |
+| -------------- | --------------------------------------------------- |
+| Vue 3          | Progressive framework (Composition API, TypeScript) |
+| TypeScript     | `strict` throughout `src/`, checked by `vue-tsc`    |
+| Vite           | Next-generation frontend tooling                    |
+| Pinia          | State management                                    |
+| Ant Design Vue | UI component library                                |
+| Fetch API      | Native HTTP client with cookie-based auth           |
+| Vue Router     | Client-side routing with guards                     |
 
 ## Backend
 
@@ -65,9 +68,10 @@ an earlier standalone backend implementing the same auth and todo contract.
 
 ## Prerequisites
 
-- **Node.js**: `>=24.0.0` — declared in this package's `package.json` (and in
-  `apps/api/package.json`); the root package declares no `engines`, so a version check run at the
-  repo root enforces nothing.
+- **Node.js**: `>=24.0.0` — declared as `engines.node` in this package's `package.json` and in
+  every other workspace package, pinned by the repo-root `.nvmrc`. `engineStrict: true` in
+  `pnpm-workspace.yaml` makes it a hard gate: an older Node fails `corepack pnpm install` outright
+  rather than warning and installing anyway.
 - A running backend API (see [Backend](#backend) above)
 
 ## Quick Start
@@ -90,7 +94,7 @@ an earlier standalone backend implementing the same auth and todo contract.
    VITE_API_BASE_URL=http://localhost:3000/api
    ```
 
-   This step is not optional. `src/utils/http.js` reads `VITE_API_BASE_URL` once at module load
+   This step is not optional. `src/utils/http.ts` reads `VITE_API_BASE_URL` once at module load
    and applies **no fallback**, so skipping the copy leaves the base URL `undefined` and every
    request goes to a URL like `"undefined/orgs"`.
 
@@ -106,7 +110,7 @@ an earlier standalone backend implementing the same auth and todo contract.
 # Start dev server (port 8080)
 corepack pnpm dev
 
-# Build for production
+# Build for production (vue-tsc type-check, then vite build)
 corepack pnpm build
 
 # Preview production build
@@ -117,6 +121,9 @@ corepack pnpm test
 
 # Run tests in watch mode
 corepack pnpm test:watch
+
+# Type-check the app with vue-tsc (all three tsconfig project references)
+corepack pnpm typecheck
 
 # Run linters (oxlint + eslint with auto-fix)
 corepack pnpm lint
@@ -140,6 +147,16 @@ authoritative. Note that `corepack pnpm lint` here is `run-s lint:*`, which **au
 linters, and `format` is scoped to `src/`, so `*.md` in this package has no Prettier owner. The
 naming conventions that are not mechanically enforced are in
 [`AGENTS.md`](AGENTS.md#file-naming).
+
+## TypeScript
+
+`src/` is TypeScript under `strict`, split across four tsconfigs (a solution file plus app, node and
+vitest projects) and checked with `vue-tsc -b`. Every SFC is `<script setup lang="ts">`, and the
+lint config rejects one that is not. API response types come from the workspace package
+[`@fullstack/contracts`](../../packages/contracts), consumed as `Wire<Entity>` because `Date` fields
+arrive over the wire as strings. The traps worth knowing before you add a file — which config owns
+which glob, why `node` types are kept out of the app project, and the three deliberate type
+suppressions — are in [`AGENTS.md`](AGENTS.md#typescript).
 
 ## Browser DevTools Setup
 

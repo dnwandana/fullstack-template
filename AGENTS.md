@@ -35,10 +35,20 @@ them, and a stale one that lands on plausible code misleads instead of announcin
 - **Build orchestration**: Turborepo (`turbo.json`; version in the root `devDependencies`)
 - **Packages** (`pnpm-workspace.yaml` globs `apps/*` and `packages/*`): `apps/api`
   (`@fullstack/api` — NestJS 11 + Prisma, TypeScript → `dist/`), `apps/app` (`@fullstack/app` —
-  Vue 3 + Vite), and `packages/contracts` (`@fullstack/contracts` — dependency-free, **type-only**
-  response contracts, built with plain `tsc`, consumed by `apps/api` via `implements`). `apps/app`
-  does not consume it: it is plain JavaScript, so it would need `checkJs` plus JSDoc annotations or
-  a TypeScript migration first.
+  Vue 3 + Vite + TypeScript), and `packages/contracts` (`@fullstack/contracts` — dependency-free,
+  **type-only** response contracts, built with plain `tsc`, consumed by `apps/api` via
+  `implements`). `apps/app` consumes it too, as `Wire<Entity>` — the same contracts the API
+  `implements`, mapped `Date` → `string` because the wire format is JSON. The two apps therefore
+  share one definition of every response shape, and a contract change breaks both type-checks
+  rather than only the API's.
+
+**Three contracts are not drift-protected.** `apps/api` has no response DTO class for auth or member
+rows — `SafeUser` is a private alias in `auth.service` and member rows are assembled inline in
+`members.service` — so `User`, `OrgMember` and `ProjectMember` exist in `packages/contracts` without
+an `implements` clause binding them to anything. `Todo`, `Org`, `Project`, `Role` and the
+`Invitation` family do have one, and a change to those breaks the API's build. Changing the shape of
+the three unbound types breaks only the frontend, and only if the frontend happens to read the
+changed field.
 
 ### Turborepo strips undeclared environment variables
 
@@ -65,8 +75,9 @@ Adding a new environment variable therefore touches **three or four** places:
 3. both `env` arrays in `turbo.json` (`build` and `test`)
 4. the table in [`apps/api/README.md`](apps/api/README.md#configuration), which is canonical
 
-`lint` and `format` declare no `env` at all; `dev` is `cache: false` and `persistent: true`, so it is
-never cached.
+`lint`, `format` and `typecheck` declare no `env` at all — the type checkers resolve
+`import.meta.env` against `apps/app/env.d.ts`, a declaration file, so no variable's *value* reaches
+them. `dev` is `cache: false` and `persistent: true`, so it is never cached.
 
 ## Commands
 
@@ -90,6 +101,15 @@ Caveats that have cost time:
   source. The root has no Prettier dependency at all, so root markdown and `apps/app/*.md` have no
   Prettier owner — edit them by hand, and do not "fix" them with Prettier, which only produces
   unrelated reformatting noise.
+- **`typecheck` is the only thing keeping JavaScript out of `apps/app`.** `allowJs` is *absent* from
+  `apps/app/tsconfig.app.json` — deleted, not set to `false` — so a stray `.js` under `src/` is not
+  an error by itself: an orphan nothing imports is simply not in the program and builds fine. The
+  gate fires the moment something *imports* it, as
+  `TS7016: Could not find a declaration file for module './x.js'`. The enforcing command is
+  `typecheck` (`vue-tsc -b --force`); `build` catches it only because `apps/app`'s `build` script is
+  `vue-tsc -b && vite build`. `vite build` on its own never type-checks, so splitting that `&&` — or
+  invoking Vite directly — silently removes the gate. `eslint.config.js` is the one deliberate `.js`
+  left in the package; it lives at the package root, outside `src/`, and is still linted.
 - **`test:api` is one of three tiers, and the root exposes only two of them.** `apps/api` sorts
   specs by filename suffix, and the two Jest configs select on that suffix alone — there is no
   hand-maintained exclusion list:
@@ -110,9 +130,10 @@ Caveats that have cost time:
   true — the e2e `testRegex` used to be `(\.e2e-spec|\.spec)\.ts$`, which re-ran every unit spec, so
   historical totals from before the split overlap and must not be summed.
 
-Beyond those five task names, package-local scripts have no root equivalent: `apps/api` adds eleven
-(database, unit test, watch/coverage, `lint:fix`, `start`), `apps/app` four (`preview`,
-`test:watch`, `lint:oxlint`, `lint:eslint`). Each package's README lists them.
+Beyond those six task names — `dev`, `build`, `lint`, `typecheck`, `test`, `format` — package-local
+scripts have no root equivalent: `apps/api` adds eleven (database, unit test, watch/coverage,
+`lint:fix`, `start`), `apps/app` four (`preview`, `test:watch`, `lint:oxlint`, `lint:eslint`). Each
+package's README lists them.
 
 ## Docker facts and invariants
 
@@ -200,6 +221,15 @@ derive from them, so the two must be kept in sync by hand.
   built Vue static files **only** — it does no `/api` proxying, because the edge nginx routes
   `api.<DOMAIN>` straight to the `api` container. In local dev `nginx/local.conf` is mounted over
   that file and *does* proxy `/api` and `/health`, since the local stack is single-origin.
+- **The `app` image is a two-package build.** `apps/app/Dockerfile` backs the `app` service in
+  *both* compose files, and since `apps/app` took `@fullstack/contracts` as a workspace dependency
+  it needs two things a single-package frontend image does not. Its filtered install is
+  `pnpm install --filter @fullstack/app... --frozen-lockfile` — the trailing `...` is what pulls the
+  workspace dependency in, and without it the `workspace:*` specifier cannot resolve. And
+  `packages/contracts` must be built before `apps/app`, because it emits only `.d.ts` and `vue-tsc`
+  (part of `apps/app`'s `build` script) needs those on disk. The builder stage therefore copies
+  `packages/contracts` twice — its `package.json` with the other manifests to keep the install layer
+  cacheable, then its sources alongside `apps/app`.
 - **Routes are versioned: the API mounts everything at `/api/v1`.** In production the edge nginx
   strips only the `/api` prefix — never the `/v1` — from both the proxied path
   (`proxy_pass http://api:3000/api/`) and from `Set-Cookie` paths
