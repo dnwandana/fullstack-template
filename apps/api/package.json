@@ -11,6 +11,7 @@
     "start:prod": "node dist/main",
     "dev": "nest start --watch",
     "build": "nest build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix",
     "format": "prettier --write .",
