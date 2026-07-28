@@ -16,7 +16,7 @@ import { useAuthStore } from "@/stores/auth"
 describe("UserMenu", () => {
   // jsdom does not implement matchMedia; Ant Design Vue's grid subscribes to it on mount.
   beforeAll(() => {
-    window.matchMedia = (query) => ({
+    vi.stubGlobal("matchMedia", (query: string) => ({
       matches: false,
       media: query,
       onchange: null,
@@ -25,7 +25,7 @@ describe("UserMenu", () => {
       addEventListener: () => {},
       removeEventListener: () => {},
       dispatchEvent: () => false,
-    })
+    }))
   })
 
   beforeEach(() => {
@@ -41,10 +41,10 @@ describe("UserMenu", () => {
 
   it("waits for logout to finish before navigating", async () => {
     const auth = useAuthStore()
-    auth.user = { id: "u1", name: "Ada" }
+    auth.user = { id: "u1", name: "Ada", email: "ada@example.com" }
 
-    let resolveLogout
-    auth.logout = vi.fn(() => new Promise((r) => (resolveLogout = r)))
+    let resolveLogout: (() => void) | undefined
+    auth.logout = vi.fn(() => new Promise<void>((r) => (resolveLogout = r)))
 
     const wrapper = mount(UserMenu)
     const pending = wrapper.vm.handleLogout()
@@ -52,7 +52,7 @@ describe("UserMenu", () => {
     // Logout is still in flight — navigation must not have happened yet.
     expect(push).not.toHaveBeenCalled()
 
-    resolveLogout()
+    resolveLogout?.()
     await pending
     expect(push).toHaveBeenCalledWith({ name: "Login" })
   })

@@ -28,7 +28,9 @@ const PENDING = [
 describe("InvitationsBell", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    request.get.mockReset().mockResolvedValue({ data: { data: PENDING } })
+    vi.mocked(request.get)
+      .mockReset()
+      .mockResolvedValue({ data: { data: PENDING }, status: 200 })
   })
 
   it("fetches the caller's invitations on mount", async () => {

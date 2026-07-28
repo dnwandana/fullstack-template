@@ -3,7 +3,7 @@ import { setActivePinia, createPinia } from "pinia"
 import { request } from "@/utils/http"
 
 // vi.mock factories are hoisted above regular top-level statements (see
-// stores/tenant.test.js for the full rationale), so the route ref must be
+// stores/tenant.test.ts for the full rationale), so the route ref must be
 // built via vi.hoisted rather than a plain top-level `const ... = ref(...)`.
 const { currentRoute } = await vi.hoisted(async () => {
   const { ref } = await import("vue")
@@ -26,14 +26,22 @@ describe("usePermissions", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     currentRoute.value = { params: { orgId: "o1" } }
-    request.get.mockReset().mockImplementation((url) => {
-      if (url.endsWith("/members"))
-        return Promise.resolve({ data: { data: [{ user_id: "u1", role_id: "r1" }] } })
-      if (url.includes("/roles/"))
-        return Promise.resolve({ data: { data: { permissions: [{ name: "org:read" }] } } })
-      return Promise.reject(new Error(`unexpected GET ${url}`))
-    })
-    useAuthStore().user = { id: "u1" }
+    vi.mocked(request.get)
+      .mockReset()
+      .mockImplementation((url: string) => {
+        if (url.endsWith("/members"))
+          return Promise.resolve({
+            data: { data: [{ user_id: "u1", role_id: "r1" }] },
+            status: 200,
+          })
+        if (url.includes("/roles/"))
+          return Promise.resolve({
+            data: { data: { permissions: [{ name: "org:read" }] } },
+            status: 200,
+          })
+        return Promise.reject(new Error(`unexpected GET ${url}`))
+      })
+    useAuthStore().user = { id: "u1", name: "Test User", email: "u1@example.com" }
   })
 
   it("resolves permissions for the current org, ignoring the userId argument", async () => {

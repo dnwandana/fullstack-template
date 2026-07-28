@@ -42,17 +42,25 @@ import { useAuthStore } from "@/stores/auth"
 const MOBILE = "(max-width: 767px)"
 const NARROW = "(min-width: 768px) and (max-width: 991px)"
 
-/** @param {string[]} matching - media query strings that should report matches */
-function stubMatchMedia(matching = []) {
-  window.matchMedia = vi.fn((query) => ({
-    matches: matching.includes(query),
-    media: query,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  }))
+/**
+ * jsdom has no matchMedia; antd's grid subscribes to it on mount.
+ *
+ * @param matching - media query strings that should report matches
+ */
+function stubMatchMedia(matching: string[] = []): void {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn((query: string) => ({
+      matches: matching.includes(query),
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  )
 }
 
 describe("AppShell", () => {
@@ -105,9 +113,10 @@ describe("AppShell", () => {
     // link straight into an org (no visit to /orgs first) left the switcher
     // and breadcrumb with no org name to show.
     route.value = { params: { orgId: "o1" }, name: "OrgMembers", matched: [] }
-    request.get.mockImplementation((url) => {
-      if (url === "/orgs") return Promise.resolve({ data: { data: [{ id: "o1", name: "Acme" }] } })
-      return Promise.resolve({ data: { data: [] } })
+    vi.mocked(request.get).mockImplementation((url: string) => {
+      if (url === "/orgs")
+        return Promise.resolve({ data: { data: [{ id: "o1", name: "Acme" }] }, status: 200 })
+      return Promise.resolve({ data: { data: [] }, status: 200 })
     })
 
     const wrapper = mount(AppShell)
@@ -125,15 +134,20 @@ describe("AppShell", () => {
     route.value = { params: { orgId: "o1" }, name: "OrgRoles", matched: [] }
     const auth = useAuthStore()
     auth.user = { id: "u1", name: "Dev", email: "dev@example.com" }
-    request.get.mockImplementation((url) => {
-      if (url === "/orgs") return Promise.resolve({ data: { data: [{ id: "o1", name: "Acme" }] } })
+    vi.mocked(request.get).mockImplementation((url: string) => {
+      if (url === "/orgs")
+        return Promise.resolve({ data: { data: [{ id: "o1", name: "Acme" }] }, status: 200 })
       if (url.endsWith("/members"))
         return Promise.resolve({
           data: { data: [{ user_id: "u1", role_id: "r1", role_name: "owner" }] },
+          status: 200,
         })
       if (url.includes("/roles/"))
-        return Promise.resolve({ data: { data: { permissions: [{ name: "org:manage_roles" }] } } })
-      return Promise.resolve({ data: { data: [] } })
+        return Promise.resolve({
+          data: { data: { permissions: [{ name: "org:manage_roles" }] } },
+          status: 200,
+        })
+      return Promise.resolve({ data: { data: [] }, status: 200 })
     })
 
     mount(AppShell)

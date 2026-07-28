@@ -9,8 +9,12 @@ import { createRole, updateRole } from "./roles"
 
 describe("roles api — permissions → permission_ids remap (contract gap)", () => {
   beforeEach(() => {
-    request.post.mockReset().mockResolvedValue({ data: { data: {} } })
-    request.put.mockReset().mockResolvedValue({ data: { data: {} } })
+    vi.mocked(request.post)
+      .mockReset()
+      .mockResolvedValue({ data: { data: {} }, status: 200 })
+    vi.mocked(request.put)
+      .mockReset()
+      .mockResolvedValue({ data: { data: {} }, status: 200 })
   })
 
   it("createRole sends permission_ids instead of permissions", async () => {
@@ -25,7 +29,7 @@ describe("roles api — permissions → permission_ids remap (contract gap)", ()
       description: "d",
       permission_ids: ["uuid-a", "uuid-b"],
     })
-    const body = request.post.mock.calls[0][1]
+    const body = vi.mocked(request.post).mock.calls[0][1]
     expect(body).not.toHaveProperty("permissions")
   })
 
@@ -41,14 +45,14 @@ describe("roles api — permissions → permission_ids remap (contract gap)", ()
       description: "d",
       permission_ids: ["uuid-a", "uuid-b"],
     })
-    const body = request.put.mock.calls[0][1]
+    const body = vi.mocked(request.put).mock.calls[0][1]
     expect(body).not.toHaveProperty("permissions")
   })
 
   it("omits permission_ids entirely when permissions is not provided", async () => {
     await createRole("org-1", { name: "Dev" })
 
-    const body = request.post.mock.calls[0][1]
+    const body = vi.mocked(request.post).mock.calls[0][1]
     expect(body).not.toHaveProperty("permission_ids")
     expect(body).not.toHaveProperty("permissions")
   })

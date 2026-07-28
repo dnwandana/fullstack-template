@@ -41,16 +41,24 @@ describe("ProjectMembersView", () => {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     })
-    request.get.mockReset().mockImplementation((url) => {
-      if (url === "/orgs/o1/projects/p1/members")
-        return Promise.resolve({ data: { data: MEMBERS } })
-      if (url === "/orgs/o1/members")
-        return Promise.resolve({ data: { data: [{ user_id: "u1", role_id: "r1" }] } })
-      if (url.endsWith("/roles")) return Promise.resolve({ data: { data: [] } })
-      if (url.includes("/roles/")) return Promise.resolve({ data: { data: { permissions: [] } } })
-      return Promise.reject(new Error(`unexpected GET ${url}`))
-    })
-    request.put.mockReset().mockResolvedValue({ data: { data: {} } })
+    vi.mocked(request.get)
+      .mockReset()
+      .mockImplementation((url: string) => {
+        if (url === "/orgs/o1/projects/p1/members")
+          return Promise.resolve({ data: { data: MEMBERS }, status: 200 })
+        if (url === "/orgs/o1/members")
+          return Promise.resolve({
+            data: { data: [{ user_id: "u1", role_id: "r1" }] },
+            status: 200,
+          })
+        if (url.endsWith("/roles")) return Promise.resolve({ data: { data: [] }, status: 200 })
+        if (url.includes("/roles/"))
+          return Promise.resolve({ data: { data: { permissions: [] } }, status: 200 })
+        return Promise.reject(new Error(`unexpected GET ${url}`))
+      })
+    vi.mocked(request.put)
+      .mockReset()
+      .mockResolvedValue({ data: { data: {} }, status: 200 })
   })
 
   it("fetches project members and org roles on mount", async () => {

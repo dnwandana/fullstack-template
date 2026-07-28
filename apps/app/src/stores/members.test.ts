@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 import { setActivePinia, createPinia } from "pinia"
 import { request } from "@/utils/http"
 
-// tenant.js reads the router singleton rather than useRoute() (see its own
+// tenant.ts reads the router singleton rather than useRoute() (see its own
 // header comment); a plain `const currentRoute = ref(...)` would still be in
 // its TDZ when the hoisted vi.mock factory below runs, so it has to be built
-// via vi.hoisted. See stores/tenant.test.js for the full rationale.
+// via vi.hoisted. See stores/tenant.test.ts for the full rationale.
 const { currentRoute } = await vi.hoisted(async () => {
   const { ref } = await import("vue")
   return { currentRoute: ref({ params: { orgId: "o1" } }) }
@@ -35,9 +35,13 @@ describe("members store — permission cache invalidation (finding 3)", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     currentRoute.value = { params: { orgId: "o1" } }
-    request.get.mockReset().mockResolvedValue({ data: { data: [] } })
-    request.put.mockReset().mockResolvedValue({ data: { data: {} } })
-    useAuthStore().user = { id: "u1" }
+    vi.mocked(request.get)
+      .mockReset()
+      .mockResolvedValue({ data: { data: [] }, status: 200 })
+    vi.mocked(request.put)
+      .mockReset()
+      .mockResolvedValue({ data: { data: {} }, status: 200 })
+    useAuthStore().user = { id: "u1", name: "Ada", email: "ada@example.com" }
   })
 
   describe("updateOrgMemberRole", () => {
@@ -74,12 +78,18 @@ describe("members store — permission cache invalidation (finding 3)", () => {
 
     it("splices the returned org membership into the list without refetching", async () => {
       const members = useMembersStore()
-      request.get.mockResolvedValue({ data: { data: [orgRow(), orgRow({ user_id: "u1" })] } })
+      vi.mocked(request.get).mockResolvedValue({
+        data: { data: [orgRow(), orgRow({ user_id: "u1" })] },
+        status: 200,
+      })
       await members.fetchOrgMembers("o1")
       expect(request.get).toHaveBeenCalledTimes(1)
 
       const updated = orgRow({ role_id: "r2", role_name: "admin" })
-      request.put.mockResolvedValue({ data: { message: "OK", data: updated } })
+      vi.mocked(request.put).mockResolvedValue({
+        data: { message: "OK", data: updated },
+        status: 200,
+      })
       await members.updateOrgMemberRole("o1", "u2", "r2")
 
       expect(request.get).toHaveBeenCalledTimes(1)
@@ -93,12 +103,15 @@ describe("members store — permission cache invalidation (finding 3)", () => {
         return { ...row, project_id: "p1" }
       }
       const members = useMembersStore()
-      request.get.mockResolvedValue({ data: { data: [projectRow()] } })
+      vi.mocked(request.get).mockResolvedValue({ data: { data: [projectRow()] }, status: 200 })
       await members.fetchProjectMembers("o1", "p1")
       expect(request.get).toHaveBeenCalledTimes(1)
 
       const updated = projectRow({ role_id: "r2", role_name: "admin" })
-      request.put.mockResolvedValue({ data: { message: "OK", data: updated } })
+      vi.mocked(request.put).mockResolvedValue({
+        data: { message: "OK", data: updated },
+        status: 200,
+      })
       await members.updateProjectMemberRole("o1", "p1", "u2", "r2")
 
       expect(request.get).toHaveBeenCalledTimes(1)

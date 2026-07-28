@@ -38,15 +38,19 @@ describe("SignupView", () => {
   })
 
   it("submits the name and email typed into the form", async () => {
-    request.post.mockResolvedValue({ data: { data: { id: "u-1" } } })
+    vi.mocked(request.post).mockResolvedValue({ data: { data: { id: "u-1" } }, status: 200 })
 
     const wrapper = mount(SignupView, { global: { plugins: [createPinia()] } })
 
     await wrapper.find('input[placeholder="Full name"]').setValue("Ada Lovelace")
     await wrapper.find('input[placeholder="Email"]').setValue("ada@example.com")
 
-    expect(wrapper.find('input[placeholder="Full name"]').element.value).toBe("Ada Lovelace")
-    expect(wrapper.find('input[placeholder="Email"]').element.value).toBe("ada@example.com")
+    expect(wrapper.find<HTMLInputElement>('input[placeholder="Full name"]').element.value).toBe(
+      "Ada Lovelace",
+    )
+    expect(wrapper.find<HTMLInputElement>('input[placeholder="Email"]').element.value).toBe(
+      "ada@example.com",
+    )
   })
 
   it("prefills and locks the email when arriving from an invite link", async () => {
@@ -55,7 +59,7 @@ describe("SignupView", () => {
     const wrapper = mount(SignupView, { global: { plugins: [createPinia()] } })
     await flushPromises()
 
-    const email = wrapper.find('input[placeholder="Email"]')
+    const email = wrapper.find<HTMLInputElement>('input[placeholder="Email"]')
     expect(email.element.value).toBe("new@acme.com")
     expect(email.element.disabled).toBe(true)
   })
@@ -64,7 +68,7 @@ describe("SignupView", () => {
     const wrapper = mount(SignupView, { global: { plugins: [createPinia()] } })
     await flushPromises()
 
-    const email = wrapper.find('input[placeholder="Email"]')
+    const email = wrapper.find<HTMLInputElement>('input[placeholder="Email"]')
     expect(email.element.value).toBe("")
     expect(email.element.disabled).toBe(false)
   })

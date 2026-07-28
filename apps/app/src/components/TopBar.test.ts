@@ -1,14 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
+import type { ComponentPublicInstance } from "vue"
+import type { RouteLocationRaw } from "vue-router"
 
 // vi.mock factories are hoisted above regular top-level statements, so a plain
 // `const route = ref(...)` here would still be in its TDZ when the mock
 // factory runs. vi.hoisted is *also* hoisted, and awaiting it lets the ref
-// exist before anything else in the file executes. See stores/tenant.test.js.
+// exist before anything else in the file executes. See stores/tenant.test.ts.
 const { route } = await vi.hoisted(async () => {
   const { ref } = await import("vue")
-  return { route: ref({ params: { orgId: "o1", projectId: "p1" }, name: "TodosList" }) }
+  return {
+    route: ref<{ params: Record<string, string>; name: string }>({
+      params: { orgId: "o1", projectId: "p1" },
+      name: "TodosList",
+    }),
+  }
 })
 vi.mock("vue-router", () => ({
   useRoute: () => route.value,
@@ -35,7 +42,12 @@ vi.mock("ant-design-vue", async (importOriginal) => ({
 
 import TopBar from "./TopBar.vue"
 
-function mountAt(params) {
+// findComponent with a CSS selector resolves to WrapperLike, which has no
+// props(). Naming the sought component's shape picks the VueWrapper overload
+// instead, and declares the one prop the brand-link assertion reads.
+type BrandLink = new () => ComponentPublicInstance<{ to: RouteLocationRaw }>
+
+function mountAt(params: Record<string, string>) {
   setActivePinia(createPinia())
   route.value = { params, name: "TodosList" }
   return mount(TopBar)
@@ -71,7 +83,7 @@ describe("TopBar", () => {
     // plus AppBreadcrumb rooting at the org, /orgs was unreachable from
     // inside the shell without the browser back button.
     const wrapper = mountAt({ orgId: "o1", projectId: "p1" })
-    const brand = wrapper.findComponent(".top-bar__brand")
+    const brand = wrapper.findComponent<BrandLink>(".top-bar__brand")
     expect(brand.exists()).toBe(true)
     expect(brand.props("to")).toEqual({ name: "OrgsList" })
   })

@@ -9,10 +9,10 @@ vi.mock("@/utils/http", () => ({
 
 // A single stable router/route pair so post-auth navigation can be asserted.
 // `currentRoute.query` is mutated per test to simulate arriving with ?redirect=.
-const { push, currentRoute } = vi.hoisted(() => ({
-  push: vi.fn(),
-  currentRoute: { query: {} },
-}))
+const { push, currentRoute } = vi.hoisted(() => {
+  const currentRoute: { query: Record<string, string> } = { query: {} }
+  return { push: vi.fn(), currentRoute }
+})
 
 vi.mock("vue-router", () => ({
   useRouter: () => ({ push }),
@@ -32,7 +32,7 @@ describe("useAuth argument chain", () => {
   })
 
   it("posts every signup field in the correct position", async () => {
-    request.post.mockResolvedValue({ data: { data: { id: "u-1" } } })
+    vi.mocked(request.post).mockResolvedValue({ data: { data: { id: "u-1" } }, status: 200 })
 
     const { formState, handleSignup } = useAuth()
     formState.name = "Ada Lovelace"
@@ -51,8 +51,9 @@ describe("useAuth argument chain", () => {
   })
 
   it("posts every signin field in the correct position", async () => {
-    request.post.mockResolvedValue({
+    vi.mocked(request.post).mockResolvedValue({
       data: { data: { id: "u-1", name: "Ada Lovelace", email: "ada@example.com" } },
+      status: 200,
     })
 
     const { formState, handleSignin } = useAuth()
@@ -68,8 +69,9 @@ describe("useAuth argument chain", () => {
   })
 
   it("returns to the invite link after signin when ?redirect= is a relative path", async () => {
-    request.post.mockResolvedValue({
+    vi.mocked(request.post).mockResolvedValue({
       data: { data: { id: "u-1", name: "Ada Lovelace", email: "ada@example.com" } },
+      status: 200,
     })
     currentRoute.query = { redirect: "/invite/inv-1?token=abc" }
 
@@ -80,8 +82,9 @@ describe("useAuth argument chain", () => {
   })
 
   it("refuses an off-site redirect after signin", async () => {
-    request.post.mockResolvedValue({
+    vi.mocked(request.post).mockResolvedValue({
       data: { data: { id: "u-1", name: "Ada Lovelace", email: "ada@example.com" } },
+      status: 200,
     })
     currentRoute.query = { redirect: "//evil.example.com/steal" }
 
@@ -92,7 +95,7 @@ describe("useAuth argument chain", () => {
   })
 
   it("carries the redirect from signup through to login", async () => {
-    request.post.mockResolvedValue({ data: { data: { id: "u-1" } } })
+    vi.mocked(request.post).mockResolvedValue({ data: { data: { id: "u-1" } }, status: 200 })
     currentRoute.query = { redirect: "/invite/inv-1?token=abc" }
 
     const { handleSignup } = useAuth()
@@ -105,7 +108,7 @@ describe("useAuth argument chain", () => {
   })
 
   it("sends signup to a bare login page when there is no redirect", async () => {
-    request.post.mockResolvedValue({ data: { data: { id: "u-1" } } })
+    vi.mocked(request.post).mockResolvedValue({ data: { data: { id: "u-1" } }, status: 200 })
 
     const { handleSignup } = useAuth()
     await handleSignup()

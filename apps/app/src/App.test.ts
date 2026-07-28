@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
 import { createPinia } from "pinia"
-import { createRouter, createMemoryHistory } from "vue-router"
+import { createRouter, createMemoryHistory, type Router } from "vue-router"
 import App from "./App.vue"
 
 // Unlike the component tests that mock vue-router wholesale, this suite drives
@@ -32,7 +32,7 @@ const routes = [
   { path: "/:pathMatch(.*)*", redirect: "/orgs" },
 ]
 
-function mountApp(router) {
+function mountApp(router: Router) {
   return mount(App, {
     global: {
       plugins: [createPinia(), router],
@@ -47,10 +47,10 @@ describe("App chrome gating", () => {
   it("does not mount the org-scoped shell while the first navigation to /login is still resolving", async () => {
     // Hold the guard open to freeze the START_LOCATION window — exactly what
     // initAuth's awaited /auth/me does in production.
-    let release
+    let release: (() => void) | undefined
     const router = createRouter({ history: createMemoryHistory(), routes })
     router.beforeEach(async () => {
-      await new Promise((resolve) => (release = resolve))
+      await new Promise<void>((resolve) => (release = resolve))
     })
     router.push("/login") // async; parks on the held guard, route stays at "/"
 

@@ -13,7 +13,12 @@ import { request } from "@/utils/http"
 // anything else in the file executes.
 const { currentRoute } = await vi.hoisted(async () => {
   const { ref } = await import("vue")
-  return { currentRoute: ref({ params: {} }) }
+  // Both params optional: this suite deliberately exercises the no-org route,
+  // which is the case currentOrgId must return null for. Without the explicit
+  // annotation the inferred `{ params: {} }` accepts literally any params
+  // object, so a typo'd or wrongly-typed param would go unnoticed.
+  const currentRoute = ref<{ params: { orgId?: string; projectId?: string } }>({ params: {} })
+  return { currentRoute }
 })
 vi.mock("@/router", () => ({ default: { currentRoute } }))
 
@@ -36,21 +41,24 @@ const ROLE = { id: "r-owner", permissions: [{ name: "org:read" }, { name: "org:u
 const ORGS = [{ id: "o1", name: "Acme" }]
 
 /** Count the GETs whose URL contains `fragment`. */
-function getCalls(fragment) {
-  return request.get.mock.calls.filter(([url]) => url.includes(fragment)).length
+function getCalls(fragment: string): number {
+  return vi.mocked(request.get).mock.calls.filter(([url]) => url.includes(fragment)).length
 }
 
 describe("tenant store", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     currentRoute.value = { params: { orgId: "o1" } }
-    request.get.mockReset().mockImplementation((url) => {
-      if (url === "/orgs") return Promise.resolve({ data: { data: ORGS } })
-      if (url.endsWith("/members")) return Promise.resolve({ data: { data: MEMBERS } })
-      if (url.includes("/roles/")) return Promise.resolve({ data: { data: ROLE } })
-      return Promise.reject(new Error(`unexpected GET ${url}`))
-    })
-    useAuthStore().user = { id: "u1", name: "Ada" }
+    vi.mocked(request.get)
+      .mockReset()
+      .mockImplementation((url) => {
+        if (url === "/orgs") return Promise.resolve({ data: { data: ORGS }, status: 200 })
+        if (url.endsWith("/members"))
+          return Promise.resolve({ data: { data: MEMBERS }, status: 200 })
+        if (url.includes("/roles/")) return Promise.resolve({ data: { data: ROLE }, status: 200 })
+        return Promise.reject(new Error(`unexpected GET ${url}`))
+      })
+    useAuthStore().user = { id: "u1", name: "Ada", email: "ada@example.com" }
   })
 
   it("derives currentOrgId from the route reactively", () => {
@@ -105,7 +113,7 @@ describe("tenant store", () => {
   })
 
   it("records an empty permission set when the user is not a member", async () => {
-    useAuthStore().user = { id: "stranger" }
+    useAuthStore().user = { id: "stranger", name: "Nemo", email: "nemo@example.com" }
     const tenant = useTenantStore()
     await tenant.loadPermissions("o1")
     expect(tenant.permissions.o1).toEqual([])
@@ -113,7 +121,7 @@ describe("tenant store", () => {
   })
 
   it("records an empty permission set when the request fails", async () => {
-    request.get.mockRejectedValue(new Error("boom"))
+    vi.mocked(request.get).mockRejectedValue(new Error("boom"))
     const tenant = useTenantStore()
     await tenant.loadPermissions("o1")
     expect(tenant.permissions.o1).toEqual([])
@@ -154,12 +162,14 @@ describe("tenant store", () => {
       expect(tenant.permissions.o1).toEqual(["org:read", "org:update"])
 
       // Simulate the role's permission set changing on the server.
-      request.get.mockImplementation((url) => {
-        if (url === "/orgs") return Promise.resolve({ data: { data: ORGS } })
-        if (url.endsWith("/members")) return Promise.resolve({ data: { data: MEMBERS } })
+      vi.mocked(request.get).mockImplementation((url) => {
+        if (url === "/orgs") return Promise.resolve({ data: { data: ORGS }, status: 200 })
+        if (url.endsWith("/members"))
+          return Promise.resolve({ data: { data: MEMBERS }, status: 200 })
         if (url.includes("/roles/"))
           return Promise.resolve({
             data: { data: { ...ROLE, permissions: [{ name: "org:read" }] } },
+            status: 200,
           })
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })

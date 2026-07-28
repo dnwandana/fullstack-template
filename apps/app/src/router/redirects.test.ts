@@ -17,10 +17,13 @@ import router from "./index"
 describe("legacy ?tab= redirects", () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
-    request.get.mockReset().mockImplementation((url) => {
-      if (url === "/auth/me") return Promise.resolve({ data: { data: { id: "u1" } } })
-      return Promise.resolve({ data: { data: [] } })
-    })
+    vi.mocked(request.get)
+      .mockReset()
+      .mockImplementation((url: string) => {
+        if (url === "/auth/me")
+          return Promise.resolve({ data: { data: { id: "u1" } }, status: 200 })
+        return Promise.resolve({ data: { data: [] }, status: 200 })
+      })
     await router.push("/orgs")
     await router.isReady()
   })
@@ -54,22 +57,25 @@ describe("legacy ?tab= redirects", () => {
   })
 
   it("carries meta.permission on org-scoped routes", () => {
-    const byName = (n) => router.getRoutes().find((r) => r.name === n)
-    expect(byName("OrgMembers").meta.permission).toBe("org:read")
-    expect(byName("OrgRoles").meta.permission).toBe("org:read")
-    expect(byName("OrgInvitations").meta.permission).toBe("invitations:manage")
-    expect(byName("OrgSettings").meta.permission).toBe("org:update")
-    expect(byName("ProjectsList").meta.permission).toBe("project:read")
+    const byName = (n: string) => router.getRoutes().find((r) => r.name === n)
+    expect(byName("OrgMembers")?.meta.permission).toBe("org:read")
+    expect(byName("OrgRoles")?.meta.permission).toBe("org:read")
+    expect(byName("OrgInvitations")?.meta.permission).toBe("invitations:manage")
+    expect(byName("OrgSettings")?.meta.permission).toBe("org:update")
+    expect(byName("ProjectsList")?.meta.permission).toBe("project:read")
   })
 })
 
 describe("project routes", () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
-    request.get.mockReset().mockImplementation((url) => {
-      if (url === "/auth/me") return Promise.resolve({ data: { data: { id: "u1" } } })
-      return Promise.resolve({ data: { data: [] } })
-    })
+    vi.mocked(request.get)
+      .mockReset()
+      .mockImplementation((url: string) => {
+        if (url === "/auth/me")
+          return Promise.resolve({ data: { data: { id: "u1" } }, status: 200 })
+        return Promise.resolve({ data: { data: [] }, status: 200 })
+      })
     await router.push("/orgs")
     await router.isReady()
   })
@@ -90,11 +96,11 @@ describe("project routes", () => {
   })
 
   it("carries meta.permission on project-scoped routes", () => {
-    const byName = (n) => router.getRoutes().find((r) => r.name === n)
-    expect(byName("TodosList").meta.permission).toBe("todos:read")
-    expect(byName("TodoDetail").meta.permission).toBe("todos:read")
-    expect(byName("ProjectMembers").meta.permission).toBe("project:read")
-    expect(byName("ProjectInvitations").meta.permission).toBe("invitations:manage")
-    expect(byName("ProjectSettings").meta.permission).toBe("project:update")
+    const byName = (n: string) => router.getRoutes().find((r) => r.name === n)
+    expect(byName("TodosList")?.meta.permission).toBe("todos:read")
+    expect(byName("TodoDetail")?.meta.permission).toBe("todos:read")
+    expect(byName("ProjectMembers")?.meta.permission).toBe("project:read")
+    expect(byName("ProjectInvitations")?.meta.permission).toBe("invitations:manage")
+    expect(byName("ProjectSettings")?.meta.permission).toBe("project:update")
   })
 })

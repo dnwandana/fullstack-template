@@ -20,8 +20,9 @@ describe("auth store", () => {
   })
 
   it("maps the signin response onto user state and storage", async () => {
-    request.post.mockResolvedValue({
+    vi.mocked(request.post).mockResolvedValue({
       data: { data: { id: "u-1", name: "Ada Lovelace", email: "ada@example.com" } },
+      status: 200,
     })
 
     const store = useAuthStore()
@@ -34,8 +35,9 @@ describe("auth store", () => {
   })
 
   it("populates user state when getMe succeeds during initAuth", async () => {
-    request.get.mockResolvedValue({
+    vi.mocked(request.get).mockResolvedValue({
       data: { data: { id: "u-2", name: "Grace Hopper", email: "grace@example.com" } },
+      status: 200,
     })
 
     const store = useAuthStore()
@@ -45,7 +47,7 @@ describe("auth store", () => {
   })
 
   it("clears user state when getMe fails during initAuth", async () => {
-    request.get.mockRejectedValue(new Error("unauthorized"))
+    vi.mocked(request.get).mockRejectedValue(new Error("unauthorized"))
 
     const store = useAuthStore()
     await store.initAuth()

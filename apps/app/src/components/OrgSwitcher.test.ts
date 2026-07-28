@@ -4,7 +4,10 @@ import { createPinia, setActivePinia } from "pinia"
 
 const { route } = await vi.hoisted(async () => {
   const { ref } = await import("vue")
-  return { route: ref({ params: { orgId: "o1" } }) }
+  // `orgId` is optional because the "renders nothing when no org is selected"
+  // case reassigns the ref to an empty params object.
+  const route = ref<{ params: { orgId?: string } }>({ params: { orgId: "o1" } })
+  return { route }
 })
 vi.mock("vue-router", () => ({
   useRoute: () => route.value,
@@ -21,8 +24,22 @@ import { useTenantStore } from "@/stores/tenant"
 import { useOrgsStore } from "@/stores/orgs"
 
 const ORGS = [
-  { id: "o1", name: "Acme" },
-  { id: "o2", name: "Globex" },
+  {
+    id: "o1",
+    name: "Acme",
+    description: null,
+    created_by: "u1",
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "o2",
+    name: "Globex",
+    description: null,
+    created_by: "u1",
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  },
 ]
 
 function setup() {
@@ -38,7 +55,7 @@ function setup() {
 describe("OrgSwitcher", () => {
   // jsdom does not implement matchMedia; Ant Design Vue's grid subscribes to it on mount.
   beforeAll(() => {
-    window.matchMedia = (query) => ({
+    vi.stubGlobal("matchMedia", (query: string) => ({
       matches: false,
       media: query,
       onchange: null,
@@ -47,7 +64,7 @@ describe("OrgSwitcher", () => {
       addEventListener: () => {},
       removeEventListener: () => {},
       dispatchEvent: () => false,
-    })
+    }))
   })
 
   beforeEach(() => setActivePinia(createPinia()))

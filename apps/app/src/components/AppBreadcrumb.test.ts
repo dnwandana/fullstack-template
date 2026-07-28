@@ -22,15 +22,34 @@ import AppBreadcrumb from "./AppBreadcrumb.vue"
 import { useOrgsStore } from "@/stores/orgs"
 import { useProjectsStore } from "@/stores/projects"
 
-function mountAt(name, params) {
+function mountAt(name: string, params: Record<string, string>) {
   setActivePinia(createPinia())
   route.value = { name, params }
-  useOrgsStore().orgs = [{ id: "o1", name: "Acme" }]
-  useProjectsStore().projects = [{ id: "p1", name: "Website" }]
+  useOrgsStore().orgs = [
+    {
+      id: "o1",
+      name: "Acme",
+      description: null,
+      created_by: "u1",
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    },
+  ]
+  useProjectsStore().projects = [
+    {
+      id: "p1",
+      org_id: "o1",
+      name: "Website",
+      description: null,
+      created_by: "u1",
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    },
+  ]
   return mount(AppBreadcrumb)
 }
 
-const labels = (wrapper) => wrapper.vm.crumbs.map((c) => c.label)
+const labels = (wrapper: ReturnType<typeof mountAt>) => wrapper.vm.crumbs.map((c) => c.label)
 
 describe("AppBreadcrumb", () => {
   beforeEach(() => setActivePinia(createPinia()))
@@ -72,6 +91,6 @@ describe("AppBreadcrumb", () => {
 
   it("never links the last crumb", () => {
     const wrapper = mountAt("ProjectSettings", { orgId: "o1", projectId: "p1" })
-    expect(wrapper.vm.crumbs.at(-1).to).toBeNull()
+    expect(wrapper.vm.crumbs.at(-1)?.to).toBeNull()
   })
 })

@@ -10,7 +10,7 @@
 import { describe, it, expect } from "vitest"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
-import { antdTheme } from "./antd.js"
+import { antdTheme } from "./antd"
 
 const colorsCss = readFileSync(
   fileURLToPath(new URL("../assets/design-system/tokens/colors.css", import.meta.url)),
@@ -18,10 +18,30 @@ const colorsCss = readFileSync(
 )
 
 /** Read a hex value out of the copied design-system stylesheet. */
-function cssVar(name) {
+function cssVar(name: string): string {
   const match = colorsCss.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{3,8})\\s*;`))
   if (!match) throw new Error(`--${name} not found in colors.css`)
   return match[1].toLowerCase()
+}
+
+/**
+ * Look a token up by name. `Object.entries` yields a `string` key, which the antd token types
+ * reject — walking the entries reads the same value without an index signature or a cast.
+ * `String(undefined)` is `"undefined"`, so a missing token fails the assertion with the token
+ * name in the message rather than throwing a TypeError.
+ */
+function rawToken(source: object | undefined, name: string): string {
+  const entry = Object.entries(source ?? {}).find(([key]) => key === name)
+  return String(entry?.[1])
+}
+
+/** `rawToken`, lowercased for comparison against `cssVar`'s normalised hex. */
+function tokenValue(source: object | undefined, name: string): string {
+  return rawToken(source, name).toLowerCase()
+}
+
+function componentTokens(name: string): object | undefined {
+  return Object.entries(antdTheme.components ?? {}).find(([key]) => key === name)?.[1]
 }
 
 const SEED_MAP = {
@@ -52,12 +72,12 @@ const COMPONENT_MAP = {
 
 describe("antdTheme", () => {
   it.each(Object.entries(SEED_MAP))("seed %s matches --%s", (tokenName, varName) => {
-    expect(antdTheme.token[tokenName].toLowerCase()).toBe(cssVar(varName))
+    expect(tokenValue(antdTheme.token, tokenName)).toBe(cssVar(varName))
   })
 
   it.each(Object.entries(COMPONENT_MAP))("component %s matches --%s", (path, varName) => {
     const [component, tokenName] = path.split(".")
-    expect(antdTheme.components[component][tokenName].toLowerCase()).toBe(cssVar(varName))
+    expect(tokenValue(componentTokens(component), tokenName)).toBe(cssVar(varName))
   })
 
   // Ant's own defaults already equal the design system's values. Declaring them
@@ -77,7 +97,10 @@ describe("antdTheme", () => {
   })
 
   it("uses the IBM Plex families", () => {
-    expect(antdTheme.token.fontFamily).toContain("IBM Plex Sans")
-    expect(antdTheme.token.fontFamilyCode).toContain("IBM Plex Mono")
+    // Read through `rawToken` rather than a property access: `token` is optional on
+    // ThemeConfig, and `fontFamilyCode` is not declared on 4.2.6's AliasToken at all
+    // (see the TODO in theme/antd.ts). Casing matters here, so no lowercasing.
+    expect(rawToken(antdTheme.token, "fontFamily")).toContain("IBM Plex Sans")
+    expect(rawToken(antdTheme.token, "fontFamilyCode")).toContain("IBM Plex Mono")
   })
 })

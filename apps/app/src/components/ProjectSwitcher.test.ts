@@ -17,7 +17,10 @@ import { createPinia, setActivePinia } from "pinia"
 // (the entire reason the watcher exists) untested.
 const { route, push } = await vi.hoisted(async () => {
   const { ref } = await import("vue")
-  return { route: ref({ params: { orgId: "o1", projectId: "p1" } }), push: vi.fn() }
+  const route = ref<{ params: { orgId: string; projectId?: string } }>({
+    params: { orgId: "o1", projectId: "p1" },
+  })
+  return { route, push: vi.fn() }
 })
 
 vi.mock("vue-router", () => ({
@@ -34,11 +37,27 @@ import ProjectSwitcher from "./ProjectSwitcher.vue"
 import { useProjectsStore } from "@/stores/projects"
 
 const PROJECTS = [
-  { id: "p1", name: "Website" },
-  { id: "p2", name: "Mobile" },
+  {
+    id: "p1",
+    org_id: "o1",
+    name: "Website",
+    description: null,
+    created_by: "u1",
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  },
+  {
+    id: "p2",
+    org_id: "o1",
+    name: "Mobile",
+    description: null,
+    created_by: "u1",
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  },
 ]
 
-function setup(params = { orgId: "o1", projectId: "p1" }) {
+function setup(params: { orgId: string; projectId?: string } = { orgId: "o1", projectId: "p1" }) {
   setActivePinia(createPinia())
   route.value = { params }
   push.mockReset()

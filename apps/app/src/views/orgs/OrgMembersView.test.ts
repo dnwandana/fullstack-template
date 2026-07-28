@@ -15,8 +15,8 @@ vi.mock("vue-router", () => ({
 
 // vi.mock factories are hoisted above regular top-level statements, so a
 // plain `const currentRoute = ref(...)` here would still be in its TDZ when
-// the mock factory below runs. vi.hoisted is also hoisted, and awaiting it
-// lets the ref exist before anything else in the file executes.
+// the mock factory runs. vi.hoisted is *also* hoisted, and awaiting it lets
+// the ref exist before anything else in the file executes.
 const { currentRoute } = await vi.hoisted(async () => {
   const { ref } = await import("vue")
   return { currentRoute: ref({ params: { orgId: "o1" } }) }
@@ -28,14 +28,13 @@ vi.mock("ant-design-vue", async (importOriginal) => ({
   message: { success: vi.fn(), error: vi.fn() },
 }))
 
-import OrgInvitationsView from "./OrgInvitationsView.vue"
+import OrgMembersView from "./OrgMembersView.vue"
 
-const INVITATIONS = [
-  { id: "i1", invitee_email: "new@example.com", status: "pending", role_name: "member" },
-]
+const MEMBERS = [{ user_id: "u1", name: "Ada", email: "ada@example.com", role_id: "r1" }]
 
-describe("OrgInvitationsView", () => {
+describe("OrgMembersView", () => {
   beforeEach(() => {
+    // Ant Design Vue's responsive grid reads matchMedia, which jsdom lacks.
     window.matchMedia = vi.fn().mockReturnValue({
       matches: false,
       addListener: vi.fn(),
@@ -43,26 +42,28 @@ describe("OrgInvitationsView", () => {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     })
-    request.get.mockReset().mockImplementation((url) => {
-      if (url.endsWith("/invitations")) return Promise.resolve({ data: { data: INVITATIONS } })
-      if (url.endsWith("/roles")) return Promise.resolve({ data: { data: [] } })
-      if (url.endsWith("/members"))
-        return Promise.resolve({ data: { data: [{ user_id: "u1", role_id: "r1" }] } })
-      if (url.includes("/roles/")) return Promise.resolve({ data: { data: { permissions: [] } } })
-      return Promise.reject(new Error(`unexpected GET ${url}`))
-    })
+    vi.mocked(request.get)
+      .mockReset()
+      .mockImplementation((url: string) => {
+        if (url.endsWith("/members"))
+          return Promise.resolve({ data: { data: MEMBERS }, status: 200 })
+        if (url.endsWith("/roles")) return Promise.resolve({ data: { data: [] }, status: 200 })
+        if (url.includes("/roles/"))
+          return Promise.resolve({ data: { data: { permissions: [] } }, status: 200 })
+        return Promise.reject(new Error(`unexpected GET ${url}`))
+      })
   })
 
-  it("fetches org invitations and roles on mount", async () => {
-    mount(OrgInvitationsView, { global: { plugins: [createPinia()] } })
+  it("fetches org members and roles on mount", async () => {
+    mount(OrgMembersView, { global: { plugins: [createPinia()] } })
     await vi.waitFor(() => {
-      expect(request.get).toHaveBeenCalledWith("/orgs/o1/invitations")
+      expect(request.get).toHaveBeenCalledWith("/orgs/o1/members")
       expect(request.get).toHaveBeenCalledWith("/orgs/o1/roles")
     })
   })
 
-  it("renders each invitation returned by the API", async () => {
-    const wrapper = mount(OrgInvitationsView, { global: { plugins: [createPinia()] } })
-    await vi.waitFor(() => expect(wrapper.text()).toContain("new@example.com"))
+  it("renders each member returned by the API", async () => {
+    const wrapper = mount(OrgMembersView, { global: { plugins: [createPinia()] } })
+    await vi.waitFor(() => expect(wrapper.text()).toContain("ada@example.com"))
   })
 })

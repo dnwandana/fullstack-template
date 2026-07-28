@@ -4,7 +4,12 @@ import { createPinia, setActivePinia } from "pinia"
 
 const { route } = await vi.hoisted(async () => {
   const { ref } = await import("vue")
-  return { route: ref({ params: { orgId: "o1" }, matched: [{ name: "OrgMembers" }] }) }
+  return {
+    route: ref<{ params: Record<string, string>; matched: { name: string }[] }>({
+      params: { orgId: "o1" },
+      matched: [{ name: "OrgMembers" }],
+    }),
+  }
 })
 vi.mock("vue-router", () => ({
   useRoute: () => route.value,
@@ -15,7 +20,7 @@ vi.mock("@/router", () => ({ default: { currentRoute: route } }))
 import SideNav from "./SideNav.vue"
 import { useTenantStore } from "@/stores/tenant"
 
-function mountWith(permissions, params = { orgId: "o1" }) {
+function mountWith(permissions: string[], params: Record<string, string> = { orgId: "o1" }) {
   setActivePinia(createPinia())
   route.value = { params, matched: [{ name: "OrgMembers" }] }
   const tenant = useTenantStore()

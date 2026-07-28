@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 import { setActivePinia, createPinia } from "pinia"
 import { request } from "@/utils/http"
 
-// tenant.js reads the router singleton rather than useRoute() (see its own
+// tenant.ts reads the router singleton rather than useRoute() (see its own
 // header comment); a plain `const currentRoute = ref(...)` would still be in
 // its TDZ when the hoisted vi.mock factory below runs, so it has to be built
-// via vi.hoisted. See stores/tenant.test.js for the full rationale.
+// via vi.hoisted. See stores/tenant.test.ts for the full rationale.
 const { currentRoute } = await vi.hoisted(async () => {
   const { ref } = await import("vue")
   return { currentRoute: ref({ params: { orgId: "o1" } }) }
@@ -27,13 +27,18 @@ describe("roles store — permission cache invalidation (finding 3)", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     currentRoute.value = { params: { orgId: "o1" } }
-    request.get.mockReset().mockResolvedValue({ data: { data: [] } })
-    request.put.mockReset()
-    useAuthStore().user = { id: "u1" }
+    vi.mocked(request.get)
+      .mockReset()
+      .mockResolvedValue({ data: { data: [] }, status: 200 })
+    vi.mocked(request.put).mockReset()
+    useAuthStore().user = { id: "u1", name: "Ada", email: "ada@example.com" }
   })
 
   it("invalidates the org's cached permissions after a role's permissions are updated", async () => {
-    request.put.mockResolvedValue({ data: { data: { id: "r1", name: "Admin" } } })
+    vi.mocked(request.put).mockResolvedValue({
+      data: { data: { id: "r1", name: "Admin" } },
+      status: 200,
+    })
 
     const tenant = useTenantStore()
     tenant.permissions = { o1: ["org:read"] }
@@ -49,7 +54,7 @@ describe("roles store — permission cache invalidation (finding 3)", () => {
   })
 
   it("does not invalidate anything when the update request fails", async () => {
-    request.put.mockRejectedValue(new Error("boom"))
+    vi.mocked(request.put).mockRejectedValue(new Error("boom"))
 
     const tenant = useTenantStore()
     tenant.permissions = { o1: ["org:read"] }
@@ -61,7 +66,10 @@ describe("roles store — permission cache invalidation (finding 3)", () => {
   })
 
   it("leaves other orgs' cached permissions untouched", async () => {
-    request.put.mockResolvedValue({ data: { data: { id: "r1", name: "Admin" } } })
+    vi.mocked(request.put).mockResolvedValue({
+      data: { data: { id: "r1", name: "Admin" } },
+      status: 200,
+    })
 
     const tenant = useTenantStore()
     tenant.permissions = { o1: ["org:read"], o2: ["org:read", "org:update"] }

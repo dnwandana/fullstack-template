@@ -43,14 +43,21 @@ describe("ProjectInvitationsView", () => {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     })
-    request.get.mockReset().mockImplementation((url) => {
-      if (url === "/orgs/o1/invitations") return Promise.resolve({ data: { data: INVITATIONS } })
-      if (url === "/orgs/o1/members")
-        return Promise.resolve({ data: { data: [{ user_id: "u1", role_id: "r1" }] } })
-      if (url.endsWith("/roles")) return Promise.resolve({ data: { data: [] } })
-      if (url.includes("/roles/")) return Promise.resolve({ data: { data: { permissions: [] } } })
-      return Promise.reject(new Error(`unexpected GET ${url}`))
-    })
+    vi.mocked(request.get)
+      .mockReset()
+      .mockImplementation((url: string) => {
+        if (url === "/orgs/o1/invitations")
+          return Promise.resolve({ data: { data: INVITATIONS }, status: 200 })
+        if (url === "/orgs/o1/members")
+          return Promise.resolve({
+            data: { data: [{ user_id: "u1", role_id: "r1" }] },
+            status: 200,
+          })
+        if (url.endsWith("/roles")) return Promise.resolve({ data: { data: [] }, status: 200 })
+        if (url.includes("/roles/"))
+          return Promise.resolve({ data: { data: { permissions: [] } }, status: 200 })
+        return Promise.reject(new Error(`unexpected GET ${url}`))
+      })
   })
 
   it("lists org invitations, since there is no project-scoped listing", async () => {
