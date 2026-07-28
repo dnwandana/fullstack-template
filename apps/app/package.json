@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vue-tsc -b && vite build",
+    "typecheck": "vue-tsc -b --force",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -19,6 +20,7 @@
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",
+    "@fullstack/contracts": "workspace:*",
     "ant-design-vue": "^4.2.6",
     "pinia": "^4.0.2",
     "vue": "^3.5.40",
@@ -26,9 +28,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/node": "^24.13.3",
     "@vitejs/plugin-vue": "^6.0.8",
     "@vue/eslint-config-prettier": "^10.2.0",
+    "@vue/eslint-config-typescript": "^14.9.0",
     "@vue/test-utils": "^2.4.11",
+    "@vue/tsconfig": "^0.9.1",
     "eslint": "^10.7.0",
     "eslint-plugin-oxlint": "~1.73.0",
     "eslint-plugin-vue": "~10.9.2",
@@ -37,8 +42,10 @@
     "npm-run-all2": "^9.0.2",
     "oxlint": "~1.74.0",
     "prettier": "3.9.5",
+    "typescript": "^5.9.3",
     "vite": "^8.1.5",
     "vite-plugin-vue-devtools": "^8.1.5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "vue-tsc": "^3.3.8"
   }
 }

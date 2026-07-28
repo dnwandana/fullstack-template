@@ -5,14 +5,20 @@ RUN corepack enable pnpm
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/app/package.json ./apps/app/
+COPY packages/contracts/package.json ./packages/contracts/
 
-RUN pnpm install --filter @fullstack/app --frozen-lockfile
+# `@fullstack/app...` (trailing ellipsis) includes the workspace deps. Without it the
+# filtered install omits @fullstack/contracts and the workspace: specifier cannot resolve.
+RUN pnpm install --filter @fullstack/app... --frozen-lockfile
 
 COPY apps/app ./apps/app
+COPY packages/contracts ./packages/contracts
 
 ARG VITE_API_BASE_URL=/api
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
+# Contracts emits only .d.ts, but vue-tsc (now part of the app build) needs it on disk.
+RUN pnpm --filter @fullstack/contracts build
 RUN pnpm --filter @fullstack/app build
 
 # Stage 2: serve with nginx
