@@ -123,10 +123,14 @@ One module per resource in `src/api/`, each a thin wrapper over `utils/http.ts`.
 
 - **Four tsconfigs, create-vue style.** `tsconfig.json` is a solution file with `files: []` and three
   references and compiles nothing itself; `tsconfig.app.json` covers `env.d.ts` plus `src/**/*.ts`
-  and `src/**/*.vue` under `strict`, excluding tests; `tsconfig.node.json` covers `vite.config.ts`
-  and `vitest.config.ts`; `tsconfig.vitest.json` extends the app config, re-includes
-  `src/**/*.test.ts` and adds the `vitest/globals` types. Because it is a project-references build,
-  the checker is `vue-tsc -b` — a bare `tsc` on any one file checks it against the wrong config.
+  and `src/**/*.vue` under `strict`, excluding both `src/**/*.test.ts` **and `src/test/**`**;
+  `tsconfig.node.json` covers `vite.config.ts` and `vitest.config.ts`; `tsconfig.vitest.json`
+  extends the app config, re-includes `src/**/*.test.ts` **and `src/test/**/*.ts`**, and adds the
+  `vitest/globals` types. Because it is a project-references build, the checker is `vue-tsc -b` — a
+  bare `tsc` on any one file checks it against the wrong config. That second pair of globs is what
+  makes `src/test/` the home for test-only helpers such as `fixtures.ts`: everything under it is
+  checked with the Vitest types and never as part of the shipping app program, so a helper may use
+  `vitest/globals` and the `node` types freely without leaking either into browser code.
 - **`node` types live only in `tsconfig.node.json` and `tsconfig.vitest.json`.** `tsconfig.app.json`
   declares `types: ["vite/client"]` and nothing else on purpose. Adding `node` there would pull the
   Node globals into browser code: `setTimeout` in `utils/http.ts` starts returning `NodeJS.Timeout`
@@ -146,12 +150,10 @@ One module per resource in `src/api/`, each a thin wrapper over `utils/http.ts`.
   mapped type that rewrites `Date` → `string` through arrays and nested objects. Annotating a store
   with the bare entity type compiles against the contract and lies about the data — `created_at`
   would appear to be a `Date` and `.getTime()` would blow up at runtime.
-- **Three type escapes survive, each with a written justification** — the tree is not escape-free
+- **Two type escapes survive, each with a written justification** — the tree is not escape-free
   and should not be "cleaned up" without reading them. `theme/antd.ts` suppresses `fontFamilyCode`
   (see above); `InviteFormModal.vue`'s `handleOk` suppresses a `string | undefined` → `string`
-  assignment that the form's required rule makes unreachable; `TodoDetailView.vue` carries a
-  `@vue-expect-error` over a `Descriptions column="1"` that has always rendered 3 columns, recorded
-  rather than fixed because fixing it changes the layout. Both `@ts-expect-error` directives
+  assignment that the form's required rule makes unreachable. Both `@ts-expect-error` directives
   self-clear as unused-directive errors if the underlying types ever change. Beyond those, `src/`
   contains no `any`, no `as`, and no non-null assertions; the remaining `TODO(ts-migration)` markers
   flag findings, not suppressions.
@@ -167,6 +169,7 @@ One module per resource in `src/api/`, each a thin wrapper over `utils/http.ts`.
 - **Pinia**: store and composable tests call `setActivePinia(createPinia())` in `beforeEach`; component tests pass a fresh pinia via `mount(..., { global: { plugins: [createPinia()] } })`
 - **Coverage**: specs are colocated with the code they cover, spanning `api/`, `components/`, `composables/`, `router/`, `stores/`, `theme/`, `utils/`, and `views/`. Do not maintain a filename list or a count here — both drift; run `git ls-files 'src/**/*.test.ts'` for the current set.
 - **Typing the mock**: the mock is installed as `vi.mock("@/utils/http", () => ({ ... }))` with a factory, then reached through `vi.mocked(request.get)` rather than a cast — that is what keeps the stub typed against the real export and is why `src/` still holds no `as`. Test files are covered by `tsconfig.vitest.json`, not by `tsconfig.app.json`, which excludes them; `typecheck` builds all three project references, so it checks the tests too.
+- **Build mocked responses through `src/test/fixtures.ts`, never as object literals.** `vi.mocked()` instantiates the http client's envelope generic at `unknown`, so `data` is unconstrained and a payload that no longer matches its contract still compiles — the exact drift the TypeScript migration was meant to catch. The module exports a `make<Entity>()` factory per contract type (`makeUser`, `makeOrg`, `makeProject`, `makeTodo`, `makePermission`, `makeRole`, `makeOrgMember`, `makeProjectMember`, `makePaginationMeta`, and the invitation family below), each returning a complete `Wire<T>`, plus `ok(data)` and `okPaginated(rows, pagination?)` which supply the two-deep envelope (`response.data.data`) and the `status: 200` that `vi.mocked()` makes mandatory. Pass overrides for the fields a test asserts on; take the defaults for the rest — `AT` is the one frozen timestamp every factory dates from, so comparisons never depend on the clock. `makeInvitationWithToken`, `makeInvitationListItem` and `makeMyInvitation` all spread `makeInvitation`, but `makeInvitationPreview` deliberately does **not** — the public, token-gated preview endpoint withholds `org_id`, `inviter_id` and `role_id` from logged-out callers, and a fixture that supplied them would let a spec assert on data the endpoint never sends. Do not "simplify" it into a spread.
 
 ## File Naming
 
