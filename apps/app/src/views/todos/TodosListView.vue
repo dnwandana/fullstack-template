@@ -105,11 +105,12 @@ const columns: ColumnsType<Wire<Todo>> = [
 ]
 
 // Row selection config
-// TODO(ts-migration): this was a plain object holding the `selectedIds` computed itself, which
+// This was a plain object holding the `selectedIds` computed itself, which
 // AntD's `TableRowSelection` declares as `Key[]`. A plain object is not ref-unwrapped by the
 // template, so AntD received the ref and only worked by accident — `useMergedState` calls
 // `ref(initValue)`, which passes an existing ref straight through. Wrapping the object in a
 // `computed` hands AntD the plain `string[]` it documents while keeping the same reactivity.
+// Pinned by `TodosListView.test.ts`.
 const rowSelection = computed(() => ({
   selectedRowKeys: selectedIds.value,
   onChange: handleSelectionChange,
