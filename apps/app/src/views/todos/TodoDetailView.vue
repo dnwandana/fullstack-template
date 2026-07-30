@@ -154,11 +154,7 @@ function formatDate(dateString: string): string {
         {{ currentTodo.title }}
       </Typography.Title>
 
-      <!-- @vue-expect-error TODO(ts-migration): `column="1"` passes the string "1", but AntD's
-           `getColumn` only honours a number or a breakpoint object and silently falls back to 3 —
-           so this grid has always rendered 3 columns per row, not 1. Fixing it (`:column="1"`)
-           would change the rendered layout, so the bug is recorded rather than fixed. -->
-      <Descriptions bordered column="1" style="margin-top: 16px">
+      <Descriptions bordered :column="1" style="margin-top: 16px">
         <Descriptions.Item label="Status">
           <Tag v-if="currentTodo.is_completed" color="success">Completed</Tag>
           <Tag v-else color="default">Pending</Tag>
