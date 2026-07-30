@@ -3,7 +3,7 @@
  */
 
 import type { Rule } from "ant-design-vue/es/form"
-import { ref, reactive } from "vue"
+import { computed, ref, reactive } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { useAuthStore } from "@/stores/auth"
 
@@ -130,16 +130,12 @@ export function useAuth() {
     // State
     formState,
     error,
-    // TODO(ts-migration): these three passthroughs are non-reactive snapshots.
-    // Pinia unwraps refs on the store instance, so `authStore.loading` reads as
-    // `boolean` (not `Ref<boolean>`) and is captured once at composable setup —
-    // LoginView's `:loading="loading"` can therefore never flip to true. Types
-    // confirm it: `loading` and `isAuthenticated` infer `boolean`, `currentUser`
-    // infers `StoredUser | null`. Pre-existing; fixing it needs `storeToRefs` or
-    // `computed()` wrappers, which is a behavior change and out of scope here.
-    loading: authStore.loading,
-    isAuthenticated: authStore.isAuthenticated,
-    currentUser: authStore.currentUser,
+    // Re-exposed as computed so the view sees live store state, read-only.
+    // A bare `authStore.loading` reads through Pinia's ref unwrapping and is
+    // captured once at setup, which left LoginView's spinner permanently off.
+    loading: computed(() => authStore.loading),
+    isAuthenticated: computed(() => authStore.isAuthenticated),
+    currentUser: computed(() => authStore.currentUser),
     // Validation rules
     nameRules,
     emailRules,

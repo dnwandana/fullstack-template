@@ -1,6 +1,8 @@
 import { setActivePinia, createPinia } from "pinia"
 import { useAuth } from "@/composables/useAuth"
+import { useAuthStore } from "@/stores/auth"
 import { request } from "@/utils/http"
+import { ok, makeUser } from "@/test/fixtures"
 
 vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
@@ -9,8 +11,11 @@ vi.mock("@/utils/http", () => ({
 
 // A single stable router/route pair so post-auth navigation can be asserted.
 // `currentRoute.query` is mutated per test to simulate arriving with ?redirect=.
+// The values are `unknown`, not `string`: vue-router surfaces a repeated query
+// key as an array, and `safeRedirect` takes `unknown` precisely to cover that —
+// a `Record<string, string>` would make the array case unwritable without a cast.
 const { push, currentRoute } = vi.hoisted(() => {
-  const currentRoute: { query: Record<string, string> } = { query: {} }
+  const currentRoute: { query: Record<string, unknown> } = { query: {} }
   return { push: vi.fn(), currentRoute }
 })
 
@@ -32,7 +37,7 @@ describe("useAuth argument chain", () => {
   })
 
   it("posts every signup field in the correct position", async () => {
-    vi.mocked(request.post).mockResolvedValue({ data: { data: { id: "u-1" } }, status: 200 })
+    vi.mocked(request.post).mockResolvedValue(ok(makeUser({ id: "u-1" })))
 
     const { formState, handleSignup } = useAuth()
     formState.name = "Ada Lovelace"
@@ -51,10 +56,7 @@ describe("useAuth argument chain", () => {
   })
 
   it("posts every signin field in the correct position", async () => {
-    vi.mocked(request.post).mockResolvedValue({
-      data: { data: { id: "u-1", name: "Ada Lovelace", email: "ada@example.com" } },
-      status: 200,
-    })
+    vi.mocked(request.post).mockResolvedValue(ok(makeUser({ id: "u-1" })))
 
     const { formState, handleSignin } = useAuth()
     formState.email = "ada@example.com"
@@ -69,10 +71,7 @@ describe("useAuth argument chain", () => {
   })
 
   it("returns to the invite link after signin when ?redirect= is a relative path", async () => {
-    vi.mocked(request.post).mockResolvedValue({
-      data: { data: { id: "u-1", name: "Ada Lovelace", email: "ada@example.com" } },
-      status: 200,
-    })
+    vi.mocked(request.post).mockResolvedValue(ok(makeUser({ id: "u-1" })))
     currentRoute.query = { redirect: "/invite/inv-1?token=abc" }
 
     const { handleSignin } = useAuth()
@@ -82,10 +81,7 @@ describe("useAuth argument chain", () => {
   })
 
   it("refuses an off-site redirect after signin", async () => {
-    vi.mocked(request.post).mockResolvedValue({
-      data: { data: { id: "u-1", name: "Ada Lovelace", email: "ada@example.com" } },
-      status: 200,
-    })
+    vi.mocked(request.post).mockResolvedValue(ok(makeUser({ id: "u-1" })))
     currentRoute.query = { redirect: "//evil.example.com/steal" }
 
     const { handleSignin } = useAuth()
@@ -94,8 +90,31 @@ describe("useAuth argument chain", () => {
     expect(push).toHaveBeenCalledWith("/orgs")
   })
 
+  // `/\evil.com` is two characters, `/` then `\`: browsers normalize the
+  // backslash into the protocol-relative form, so it escapes the origin exactly
+  // as `//evil.com` does.
+  it("rejects the backslash variant of a protocol-relative redirect", async () => {
+    vi.mocked(request.post).mockResolvedValue(ok(makeUser({ id: "u-1" })))
+    currentRoute.query = { redirect: "/\\evil.com" }
+
+    const { handleSignin } = useAuth()
+    await handleSignin()
+
+    expect(push).toHaveBeenCalledWith("/orgs")
+  })
+
+  it("rejects a repeated redirect query key, which arrives as an array", async () => {
+    vi.mocked(request.post).mockResolvedValue(ok(makeUser({ id: "u-1" })))
+    currentRoute.query = { redirect: ["/orgs", "//evil.example.com/steal"] }
+
+    const { handleSignin } = useAuth()
+    await handleSignin()
+
+    expect(push).toHaveBeenCalledWith("/orgs")
+  })
+
   it("carries the redirect from signup through to login", async () => {
-    vi.mocked(request.post).mockResolvedValue({ data: { data: { id: "u-1" } }, status: 200 })
+    vi.mocked(request.post).mockResolvedValue(ok(makeUser({ id: "u-1" })))
     currentRoute.query = { redirect: "/invite/inv-1?token=abc" }
 
     const { handleSignup } = useAuth()
@@ -108,7 +127,7 @@ describe("useAuth argument chain", () => {
   })
 
   it("sends signup to a bare login page when there is no redirect", async () => {
-    vi.mocked(request.post).mockResolvedValue({ data: { data: { id: "u-1" } }, status: 200 })
+    vi.mocked(request.post).mockResolvedValue(ok(makeUser({ id: "u-1" })))
 
     const { handleSignup } = useAuth()
     await handleSignup()
@@ -125,5 +144,25 @@ describe("useAuth argument chain", () => {
 
     expect(formState.name).toBe("")
     expect(formState.email).toBe("")
+  })
+
+  it("tracks the store's loading flag rather than snapshotting it", () => {
+    const auth = useAuth()
+    const store = useAuthStore()
+
+    expect(auth.loading.value).toBe(false)
+    store.loading = true
+    expect(auth.loading.value).toBe(true)
+  })
+
+  it("tracks the signed-in user reactively", () => {
+    const auth = useAuth()
+    const store = useAuthStore()
+
+    expect(auth.isAuthenticated.value).toBe(false)
+    expect(auth.currentUser.value).toBeNull()
+    store.user = makeUser({ id: "u1" })
+    expect(auth.isAuthenticated.value).toBe(true)
+    expect(auth.currentUser.value?.id).toBe("u1")
   })
 })
