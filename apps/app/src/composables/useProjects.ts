@@ -33,7 +33,7 @@ export function useProjects() {
 
   /** Ant Design form validation rules for the project name field */
   const nameRules = [
-    { required: true, message: "Please enter an organization name" },
+    { required: true, message: "Please enter a project name" },
     { max: 100, message: "Name cannot exceed 100 characters" },
   ]
 
