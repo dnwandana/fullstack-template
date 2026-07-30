@@ -2,6 +2,7 @@ import { mount, flushPromises, type VueWrapper } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 import InviteAcceptView from "@/views/invitations/InviteAcceptView.vue"
 import { useAuthStore } from "@/stores/auth"
+import { ok, makeInvitation, makeInvitationPreview, makeUser } from "@/test/fixtures"
 import { request } from "@/utils/http"
 
 vi.mock("@/utils/http", () => ({
@@ -41,17 +42,27 @@ const routeWithToken = () => ({
   fullPath: `/invite/inv-1?token=${"a".repeat(64)}`,
 })
 
-const preview = {
-  id: "inv-1",
-  org_name: "Acme Corp",
-  project_name: null,
-  inviter_name: "Ada Lovelace",
-  role_name: "member",
-  invitee_email: "new@acme.com",
-  status: "pending",
-  is_expired: false,
-  requires_signup: true,
-}
+/** The invitee this invitation is addressed to. `wrong-account` keys off this value alone. */
+const INVITEE_EMAIL = "new@acme.com"
+const ORG_NAME = "Acme Corp"
+
+/**
+ * The public preview payload every state below starts from: pending, unexpired, for someone with
+ * no account yet.
+ *
+ * `makeInvitationPreview`, never `makeInvitation` — the preview endpoint is public and token-gated
+ * and withholds `org_id`, `inviter_id` and `role_id` by design, so a full invitation here would let
+ * a spec assert on fields the real response never carries. Each render state below is selected by
+ * overriding exactly the one field that drives it.
+ */
+const preview = (overrides: Parameters<typeof makeInvitationPreview>[0] = {}) =>
+  makeInvitationPreview({
+    id: "inv-1",
+    org_name: ORG_NAME,
+    invitee_email: INVITEE_EMAIL,
+    requires_signup: true,
+    ...overrides,
+  })
 
 describe("InviteAcceptView", () => {
   // jsdom does not implement matchMedia; Ant Design Vue's grid subscribes to it on mount.
@@ -75,7 +86,7 @@ describe("InviteAcceptView", () => {
   })
 
   it("shows who invited you and to what", async () => {
-    vi.mocked(request.get).mockResolvedValue({ data: { data: preview }, status: 200 })
+    vi.mocked(request.get).mockResolvedValue(ok(preview()))
 
     const wrapper = mount(InviteAcceptView, { global: { plugins: [createPinia()] } })
     await flushPromises()
@@ -111,10 +122,7 @@ describe("InviteAcceptView", () => {
   })
 
   it("shows an expired state for an expired invitation", async () => {
-    vi.mocked(request.get).mockResolvedValue({
-      data: { data: { ...preview, is_expired: true } },
-      status: 200,
-    })
+    vi.mocked(request.get).mockResolvedValue(ok(preview({ is_expired: true })))
 
     const wrapper = mount(InviteAcceptView, { global: { plugins: [createPinia()] } })
     await flushPromises()
@@ -123,7 +131,7 @@ describe("InviteAcceptView", () => {
   })
 
   it("offers signup when the invitee has no account", async () => {
-    vi.mocked(request.get).mockResolvedValue({ data: { data: preview }, status: 200 })
+    vi.mocked(request.get).mockResolvedValue(ok(preview({ requires_signup: true })))
 
     const wrapper = mount(InviteAcceptView, { global: { plugins: [createPinia()] } })
     await flushPromises()
@@ -136,20 +144,18 @@ describe("InviteAcceptView", () => {
    * pending. Returns the wrapper once the preview has resolved.
    */
   const mountReady = async () => {
-    vi.mocked(request.get).mockResolvedValue({
-      data: { data: { ...preview, requires_signup: false } },
-      status: 200,
-    })
+    vi.mocked(request.get).mockResolvedValue(ok(preview({ requires_signup: false })))
 
     const pinia = createPinia()
     setActivePinia(pinia)
-    useAuthStore().user = { id: "u-1", name: "New Person", email: preview.invitee_email }
+    // Signed in *as the invitee* — a different email here would render `wrong-account` instead.
+    useAuthStore().user = makeUser({ id: "u-1", name: "New Person", email: INVITEE_EMAIL })
 
     const wrapper = mount(InviteAcceptView, { global: { plugins: [pinia] } })
     await flushPromises()
 
     // The list refresh that follows a successful accept is a separate GET.
-    vi.mocked(request.get).mockResolvedValue({ data: { data: [] }, status: 200 })
+    vi.mocked(request.get).mockResolvedValue(ok([]))
     return wrapper
   }
 
@@ -164,10 +170,10 @@ describe("InviteAcceptView", () => {
 
   it("navigates to the org list after a successful accept", async () => {
     const wrapper = await mountReady()
-    vi.mocked(request.post).mockResolvedValue({
-      data: { data: { id: "inv-1", status: "accepted" } },
-      status: 200,
-    })
+    // The accept endpoint returns the plain invitation row, not the public preview projection.
+    vi.mocked(request.post).mockResolvedValue(
+      ok(makeInvitation({ id: "inv-1", status: "accepted" })),
+    )
 
     await acceptButton(wrapper).trigger("click")
     await flushPromises()

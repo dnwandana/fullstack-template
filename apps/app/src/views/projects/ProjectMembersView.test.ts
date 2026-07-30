@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { createPinia } from "pinia"
+import { ok, okPaginated, makeOrgMember, makeProjectMember, makeRole } from "@/test/fixtures"
 import { request } from "@/utils/http"
 
 vi.mock("@/utils/http", () => ({
@@ -30,7 +31,9 @@ vi.mock("ant-design-vue", async (importOriginal) => ({
 
 import ProjectMembersView from "./ProjectMembersView.vue"
 
-const MEMBERS = [{ user_id: "u1", name: "Ada", email: "ada@example.com", role_id: "r1" }]
+// Project membership rows carry `project_id`; the org listing below carries `org_id`. Standing one
+// factory in for the other would compile and hide exactly that difference.
+const MEMBERS = [makeProjectMember({ user_id: "u1", role_id: "r1" })]
 
 describe("ProjectMembersView", () => {
   beforeEach(() => {
@@ -44,21 +47,19 @@ describe("ProjectMembersView", () => {
     vi.mocked(request.get)
       .mockReset()
       .mockImplementation((url: string) => {
-        if (url === "/orgs/o1/projects/p1/members")
-          return Promise.resolve({ data: { data: MEMBERS }, status: 200 })
+        if (url === "/orgs/o1/projects/p1/members") return Promise.resolve(okPaginated(MEMBERS))
         if (url === "/orgs/o1/members")
-          return Promise.resolve({
-            data: { data: [{ user_id: "u1", role_id: "r1" }] },
-            status: 200,
-          })
-        if (url.endsWith("/roles")) return Promise.resolve({ data: { data: [] }, status: 200 })
+          return Promise.resolve(okPaginated([makeOrgMember({ user_id: "u1", role_id: "r1" })]))
+        if (url.endsWith("/roles")) return Promise.resolve(ok([]))
         if (url.includes("/roles/"))
-          return Promise.resolve({ data: { data: { permissions: [] } }, status: 200 })
+          return Promise.resolve(ok(makeRole({ id: "r1", permissions: [] })))
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })
+    // The role-change PUT answers with the updated project membership row, which the store splices
+    // into the list in place rather than refetching.
     vi.mocked(request.put)
       .mockReset()
-      .mockResolvedValue({ data: { data: {} }, status: 200 })
+      .mockResolvedValue(ok(makeProjectMember({ user_id: "u1", role_id: "r2" })))
   })
 
   it("fetches project members and org roles on mount", async () => {

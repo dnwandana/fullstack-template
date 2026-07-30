@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { createPinia } from "pinia"
+import { ok, okPaginated, makeInvitationListItem, makeOrgMember, makeRole } from "@/test/fixtures"
 import { request } from "@/utils/http"
 
 vi.mock("@/utils/http", () => ({
@@ -30,8 +31,16 @@ vi.mock("ant-design-vue", async (importOriginal) => ({
 
 import OrgInvitationsView from "./OrgInvitationsView.vue"
 
+// The listing endpoint returns `InvitationListItem` — the row shape with the resolved inviter,
+// invitee and role names. `makeInvitationWithToken` would be wrong here: only invite-create and
+// resend ever return the raw token and `accept_url`.
 const INVITATIONS = [
-  { id: "i1", invitee_email: "new@example.com", status: "pending", role_name: "member" },
+  makeInvitationListItem({
+    id: "i1",
+    invitee_email: "new@example.com",
+    status: "pending",
+    role_name: "member",
+  }),
 ]
 
 describe("OrgInvitationsView", () => {
@@ -46,16 +55,12 @@ describe("OrgInvitationsView", () => {
     vi.mocked(request.get)
       .mockReset()
       .mockImplementation((url: string) => {
-        if (url.endsWith("/invitations"))
-          return Promise.resolve({ data: { data: INVITATIONS }, status: 200 })
-        if (url.endsWith("/roles")) return Promise.resolve({ data: { data: [] }, status: 200 })
+        if (url.endsWith("/invitations")) return Promise.resolve(okPaginated(INVITATIONS))
+        if (url.endsWith("/roles")) return Promise.resolve(ok([]))
         if (url.endsWith("/members"))
-          return Promise.resolve({
-            data: { data: [{ user_id: "u1", role_id: "r1" }] },
-            status: 200,
-          })
+          return Promise.resolve(okPaginated([makeOrgMember({ user_id: "u1", role_id: "r1" })]))
         if (url.includes("/roles/"))
-          return Promise.resolve({ data: { data: { permissions: [] } }, status: 200 })
+          return Promise.resolve(ok(makeRole({ id: "r1", permissions: [] })))
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })
   })

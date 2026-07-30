@@ -32,13 +32,26 @@ vi.mock("ant-design-vue", () => ({ message: { success: vi.fn(), error: vi.fn() }
 import { useTenantStore } from "./tenant"
 import { useAuthStore } from "./auth"
 import { useOrgsStore } from "./orgs"
+import { ok, okPaginated, makeOrg, makeOrgMember, makePermission, makeRole } from "@/test/fixtures"
 
 const MEMBERS = [
-  { user_id: "u1", role_id: "r-owner", role_name: "owner" },
-  { user_id: "u2", role_id: "r-member", role_name: "member" },
+  makeOrgMember({ user_id: "u1", role_id: "r-owner", role_name: "owner" }),
+  makeOrgMember({ user_id: "u2", role_id: "r-member", role_name: "member" }),
 ]
-const ROLE = { id: "r-owner", permissions: [{ name: "org:read" }, { name: "org:update" }] }
-const ORGS = [{ id: "o1", name: "Acme" }]
+const READ = makePermission({
+  id: "perm-org-read",
+  name: "org:read",
+  resource: "org",
+  action: "read",
+})
+const UPDATE = makePermission({
+  id: "perm-org-update",
+  name: "org:update",
+  resource: "org",
+  action: "update",
+})
+const ROLE = makeRole({ id: "r-owner", name: "Owner", permissions: [READ, UPDATE] })
+const ORGS = [makeOrg({ id: "o1", name: "Acme" })]
 
 /** Count the GETs whose URL contains `fragment`. */
 function getCalls(fragment: string): number {
@@ -52,10 +65,9 @@ describe("tenant store", () => {
     vi.mocked(request.get)
       .mockReset()
       .mockImplementation((url) => {
-        if (url === "/orgs") return Promise.resolve({ data: { data: ORGS }, status: 200 })
-        if (url.endsWith("/members"))
-          return Promise.resolve({ data: { data: MEMBERS }, status: 200 })
-        if (url.includes("/roles/")) return Promise.resolve({ data: { data: ROLE }, status: 200 })
+        if (url === "/orgs") return Promise.resolve(ok(ORGS))
+        if (url.endsWith("/members")) return Promise.resolve(okPaginated(MEMBERS))
+        if (url.includes("/roles/")) return Promise.resolve(ok(ROLE))
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })
     useAuthStore().user = { id: "u1", name: "Ada", email: "ada@example.com" }
@@ -163,14 +175,10 @@ describe("tenant store", () => {
 
       // Simulate the role's permission set changing on the server.
       vi.mocked(request.get).mockImplementation((url) => {
-        if (url === "/orgs") return Promise.resolve({ data: { data: ORGS }, status: 200 })
-        if (url.endsWith("/members"))
-          return Promise.resolve({ data: { data: MEMBERS }, status: 200 })
+        if (url === "/orgs") return Promise.resolve(ok(ORGS))
+        if (url.endsWith("/members")) return Promise.resolve(okPaginated(MEMBERS))
         if (url.includes("/roles/"))
-          return Promise.resolve({
-            data: { data: { ...ROLE, permissions: [{ name: "org:read" }] } },
-            status: 200,
-          })
+          return Promise.resolve(ok(makeRole({ ...ROLE, permissions: [READ] })))
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })
 

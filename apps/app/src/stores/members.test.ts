@@ -19,9 +19,11 @@ vi.mock("@/utils/http", () => ({
 
 vi.mock("ant-design-vue", () => ({ message: { success: vi.fn(), error: vi.fn() } }))
 
+import type { OrgMember, ProjectMember, Wire } from "@fullstack/contracts"
 import { useMembersStore } from "./members"
 import { useTenantStore } from "./tenant"
 import { useAuthStore } from "./auth"
+import { ok, okPaginated, makeOrgMember, makeProjectMember } from "@/test/fixtures"
 
 /** Seed a warm tenant cache for org "o1" so a wrongly-skipped invalidation is visible. */
 function seedTenant() {
@@ -35,12 +37,8 @@ describe("members store — permission cache invalidation (finding 3)", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     currentRoute.value = { params: { orgId: "o1" } }
-    vi.mocked(request.get)
-      .mockReset()
-      .mockResolvedValue({ data: { data: [] }, status: 200 })
-    vi.mocked(request.put)
-      .mockReset()
-      .mockResolvedValue({ data: { data: {} }, status: 200 })
+    vi.mocked(request.get).mockReset().mockResolvedValue(okPaginated([]))
+    vi.mocked(request.put).mockReset().mockResolvedValue(ok(makeOrgMember()))
     useAuthStore().user = { id: "u1", name: "Ada", email: "ada@example.com" }
   })
 
@@ -65,31 +63,17 @@ describe("members store — permission cache invalidation (finding 3)", () => {
   })
 
   describe("in-place membership update (L-26)", () => {
-    const orgRow = (over = {}) => ({
-      user_id: "u2",
-      org_id: "o1",
-      role_id: "r1",
-      joined_at: "2026-07-01T00:00:00.000Z",
-      name: "Two",
-      email: "two@x.io",
-      role_name: "member",
-      ...over,
-    })
+    const orgRow = (over: Partial<Wire<OrgMember>> = {}) =>
+      makeOrgMember({ user_id: "u2", name: "Two", email: "two@x.io", role_name: "member", ...over })
 
     it("splices the returned org membership into the list without refetching", async () => {
       const members = useMembersStore()
-      vi.mocked(request.get).mockResolvedValue({
-        data: { data: [orgRow(), orgRow({ user_id: "u1" })] },
-        status: 200,
-      })
+      vi.mocked(request.get).mockResolvedValue(okPaginated([orgRow(), orgRow({ user_id: "u1" })]))
       await members.fetchOrgMembers("o1")
       expect(request.get).toHaveBeenCalledTimes(1)
 
       const updated = orgRow({ role_id: "r2", role_name: "admin" })
-      vi.mocked(request.put).mockResolvedValue({
-        data: { message: "OK", data: updated },
-        status: 200,
-      })
+      vi.mocked(request.put).mockResolvedValue(ok(updated))
       await members.updateOrgMemberRole("o1", "u2", "r2")
 
       expect(request.get).toHaveBeenCalledTimes(1)
@@ -98,20 +82,24 @@ describe("members store — permission cache invalidation (finding 3)", () => {
     })
 
     it("splices the returned project membership into the list without refetching", async () => {
-      const projectRow = (over = {}) => {
-        const { org_id: _org, ...row } = orgRow(over)
-        return { ...row, project_id: "p1" }
-      }
+      // Deliberately built from makeProjectMember rather than by stripping
+      // `org_id` off an org row: the two membership contracts differ by exactly
+      // that field, so reusing one for the other is the drift this spec catches.
+      const projectRow = (over: Partial<Wire<ProjectMember>> = {}) =>
+        makeProjectMember({
+          user_id: "u2",
+          name: "Two",
+          email: "two@x.io",
+          role_name: "member",
+          ...over,
+        })
       const members = useMembersStore()
-      vi.mocked(request.get).mockResolvedValue({ data: { data: [projectRow()] }, status: 200 })
+      vi.mocked(request.get).mockResolvedValue(okPaginated([projectRow()]))
       await members.fetchProjectMembers("o1", "p1")
       expect(request.get).toHaveBeenCalledTimes(1)
 
       const updated = projectRow({ role_id: "r2", role_name: "admin" })
-      vi.mocked(request.put).mockResolvedValue({
-        data: { message: "OK", data: updated },
-        status: 200,
-      })
+      vi.mocked(request.put).mockResolvedValue(ok(updated))
       await members.updateProjectMemberRole("o1", "p1", "u2", "r2")
 
       expect(request.get).toHaveBeenCalledTimes(1)
@@ -120,6 +108,12 @@ describe("members store — permission cache invalidation (finding 3)", () => {
   })
 
   describe("updateProjectMemberRole", () => {
+    // The shared beforeEach mocks the PUT with an org membership row; the
+    // project endpoint returns a ProjectMember, so these override it.
+    beforeEach(() => {
+      vi.mocked(request.put).mockResolvedValue(ok(makeProjectMember()))
+    })
+
     it("invalidates the cache when the current user's own project role changes", async () => {
       // Roles are org-scoped even when assigned to a project member (roles.org_id
       // is NOT NULL — see ProjectMembersView), so a project role change for the

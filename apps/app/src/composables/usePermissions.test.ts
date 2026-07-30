@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { setActivePinia, createPinia } from "pinia"
 import { request } from "@/utils/http"
+import { ok, okPaginated, makeOrgMember, makePermission, makeRole } from "@/test/fixtures"
 
 // vi.mock factories are hoisted above regular top-level statements (see
 // stores/tenant.test.ts for the full rationale), so the route ref must be
@@ -30,15 +31,17 @@ describe("usePermissions", () => {
       .mockReset()
       .mockImplementation((url: string) => {
         if (url.endsWith("/members"))
-          return Promise.resolve({
-            data: { data: [{ user_id: "u1", role_id: "r1" }] },
-            status: 200,
-          })
+          return Promise.resolve(okPaginated([makeOrgMember({ user_id: "u1", role_id: "r1" })]))
         if (url.includes("/roles/"))
-          return Promise.resolve({
-            data: { data: { permissions: [{ name: "org:read" }] } },
-            status: 200,
-          })
+          return Promise.resolve(
+            ok(
+              makeRole({
+                permissions: [
+                  makePermission({ name: "org:read", resource: "org", action: "read" }),
+                ],
+              }),
+            ),
+          )
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })
     useAuthStore().user = { id: "u1", name: "Test User", email: "u1@example.com" }

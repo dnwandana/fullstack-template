@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
+import { ok, okPaginated, makeOrg, makeOrgMember, makePermission, makeRole } from "@/test/fixtures"
 
 // vi.mock factories are hoisted above regular top-level statements, so a
 // plain `const route = ref(...)` here would still be in its TDZ when the
@@ -21,7 +22,7 @@ vi.mock("@/router", () => ({ default: { currentRoute: route } }))
 vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
   request: {
-    get: vi.fn().mockResolvedValue({ data: { data: [] } }),
+    get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
     del: vi.fn(),
@@ -68,6 +69,10 @@ describe("AppShell", () => {
     setActivePinia(createPinia())
     localStorage.clear()
     stubMatchMedia()
+    // The default the mock factory used to carry inline. It cannot live in the
+    // factory any more: `ok` is an ordinary import, and vi.mock factories are
+    // hoisted above imports.
+    vi.mocked(request.get).mockReset().mockResolvedValue(ok([]))
   })
 
   it("renders the top bar, breadcrumb, nav and the routed view", () => {
@@ -114,9 +119,8 @@ describe("AppShell", () => {
     // and breadcrumb with no org name to show.
     route.value = { params: { orgId: "o1" }, name: "OrgMembers", matched: [] }
     vi.mocked(request.get).mockImplementation((url: string) => {
-      if (url === "/orgs")
-        return Promise.resolve({ data: { data: [{ id: "o1", name: "Acme" }] }, status: 200 })
-      return Promise.resolve({ data: { data: [] }, status: 200 })
+      if (url === "/orgs") return Promise.resolve(ok([makeOrg({ id: "o1", name: "Acme" })]))
+      return Promise.resolve(ok([]))
     })
 
     const wrapper = mount(AppShell)
@@ -135,19 +139,26 @@ describe("AppShell", () => {
     const auth = useAuthStore()
     auth.user = { id: "u1", name: "Dev", email: "dev@example.com" }
     vi.mocked(request.get).mockImplementation((url: string) => {
-      if (url === "/orgs")
-        return Promise.resolve({ data: { data: [{ id: "o1", name: "Acme" }] }, status: 200 })
+      if (url === "/orgs") return Promise.resolve(ok([makeOrg({ id: "o1", name: "Acme" })]))
       if (url.endsWith("/members"))
-        return Promise.resolve({
-          data: { data: [{ user_id: "u1", role_id: "r1", role_name: "owner" }] },
-          status: 200,
-        })
+        return Promise.resolve(
+          okPaginated([makeOrgMember({ user_id: "u1", role_id: "r1", role_name: "owner" })]),
+        )
       if (url.includes("/roles/"))
-        return Promise.resolve({
-          data: { data: { permissions: [{ name: "org:manage_roles" }] } },
-          status: 200,
-        })
-      return Promise.resolve({ data: { data: [] }, status: 200 })
+        return Promise.resolve(
+          ok(
+            makeRole({
+              permissions: [
+                makePermission({
+                  name: "org:manage_roles",
+                  resource: "org",
+                  action: "manage_roles",
+                }),
+              ],
+            }),
+          ),
+        )
+      return Promise.resolve(ok([]))
     })
 
     mount(AppShell)

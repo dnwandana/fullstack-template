@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { setActivePinia, createPinia } from "pinia"
 import { request } from "@/utils/http"
+import { ok, makeUser } from "@/test/fixtures"
 
 vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
@@ -20,9 +21,8 @@ describe("legacy ?tab= redirects", () => {
     vi.mocked(request.get)
       .mockReset()
       .mockImplementation((url: string) => {
-        if (url === "/auth/me")
-          return Promise.resolve({ data: { data: { id: "u1" } }, status: 200 })
-        return Promise.resolve({ data: { data: [] }, status: 200 })
+        if (url === "/auth/me") return Promise.resolve(ok(makeUser({ id: "u1" })))
+        return Promise.resolve(ok([]))
       })
     await router.push("/orgs")
     await router.isReady()
@@ -72,9 +72,8 @@ describe("project routes", () => {
     vi.mocked(request.get)
       .mockReset()
       .mockImplementation((url: string) => {
-        if (url === "/auth/me")
-          return Promise.resolve({ data: { data: { id: "u1" } }, status: 200 })
-        return Promise.resolve({ data: { data: [] }, status: 200 })
+        if (url === "/auth/me") return Promise.resolve(ok(makeUser({ id: "u1" })))
+        return Promise.resolve(ok([]))
       })
     await router.push("/orgs")
     await router.isReady()

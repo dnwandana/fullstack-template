@@ -1,6 +1,7 @@
 import { mount, flushPromises } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import SignupView from "@/views/auth/SignupView.vue"
+import { ok, makeUser } from "@/test/fixtures"
 import { request } from "@/utils/http"
 
 vi.mock("@/utils/http", () => ({
@@ -38,7 +39,7 @@ describe("SignupView", () => {
   })
 
   it("submits the name and email typed into the form", async () => {
-    vi.mocked(request.post).mockResolvedValue({ data: { data: { id: "u-1" } }, status: 200 })
+    vi.mocked(request.post).mockResolvedValue(ok(makeUser({ id: "u-1" })))
 
     const wrapper = mount(SignupView, { global: { plugins: [createPinia()] } })
 

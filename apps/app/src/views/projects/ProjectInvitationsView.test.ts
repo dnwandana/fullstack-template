@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { createPinia } from "pinia"
+import { ok, okPaginated, makeInvitationListItem, makeOrgMember, makeRole } from "@/test/fixtures"
 import { request } from "@/utils/http"
 
 vi.mock("@/utils/http", () => ({
@@ -30,8 +31,15 @@ vi.mock("ant-design-vue", async (importOriginal) => ({
 
 import ProjectInvitationsView from "./ProjectInvitationsView.vue"
 
+// This view lists ORG invitations — the listing endpoint's `InvitationListItem` rows, not the
+// token-bearing shape that only invite-create and resend return.
 const INVITATIONS = [
-  { id: "i1", invitee_email: "new@example.com", status: "pending", role_name: "member" },
+  makeInvitationListItem({
+    id: "i1",
+    invitee_email: "new@example.com",
+    status: "pending",
+    role_name: "member",
+  }),
 ]
 
 describe("ProjectInvitationsView", () => {
@@ -46,16 +54,12 @@ describe("ProjectInvitationsView", () => {
     vi.mocked(request.get)
       .mockReset()
       .mockImplementation((url: string) => {
-        if (url === "/orgs/o1/invitations")
-          return Promise.resolve({ data: { data: INVITATIONS }, status: 200 })
+        if (url === "/orgs/o1/invitations") return Promise.resolve(okPaginated(INVITATIONS))
         if (url === "/orgs/o1/members")
-          return Promise.resolve({
-            data: { data: [{ user_id: "u1", role_id: "r1" }] },
-            status: 200,
-          })
-        if (url.endsWith("/roles")) return Promise.resolve({ data: { data: [] }, status: 200 })
+          return Promise.resolve(okPaginated([makeOrgMember({ user_id: "u1", role_id: "r1" })]))
+        if (url.endsWith("/roles")) return Promise.resolve(ok([]))
         if (url.includes("/roles/"))
-          return Promise.resolve({ data: { data: { permissions: [] } }, status: 200 })
+          return Promise.resolve(ok(makeRole({ id: "r1", permissions: [] })))
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })
   })

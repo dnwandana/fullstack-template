@@ -22,23 +22,19 @@ vi.mock("ant-design-vue", () => ({ message: { success: vi.fn(), error: vi.fn() }
 import { useRolesStore } from "./roles"
 import { useTenantStore } from "./tenant"
 import { useAuthStore } from "./auth"
+import { ok, makeRole } from "@/test/fixtures"
 
 describe("roles store — permission cache invalidation (finding 3)", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     currentRoute.value = { params: { orgId: "o1" } }
-    vi.mocked(request.get)
-      .mockReset()
-      .mockResolvedValue({ data: { data: [] }, status: 200 })
+    vi.mocked(request.get).mockReset().mockResolvedValue(ok([]))
     vi.mocked(request.put).mockReset()
     useAuthStore().user = { id: "u1", name: "Ada", email: "ada@example.com" }
   })
 
   it("invalidates the org's cached permissions after a role's permissions are updated", async () => {
-    vi.mocked(request.put).mockResolvedValue({
-      data: { data: { id: "r1", name: "Admin" } },
-      status: 200,
-    })
+    vi.mocked(request.put).mockResolvedValue(ok(makeRole({ id: "r1", name: "Admin" })))
 
     const tenant = useTenantStore()
     tenant.permissions = { o1: ["org:read"] }
@@ -66,10 +62,7 @@ describe("roles store — permission cache invalidation (finding 3)", () => {
   })
 
   it("leaves other orgs' cached permissions untouched", async () => {
-    vi.mocked(request.put).mockResolvedValue({
-      data: { data: { id: "r1", name: "Admin" } },
-      status: 200,
-    })
+    vi.mocked(request.put).mockResolvedValue(ok(makeRole({ id: "r1", name: "Admin" })))
 
     const tenant = useTenantStore()
     tenant.permissions = { o1: ["org:read"], o2: ["org:read", "org:update"] }

@@ -3,6 +3,7 @@ import { mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 import type { ComponentPublicInstance } from "vue"
 import type { RouteLocationRaw } from "vue-router"
+import { ok } from "@/test/fixtures"
 
 // vi.mock factories are hoisted above regular top-level statements, so a plain
 // `const route = ref(...)` here would still be in its TDZ when the mock
@@ -27,7 +28,7 @@ vi.mock("@/router", () => ({ default: { currentRoute: route } }))
 vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
   request: {
-    get: vi.fn().mockResolvedValue({ data: { data: [] } }),
+    get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
     del: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock("ant-design-vue", async (importOriginal) => ({
 }))
 
 import TopBar from "./TopBar.vue"
+import { request } from "@/utils/http"
 
 // findComponent with a CSS selector resolves to WrapperLike, which has no
 // props(). Naming the sought component's shape picks the VueWrapper overload
@@ -54,7 +56,13 @@ function mountAt(params: Record<string, string>) {
 }
 
 describe("TopBar", () => {
-  beforeEach(() => setActivePinia(createPinia()))
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    // The default the mock factory used to carry inline. It cannot live in the
+    // factory any more: `ok` is an ordinary import, and vi.mock factories are
+    // hoisted above imports.
+    vi.mocked(request.get).mockReset().mockResolvedValue(ok([]))
+  })
 
   it("renders the switchers, the bell and the user menu", () => {
     const wrapper = mountAt({ orgId: "o1", projectId: "p1" })

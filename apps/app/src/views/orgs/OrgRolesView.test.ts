@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { createPinia } from "pinia"
+import { ok, okPaginated, makeOrgMember, makePermission, makeRole } from "@/test/fixtures"
 import { request } from "@/utils/http"
 
 vi.mock("@/utils/http", () => ({
@@ -30,9 +31,17 @@ vi.mock("ant-design-vue", async (importOriginal) => ({
 
 import OrgRolesView from "./OrgRolesView.vue"
 
+// `is_system` is set explicitly on both rows: the table tags the two kinds differently and gates
+// Edit/Delete on it, so leaving it to a default would make the "System"/"Custom" case dishonest.
 const ROLES = [
-  { id: "r1", name: "owner", description: null, is_system: true },
-  { id: "r2", name: "auditor", description: "Read only", is_system: false },
+  makeRole({ id: "r1", name: "owner", description: null, is_system: true }),
+  makeRole({
+    id: "r2",
+    name: "auditor",
+    description: "Read only",
+    is_system: false,
+    permissions: [makePermission({ name: "todos:read" })],
+  }),
 ]
 
 describe("OrgRolesView", () => {
@@ -47,16 +56,12 @@ describe("OrgRolesView", () => {
     vi.mocked(request.get)
       .mockReset()
       .mockImplementation((url: string) => {
-        if (url.endsWith("/roles")) return Promise.resolve({ data: { data: ROLES }, status: 200 })
-        if (url.endsWith("/permissions"))
-          return Promise.resolve({ data: { data: [] }, status: 200 })
+        if (url.endsWith("/roles")) return Promise.resolve(ok(ROLES))
+        if (url.endsWith("/permissions")) return Promise.resolve(ok([]))
         if (url.endsWith("/members"))
-          return Promise.resolve({
-            data: { data: [{ user_id: "u1", role_id: "r1" }] },
-            status: 200,
-          })
+          return Promise.resolve(okPaginated([makeOrgMember({ user_id: "u1", role_id: "r1" })]))
         if (url.includes("/roles/"))
-          return Promise.resolve({ data: { data: { permissions: [] } }, status: 200 })
+          return Promise.resolve(ok(makeRole({ id: "r1", is_system: true, permissions: [] })))
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })
   })

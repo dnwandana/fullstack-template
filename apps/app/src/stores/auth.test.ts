@@ -2,6 +2,7 @@ import { setActivePinia, createPinia } from "pinia"
 import { useAuthStore } from "@/stores/auth"
 import { getUserData } from "@/utils/storage"
 import { request } from "@/utils/http"
+import { ok, makeUser } from "@/test/fixtures"
 
 vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
@@ -20,10 +21,9 @@ describe("auth store", () => {
   })
 
   it("maps the signin response onto user state and storage", async () => {
-    vi.mocked(request.post).mockResolvedValue({
-      data: { data: { id: "u-1", name: "Ada Lovelace", email: "ada@example.com" } },
-      status: 200,
-    })
+    vi.mocked(request.post).mockResolvedValue(
+      ok(makeUser({ id: "u-1", name: "Ada Lovelace", email: "ada@example.com" })),
+    )
 
     const store = useAuthStore()
     await store.signin("ada@example.com", "Testpass123!")
@@ -35,10 +35,9 @@ describe("auth store", () => {
   })
 
   it("populates user state when getMe succeeds during initAuth", async () => {
-    vi.mocked(request.get).mockResolvedValue({
-      data: { data: { id: "u-2", name: "Grace Hopper", email: "grace@example.com" } },
-      status: 200,
-    })
+    vi.mocked(request.get).mockResolvedValue(
+      ok(makeUser({ id: "u-2", name: "Grace Hopper", email: "grace@example.com" })),
+    )
 
     const store = useAuthStore()
     await store.initAuth()

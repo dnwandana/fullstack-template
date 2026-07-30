@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 import { request } from "@/utils/http"
+import { ok, makeMyInvitation } from "@/test/fixtures"
 
 vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
@@ -20,17 +21,17 @@ vi.mock("ant-design-vue", async (importOriginal) => ({
 
 import InvitationsBell from "./InvitationsBell.vue"
 
+// `listMyInvitations()` is declared `Envelope<Wire<MyInvitation>[]>`, so this is
+// the "my invitations" projection — not `Invitation` and not `InvitationListItem`.
 const PENDING = [
-  { id: "i1", status: "pending" },
-  { id: "i2", status: "pending" },
+  makeMyInvitation({ id: "i1", status: "pending" }),
+  makeMyInvitation({ id: "i2", status: "pending" }),
 ]
 
 describe("InvitationsBell", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
-    vi.mocked(request.get)
-      .mockReset()
-      .mockResolvedValue({ data: { data: PENDING }, status: 200 })
+    vi.mocked(request.get).mockReset().mockResolvedValue(ok(PENDING))
   })
 
   it("fetches the caller's invitations on mount", async () => {

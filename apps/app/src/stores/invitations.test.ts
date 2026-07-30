@@ -1,6 +1,8 @@
 import { createPinia, setActivePinia } from "pinia"
 import { useInvitationsStore } from "@/stores/invitations"
 import { request } from "@/utils/http"
+import type { InvitationListItem, MyInvitation, Wire } from "@fullstack/contracts"
+import { ok, okPaginated, makeInvitationPreview, makeInvitationWithToken } from "@/test/fixtures"
 
 vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
@@ -18,8 +20,10 @@ describe("invitations store", () => {
   })
 
   it("sends the raw token in the accept request body", async () => {
-    vi.mocked(request.post).mockResolvedValue({ data: { data: null }, status: 200 })
-    vi.mocked(request.get).mockResolvedValue({ data: { data: [] }, status: 200 })
+    vi.mocked(request.post).mockResolvedValue(ok(null))
+    // acceptInvitation refreshes GET /invitations, the un-paginated "my
+    // invitations" list.
+    vi.mocked(request.get).mockResolvedValue(ok<Wire<MyInvitation>[]>([]))
 
     const store = useInvitationsStore()
     await store.acceptInvitation("inv-1", "a".repeat(64))
@@ -30,7 +34,7 @@ describe("invitations store", () => {
   })
 
   it("passes the token as a query param when previewing", async () => {
-    vi.mocked(request.get).mockResolvedValue({ data: { data: { org_name: "Acme" } }, status: 200 })
+    vi.mocked(request.get).mockResolvedValue(ok(makeInvitationPreview({ org_name: "Acme" })))
 
     const store = useInvitationsStore()
     const preview = await store.previewInvitation("inv-1", "b".repeat(64))
@@ -51,11 +55,10 @@ describe("invitations store", () => {
   })
 
   it("captures the accept url returned when inviting to an org", async () => {
-    vi.mocked(request.post).mockResolvedValue({
-      data: { data: { id: "inv-1", accept_url: "http://test/invite/inv-1?token=x" } },
-      status: 200,
-    })
-    vi.mocked(request.get).mockResolvedValue({ data: { data: [] }, status: 200 })
+    vi.mocked(request.post).mockResolvedValue(
+      ok(makeInvitationWithToken({ id: "inv-1", accept_url: "http://test/invite/inv-1?token=x" })),
+    )
+    vi.mocked(request.get).mockResolvedValue(okPaginated<Wire<InvitationListItem>>([]))
 
     const store = useInvitationsStore()
     await store.inviteToOrg("org-1", { email: "a@test.com", role_id: "role-1" })
@@ -64,11 +67,10 @@ describe("invitations store", () => {
   })
 
   it("captures the accept url returned when inviting to a project", async () => {
-    vi.mocked(request.post).mockResolvedValue({
-      data: { data: { id: "inv-2", accept_url: "http://test/invite/inv-2?token=y" } },
-      status: 200,
-    })
-    vi.mocked(request.get).mockResolvedValue({ data: { data: [] }, status: 200 })
+    vi.mocked(request.post).mockResolvedValue(
+      ok(makeInvitationWithToken({ id: "inv-2", accept_url: "http://test/invite/inv-2?token=y" })),
+    )
+    vi.mocked(request.get).mockResolvedValue(okPaginated<Wire<InvitationListItem>>([]))
 
     const store = useInvitationsStore()
     await store.inviteToProject("org-1", "proj-1", { email: "b@test.com", role_id: "role-1" })
@@ -77,13 +79,16 @@ describe("invitations store", () => {
   })
 
   it("resends an invitation and returns the fresh link", async () => {
-    vi.mocked(request.post).mockResolvedValue({
-      data: {
-        data: { id: "inv-1", token: "d".repeat(64), accept_url: "http://test/invite/inv-1" },
-      },
-      status: 200,
-    })
-    vi.mocked(request.get).mockResolvedValue({ data: { data: [] }, status: 200 })
+    vi.mocked(request.post).mockResolvedValue(
+      ok(
+        makeInvitationWithToken({
+          id: "inv-1",
+          token: "d".repeat(64),
+          accept_url: "http://test/invite/inv-1",
+        }),
+      ),
+    )
+    vi.mocked(request.get).mockResolvedValue(okPaginated<Wire<InvitationListItem>>([]))
 
     const store = useInvitationsStore()
     const result = await store.resendInvitation("org-1", "inv-1")

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { createPinia } from "pinia"
+import { ok, okPaginated, makeOrgMember, makeRole } from "@/test/fixtures"
 import { request } from "@/utils/http"
 
 vi.mock("@/utils/http", () => ({
@@ -30,7 +31,9 @@ vi.mock("ant-design-vue", async (importOriginal) => ({
 
 import OrgMembersView from "./OrgMembersView.vue"
 
-const MEMBERS = [{ user_id: "u1", name: "Ada", email: "ada@example.com", role_id: "r1" }]
+// Org membership rows — `makeOrgMember`, not `makeProjectMember`. The two differ in exactly one
+// field (`org_id` vs `project_id`), which is the drift this file exists to catch.
+const MEMBERS = [makeOrgMember({ user_id: "u1", role_id: "r1" })]
 
 describe("OrgMembersView", () => {
   beforeEach(() => {
@@ -45,11 +48,10 @@ describe("OrgMembersView", () => {
     vi.mocked(request.get)
       .mockReset()
       .mockImplementation((url: string) => {
-        if (url.endsWith("/members"))
-          return Promise.resolve({ data: { data: MEMBERS }, status: 200 })
-        if (url.endsWith("/roles")) return Promise.resolve({ data: { data: [] }, status: 200 })
+        if (url.endsWith("/members")) return Promise.resolve(okPaginated(MEMBERS))
+        if (url.endsWith("/roles")) return Promise.resolve(ok([]))
         if (url.includes("/roles/"))
-          return Promise.resolve({ data: { data: { permissions: [] } }, status: 200 })
+          return Promise.resolve(ok(makeRole({ id: "r1", permissions: [] })))
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })
   })
