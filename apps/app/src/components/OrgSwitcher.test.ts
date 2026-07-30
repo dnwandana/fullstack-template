@@ -2,16 +2,20 @@ import { describe, it, expect, beforeEach, beforeAll, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 
-const { route } = await vi.hoisted(async () => {
+// `push` is hoisted alongside `route` so one spy survives every `useRouter()`
+// call. The component calls `useRouter()` once at setup and keeps that
+// instance, so a `vi.fn()` created inline in the factory would hand the test a
+// different spy than the one the component pushes to.
+const { route, push } = await vi.hoisted(async () => {
   const { ref } = await import("vue")
   // `orgId` is optional because the "renders nothing when no org is selected"
   // case reassigns the ref to an empty params object.
   const route = ref<{ params: { orgId?: string } }>({ params: { orgId: "o1" } })
-  return { route }
+  return { route, push: vi.fn() }
 })
 vi.mock("vue-router", () => ({
   useRoute: () => route.value,
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push }),
 }))
 vi.mock("@/router", () => ({ default: { currentRoute: route } }))
 vi.mock("ant-design-vue", async (importOriginal) => ({
@@ -19,28 +23,13 @@ vi.mock("ant-design-vue", async (importOriginal) => ({
   message: { success: vi.fn(), error: vi.fn() },
 }))
 
+import { Menu } from "ant-design-vue"
 import OrgSwitcher from "./OrgSwitcher.vue"
 import { useTenantStore } from "@/stores/tenant"
 import { useOrgsStore } from "@/stores/orgs"
+import { makeOrg } from "@/test/fixtures"
 
-const ORGS = [
-  {
-    id: "o1",
-    name: "Acme",
-    description: null,
-    created_by: "u1",
-    created_at: "2026-01-01T00:00:00.000Z",
-    updated_at: "2026-01-01T00:00:00.000Z",
-  },
-  {
-    id: "o2",
-    name: "Globex",
-    description: null,
-    created_by: "u1",
-    created_at: "2026-01-01T00:00:00.000Z",
-    updated_at: "2026-01-01T00:00:00.000Z",
-  },
-]
+const ORGS = [makeOrg({ id: "o1", name: "Acme" }), makeOrg({ id: "o2", name: "Globex" })]
 
 function setup() {
   setActivePinia(createPinia())
@@ -67,7 +56,12 @@ describe("OrgSwitcher", () => {
     }))
   })
 
-  beforeEach(() => setActivePinia(createPinia()))
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    // One spy is shared across every `useRouter()` call, so without this the
+    // no-navigation case would see the previous test's push.
+    push.mockReset()
+  })
 
   it("shows the current org name", () => {
     setup()
@@ -101,5 +95,27 @@ describe("OrgSwitcher", () => {
       roleId: "r1",
       roleName: "admin",
     })
+  })
+
+  // `selectOrg` is not in `defineExpose`, so both cases drive it through the
+  // Menu's `@click` handler — the component's own contract.
+  it("navigates to the chosen org's projects", async () => {
+    setup()
+    const wrapper = mount(OrgSwitcher)
+    await wrapper.vm.onOpenChange(true)
+
+    await wrapper.findComponent(Menu).vm.$emit("click", { key: "o2" })
+
+    expect(push).toHaveBeenCalledWith({ name: "ProjectsList", params: { orgId: "o2" } })
+  })
+
+  it("does not navigate when the chosen org is already current", async () => {
+    setup() // route.params.orgId is "o1"
+    const wrapper = mount(OrgSwitcher)
+    await wrapper.vm.onOpenChange(true)
+
+    await wrapper.findComponent(Menu).vm.$emit("click", { key: "o1" })
+
+    expect(push).not.toHaveBeenCalled()
   })
 })
