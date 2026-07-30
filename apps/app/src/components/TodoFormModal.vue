@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, watch } from "vue"
+import { computed, reactive, watch } from "vue"
 import { Form, Modal, Input, Checkbox } from "ant-design-vue"
 import type { Rule } from "ant-design-vue/es/form"
 import type { Todo, Wire } from "@fullstack/contracts"
@@ -82,8 +82,6 @@ function handleCancel() {
 
 // Computed title for modal
 const modalTitle = computed(() => (props.todo ? "Edit Todo" : "Create Todo"))
-
-import { computed } from "vue"
 </script>
 
 <template>
