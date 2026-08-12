@@ -511,8 +511,10 @@ apps/api/
 │   ├── schema.prisma         # Domain models (@map/@@map keep the DB snake_case)
 │   ├── migrations/           # Prisma migrations (single 0_init baseline)
 │   └── seed.ts               # Idempotent seed of the canonical permissions
-├── test/                     # Jest configs + e2e specs, helpers, globalSetup, Redis reset hook
-│                             # (unit and integration specs live beside the code they cover)
+├── test/                     # Jest configs + shared helpers, globalSetup, Redis reset hook
+│   ├── integration/          # .int-spec.ts suites (PostgreSQL + Redis)
+│   └── e2e/                  # .e2e-spec.ts suites (PostgreSQL + Redis)
+│                             # (unit specs live in __tests__/ folders beside the code they cover)
 ├── .editorconfig             # Editor configuration
 ├── .env.example              # Environment variable template
 ├── .env.test.example         # Test environment template (valid dummy secrets — copy to .env.test)

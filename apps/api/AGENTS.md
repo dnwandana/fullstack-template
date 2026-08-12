@@ -260,7 +260,7 @@ Signin hardening: every attempt runs one Argon2 verify against a real or dummy h
 
 `project:read_all` ("view all projects in the organization, not only those you belong to") is the most recently added permission; owner and admin have it, member and viewer do not. It exists so cross-project visibility is a grantable permission instead of a role-name special case.
 
-**Invariant: `ALL_PERMISSIONS` in `src/modules/orgs/system-roles.ts` and `PERMISSION_NAMES` in `prisma/seed.ts` must hold the same set of names.** Nothing enforces it: `ALL_PERMISSIONS` is not exported, `test/seed.int-spec.ts` only compares `PERMISSION_NAMES` against the seeded DB rows, and a name present in one and absent from the other compiles and seeds cleanly — it just silently fails to grant. Edit both in the same commit.
+**Invariant: `ALL_PERMISSIONS` in `src/modules/orgs/system-roles.ts` and `PERMISSION_NAMES` in `prisma/seed.ts` must hold the same set of names.** Nothing enforces it: `ALL_PERMISSIONS` is not exported, `test/integration/seed.int-spec.ts` only compares `PERMISSION_NAMES` against the seeded DB rows, and a name present in one and absent from the other compiles and seeds cleanly — it just silently fails to grant. Edit both in the same commit.
 
 ### Invitation system
 
@@ -347,7 +347,7 @@ How to run the suites is in [`README.md`](README.md#testing). The traps:
 | End-to-end  | `.e2e-spec.ts` | `test/jest-e2e.json`  | `(\.e2e-spec\|\.int-spec)\.ts$` | PostgreSQL + Redis |
 
 - **The two configs select disjoint sets.** `.int-spec.ts` and `.e2e-spec.ts` do not end in `.spec.ts`, so no file runs in both tiers and the two counts may be added. Renaming a spec moves it between tiers with no config edit — which is the point, and also means a mistyped suffix silently drops a file from both tiers rather than failing.
-- Unit specs live beside the code they cover; integration specs mostly do too. `test/` holds the e2e specs, the shared helpers, and the two configs.
+- Unit specs live in a `__tests__/` folder beside the code they cover. Integration specs live in `test/integration/` and e2e specs in `test/e2e/`; the `test/` root holds the shared helpers and the two configs.
 - **PostgreSQL has no automatic per-test reset.** `test/setup-e2e.ts` is a Jest `globalSetup`: it applies migrations and seeds the permissions (re-exporting `seedPermissions` from `prisma/seed.ts` so suites share one implementation) **once** per run. It also exports `truncateAll`, which each spec calls itself — a spec that omits the call leaks rows into the next one.
 - **Redis _is_ reset before every test.** `test/reset-redis-state.ts` is registered as `setupFilesAfterEnv` in `test/jest-e2e.json`, so its `beforeEach` is a root hook covering every test in every suite in the tier. It calls `flushRedis`, which issues `flushdb` (not `flushall`), and `.env.test` pins the connection to **database 1** so the blast radius is exactly the data the run owns. This exists because throttle counters and BullMQ job hashes are process-external: without it a full e2e pass exceeds `RATE_LIMIT_AUTH_MAX`, which is Joi-capped at 50 and so cannot simply be raised in `.env.test`. It flushes the whole db rather than matching key patterns because a pattern list must be kept in step with two libraries' key layouts — a renamed key would stop matching and nothing would fail until an unrelated suite did.
 - **Style**: boot the actual NestJS app (`test/create-test-app.ts`) and drive it with Supertest.

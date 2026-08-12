@@ -390,8 +390,8 @@ fullstack-template/
 │   │   │   ├── schema.prisma       # 12 domain models (@map/@@map keep the DB snake_case)
 │   │   │   ├── migrations/         # Prisma migrations (single 0_init baseline)
 │   │   │   └── seed.ts             # Idempotent seed of the 17 canonical permissions
-│   │   └── test/                   # e2e suites + shared helpers + both Jest configs
-│   │                               #   (unit and integration specs live beside the code they cover)
+│   │   └── test/                   # Shared helpers + both Jest configs; integration/ and e2e/ suites
+│   │                               #   (unit specs live in __tests__/ folders beside the code they cover)
 │   │
 │   └── app/
 │       └── src/
