@@ -40,17 +40,21 @@ export class OrgsController {
   @Put(":org_id")
   @OrgScoped("org:update")
   async update(
+    @CurrentUser("id") userId: string,
     @CurrentOrg() org: { id: string },
     @Body() dto: OrgBodyDto,
   ): Promise<Payload<OrgResponse>> {
-    const data = await this.orgs.update(org.id, dto)
+    const data = await this.orgs.update(org.id, userId, dto)
     return { message: "OK", data }
   }
 
   @Delete(":org_id")
   @OrgScoped("org:delete")
-  async remove(@CurrentOrg() org: { id: string }): Promise<Payload<null>> {
-    await this.orgs.remove(org.id)
+  async remove(
+    @CurrentUser("id") userId: string,
+    @CurrentOrg() org: { id: string },
+  ): Promise<Payload<null>> {
+    await this.orgs.remove(org.id, userId)
     return { message: "OK", data: null }
   }
 }

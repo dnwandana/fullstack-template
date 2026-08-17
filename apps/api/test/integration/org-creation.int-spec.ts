@@ -1,6 +1,7 @@
 import { Test } from "@nestjs/testing"
 import { PrismaModule } from "@core/database/prisma.module"
 import { PrismaService } from "@core/database/prisma.service"
+import { AuditService } from "@core/audit/audit.service"
 import { OrgsService } from "@modules/orgs/orgs.service"
 import { UsersService } from "@modules/users/users.service"
 import { truncateAll, seedPermissions } from "@test/setup-e2e"
@@ -12,7 +13,12 @@ describe("OrgsService.createWithSystemRoles", () => {
   beforeAll(async () => {
     const ref = await Test.createTestingModule({
       imports: [PrismaModule],
-      providers: [OrgsService, UsersService],
+      // OrgsService now injects AuditService; a stub keeps this suite about org creation.
+      providers: [
+        OrgsService,
+        UsersService,
+        { provide: AuditService, useValue: { record: jest.fn() } },
+      ],
     }).compile()
     orgs = ref.get(OrgsService)
     users = ref.get(UsersService)
