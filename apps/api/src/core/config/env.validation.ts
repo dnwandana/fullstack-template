@@ -34,6 +34,8 @@ const schema = Joi.object({
   REDIS_URL: Joi.string()
     .uri({ scheme: ["redis", "rediss"] })
     .required(),
+  // Audit rows older than this many days are removed by the nightly cleanup job.
+  AUDIT_RETENTION_DAYS: Joi.number().integer().positive().default(90),
   // Off in production by default: publishing a fresh deployment's full route and schema surface
   // should be deliberate. Keep this declared LAST — Joi resolves keys in declaration order and
   // reads siblings off `parent`, so NODE_ENV must already carry its default when this runs.

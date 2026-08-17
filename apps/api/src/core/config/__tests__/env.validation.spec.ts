@@ -47,4 +47,20 @@ describe("validate(env)", () => {
       /placeholder/,
     )
   })
+
+  describe("AUDIT_RETENTION_DAYS", () => {
+    it("defaults to 90", () => {
+      const value = validate({ ...base })
+      expect(value.AUDIT_RETENTION_DAYS).toBe(90)
+    })
+
+    it("rejects zero and negatives", () => {
+      expect(() => validate({ ...base, AUDIT_RETENTION_DAYS: "0" })).toThrow(
+        /AUDIT_RETENTION_DAYS/,
+      )
+      expect(() => validate({ ...base, AUDIT_RETENTION_DAYS: "-5" })).toThrow(
+        /AUDIT_RETENTION_DAYS/,
+      )
+    })
+  })
 })
