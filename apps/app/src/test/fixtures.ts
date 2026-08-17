@@ -7,6 +7,7 @@
  * the bare entity: responses are JSON, so `Date` fields arrive as ISO strings.
  */
 import type {
+  AuditLog,
   Envelope,
   Invitation,
   InvitationListItem,
@@ -120,6 +121,24 @@ export function makeProjectMember(o: Partial<Wire<ProjectMember>> = {}): Wire<Pr
     name: "Ada Lovelace",
     email: "ada@example.com",
     role_name: "member",
+    ...o,
+  }
+}
+
+export function makeAuditLog(o: Partial<Wire<AuditLog>> = {}): Wire<AuditLog> {
+  return {
+    id: "log-1",
+    org_id: "org-1",
+    project_id: null,
+    actor_id: "user-1",
+    actor_name: "Ada Lovelace",
+    actor_email: "ada@example.com",
+    action: "todo.created",
+    entity_type: "todo",
+    entity_id: "todo-1",
+    entity_name: "Write the spec",
+    changes: null,
+    created_at: AT,
     ...o,
   }
 }
