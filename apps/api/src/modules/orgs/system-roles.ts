@@ -19,6 +19,7 @@ const ALL_PERMISSIONS = [
   "todos:delete",
   "invitations:create",
   "invitations:manage",
+  "audit:read",
 ]
 
 /**

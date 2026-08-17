@@ -24,6 +24,7 @@ export const PERMISSION_NAMES = [
   "todos:delete",
   "invitations:create",
   "invitations:manage",
+  "audit:read",
 ] as const
 
 export type PermissionName = (typeof PERMISSION_NAMES)[number]
@@ -47,6 +48,7 @@ const PERMISSION_DESCRIPTIONS: Record<PermissionName, string> = {
   "todos:delete": "Delete todo items from a project",
   "invitations:create": "Send invitations to join the organization or a project",
   "invitations:manage": "View, resend, and revoke pending invitations",
+  "audit:read": "Read the org audit log page and endpoint",
 }
 
 /**
