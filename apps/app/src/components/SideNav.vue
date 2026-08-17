@@ -15,6 +15,7 @@ import { useRoute } from "vue-router"
 import { Menu } from "ant-design-vue"
 import {
   CheckSquareOutlined,
+  HistoryOutlined,
   ProjectOutlined,
   TeamOutlined,
   SafetyCertificateOutlined,
@@ -54,6 +55,7 @@ const ORG_ITEMS: NavItem[] = [
     permission: "invitations:manage",
   },
   { key: "OrgSettings", label: "Settings", icon: SettingOutlined, permission: "org:update" },
+  { key: "OrgAuditLog", label: "Audit Logs", icon: HistoryOutlined, permission: "audit:read" },
 ]
 
 const PROJECT_ITEMS: NavItem[] = [

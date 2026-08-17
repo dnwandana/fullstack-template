@@ -28,6 +28,7 @@ const PAGE_LABELS: Record<string, string> = {
   OrgRoles: "Roles",
   OrgInvitations: "Invitations",
   OrgSettings: "Settings",
+  OrgAuditLog: "Audit Logs",
   ProjectMembers: "Members",
   ProjectInvitations: "Invitations",
   ProjectSettings: "Settings",

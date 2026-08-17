@@ -8,6 +8,7 @@
  *   /orgs/:orgId/roles                       — org roles and permissions
  *   /orgs/:orgId/invitations                 — invitations sent for the org
  *   /orgs/:orgId/settings                    — org general settings
+ *   /orgs/:orgId/audit-logs                  — org audit log
  *   /orgs/:orgId/projects/:projectId         — list todos within a project
  *   /orgs/:orgId/projects/:projectId/todos/:id — single todo detail
  *   /orgs/:orgId/projects/:projectId/members   — project members
@@ -137,6 +138,12 @@ const routes: RouteRecordRaw[] = [
       roles: "OrgRoles",
       invitations: "OrgInvitations",
     }),
+  },
+  {
+    path: "/orgs/:orgId/audit-logs",
+    name: "OrgAuditLog",
+    component: () => import("@/views/orgs/OrgAuditLogView.vue"),
+    meta: { requiresAuth: true, permission: "audit:read" },
   },
 
   // ── Project routes (scoped within an organization) ───────────────────

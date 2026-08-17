@@ -32,13 +32,20 @@ describe("SideNav", () => {
   beforeEach(() => setActivePinia(createPinia()))
 
   it("shows the org group when an org is selected and no project is", () => {
-    const wrapper = mountWith(["org:read", "org:update", "invitations:manage", "project:read"])
+    const wrapper = mountWith([
+      "org:read",
+      "org:update",
+      "invitations:manage",
+      "project:read",
+      "audit:read",
+    ])
     const text = wrapper.text()
     expect(text).toContain("Projects")
     expect(text).toContain("Members")
     expect(text).toContain("Roles")
     expect(text).toContain("Invitations")
     expect(text).toContain("Settings")
+    expect(text).toContain("Audit Logs")
     expect(text).not.toContain("Todos")
   })
 
@@ -49,6 +56,7 @@ describe("SideNav", () => {
     expect(text).toContain("Roles")
     expect(text).not.toContain("Settings")
     expect(text).not.toContain("Invitations")
+    expect(text).not.toContain("Audit Logs")
   })
 
   it("switches to the project group when a project is selected", () => {

@@ -62,6 +62,7 @@ describe("legacy ?tab= redirects", () => {
     expect(byName("OrgRoles")?.meta.permission).toBe("org:read")
     expect(byName("OrgInvitations")?.meta.permission).toBe("invitations:manage")
     expect(byName("OrgSettings")?.meta.permission).toBe("org:update")
+    expect(byName("OrgAuditLog")?.meta.permission).toBe("audit:read")
     expect(byName("ProjectsList")?.meta.permission).toBe("project:read")
   })
 })
