@@ -25,9 +25,13 @@ export interface CleanupResult {
   refreshTokens: number
   resetTokens: number
   invitations: number
+  auditLogs: number
 }
 
-/** Nightly pruner for expired refresh tokens, password-reset tokens and invitations. */
+/**
+ * Nightly pruner for expired refresh tokens, password-reset tokens, invitations, and
+ * audit logs past their retention window.
+ */
 @Injectable()
 export class CleanupService {
   private readonly logger = new Logger(CleanupService.name)
@@ -50,7 +54,8 @@ export class CleanupService {
       const r = await this.run()
       this.logger.log(
         `Cleanup removed ${r.refreshTokens} refresh tokens, ` +
-          `${r.resetTokens} reset tokens, ${r.invitations} invitations`,
+          `${r.resetTokens} reset tokens, ${r.invitations} invitations, ` +
+          `${r.auditLogs} audit logs`,
       )
     } catch (err) {
       // @nestjs/schedule does not catch rejections from cron handlers, so without this the
@@ -73,6 +78,9 @@ export class CleanupService {
     const refreshCutoff = new Date(now - REFRESH_GRACE_MS)
     const resetCutoff = new Date(now - RESET_GRACE_MS)
     const invitationCutoff = new Date(now - INVITATION_GRACE_MS)
+    // Read through ConfigService so Joi's default (90) applies when the var is unset.
+    const auditRetentionDays = this.config.get<number>("AUDIT_RETENTION_DAYS", 90)
+    const auditCutoff = new Date(now - auditRetentionDays * DAY_MS)
 
     // Raw SQL, not deleteMany: Prisma cannot express DELETE … LIMIT, and the bounded subquery
     // is what caps each transaction. Every filter column is indexed (the expires_at/revoked_at
@@ -105,7 +113,20 @@ export class CleanupService {
             LIMIT ${limit})`,
     )
 
-    return { refreshTokens, resetTokens, invitations }
+    // Accepted trade-off: this created_at-only scan has no dedicated index — both audit_logs
+    // indexes lead with org_id. The nightly sweep on a single-VPS deployment tolerates a
+    // sequential scan, and the spec defines only the two composite indexes.
+    const auditLogs = await this.sweep(
+      batchSize,
+      (tx, limit) =>
+        tx.$executeRaw`
+          DELETE FROM audit_logs WHERE id IN (
+            SELECT id FROM audit_logs
+            WHERE created_at < ${auditCutoff}
+            LIMIT ${limit})`,
+    )
+
+    return { refreshTokens, resetTokens, invitations, auditLogs }
   }
 
   // Batches until one comes up short. The lock is transaction-scoped, so it is released between

@@ -89,7 +89,12 @@ describe("CleanupService", () => {
 
   it("is idempotent", async () => {
     await service.run()
-    expect(await service.run()).toEqual({ refreshTokens: 0, resetTokens: 0, invitations: 0 })
+    expect(await service.run()).toEqual({
+      refreshTokens: 0,
+      resetTokens: 0,
+      invitations: 0,
+      auditLogs: 0,
+    })
   })
 
   it("deletes a revoked-but-unexpired token once its grace window has passed", async () => {
@@ -152,6 +157,50 @@ describe("CleanupService", () => {
     expect(result.invitations).toBe(1)
     const rows = await prisma.invitation.findMany({ select: { inviteeEmail: true } })
     expect(rows.map((r) => r.inviteeEmail)).toEqual(["recent@x.io"])
+  })
+
+  it("deletes audit logs past retention and keeps recent ones", async () => {
+    const org = await prisma.organization.create({
+      data: { id: randomUUID(), name: "Acme", createdBy: userId },
+      select: { id: true },
+    })
+    const orgId = org.id
+    // 91 days is past the default 90-day retention window; the second row is fresh.
+    const old = new Date(Date.now() - 91 * DAY)
+    await prisma.auditLog.createMany({
+      data: [
+        {
+          id: randomUUID(),
+          orgId,
+          actorId: null,
+          actorName: "Unknown",
+          actorEmail: null,
+          action: "todo.created",
+          entityType: "todo",
+          entityId: randomUUID(),
+          entityName: "old row",
+          createdAt: old,
+        },
+        {
+          id: randomUUID(),
+          orgId,
+          actorId: null,
+          actorName: "Unknown",
+          actorEmail: null,
+          action: "todo.created",
+          entityType: "todo",
+          entityId: randomUUID(),
+          entityName: "recent row",
+        },
+      ],
+    })
+
+    const result = await service.run(100)
+
+    expect(result.auditLogs).toBe(1)
+    const remaining = await prisma.auditLog.findMany({ where: { orgId } })
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0]?.entityName).toBe("recent row")
   })
 
   it("exposes the CLEANUP_ENABLED default through ConfigService", () => {
