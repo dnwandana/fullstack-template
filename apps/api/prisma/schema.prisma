@@ -38,6 +38,7 @@ model Organization {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  auditLogs   AuditLog[]
   creator     User         @relation(fields: [createdBy], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "organizations_created_by_foreign")
   invitations Invitation[]
   orgMembers  OrgMember[]
@@ -231,4 +232,29 @@ model PasswordResetToken {
   @@index([expiresAt], map: "password_reset_tokens_expires_at_index")
   @@index([userId], map: "password_reset_tokens_user_id_index")
   @@map("password_reset_tokens")
+}
+
+// Append-only: no updatedAt (precedent: Permission). The org FK cascades — the org
+// page is the log's only entry point, so the log dies with the org. actor_id and
+// entity_id carry no FK: a removed user or deleted entity keeps its trail, with the
+// *_name columns as display snapshots so the UI never joins.
+model AuditLog {
+  id         String   @id @db.Uuid
+  orgId      String   @map("org_id") @db.Uuid
+  projectId  String?  @map("project_id") @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  actorName  String   @map("actor_name")
+  actorEmail String?  @map("actor_email")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id") @db.Uuid
+  entityName String   @map("entity_name")
+  changes    Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "audit_logs_org_id_foreign")
+
+  @@index([orgId, createdAt], map: "audit_logs_org_id_created_at_index")
+  @@index([orgId, projectId, createdAt], map: "audit_logs_org_id_project_id_created_at_index")
+  @@map("audit_logs")
 }

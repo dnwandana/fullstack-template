@@ -154,6 +154,24 @@ CREATE TABLE "password_reset_tokens" (
     CONSTRAINT "password_reset_tokens_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "audit_logs" (
+    "id" UUID NOT NULL,
+    "org_id" UUID NOT NULL,
+    "project_id" UUID,
+    "actor_id" UUID,
+    "actor_name" TEXT NOT NULL,
+    "actor_email" TEXT,
+    "action" TEXT NOT NULL,
+    "entity_type" TEXT NOT NULL,
+    "entity_id" UUID NOT NULL,
+    "entity_name" TEXT NOT NULL,
+    "changes" JSONB,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "audit_logs_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_unique" ON "users"("email");
 
@@ -223,6 +241,12 @@ CREATE INDEX "password_reset_tokens_expires_at_index" ON "password_reset_tokens"
 -- CreateIndex
 CREATE INDEX "password_reset_tokens_user_id_index" ON "password_reset_tokens"("user_id");
 
+-- CreateIndex
+CREATE INDEX "audit_logs_org_id_created_at_index" ON "audit_logs"("org_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "audit_logs_org_id_project_id_created_at_index" ON "audit_logs"("org_id", "project_id", "created_at");
+
 -- AddForeignKey
 ALTER TABLE "organizations" ADD CONSTRAINT "organizations_created_by_foreign" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
@@ -285,4 +309,7 @@ ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_user_id_foreign" FOR
 
 -- AddForeignKey
 ALTER TABLE "password_reset_tokens" ADD CONSTRAINT "password_reset_tokens_user_id_foreign" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_org_id_foreign" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 
