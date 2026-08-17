@@ -49,16 +49,20 @@ export class ProjectsController {
   @Put(":project_id")
   @ProjectScoped("project:update")
   async update(
+    @CurrentUser("id") userId: string,
     @CurrentProject() project: { id: string },
     @Body() dto: ProjectBodyDto,
   ): Promise<Payload<ProjectResponse>> {
-    return { message: "OK", data: await this.projects.update(project.id, dto) }
+    return { message: "OK", data: await this.projects.update(project.id, userId, dto) }
   }
 
   @Delete(":project_id")
   @ProjectScoped("project:delete")
-  async remove(@CurrentProject() project: { id: string }): Promise<Payload<null>> {
-    await this.projects.remove(project.id)
+  async remove(
+    @CurrentUser("id") userId: string,
+    @CurrentProject() project: { id: string },
+  ): Promise<Payload<null>> {
+    await this.projects.remove(project.id, userId)
     return { message: "OK", data: null }
   }
 }

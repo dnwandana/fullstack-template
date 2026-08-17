@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common"
 import { randomUUID } from "crypto"
 import { PrismaService } from "@core/database/prisma.service"
+import { AuditService } from "@core/audit/audit.service"
+import { diffFields } from "@core/audit/diff-fields"
 import { ProjectBodyDto } from "./dto/project-body.dto"
 import { PROJECT_SELECT } from "./project-row"
 import { ProjectResponse, toProjectResponse } from "./dto/project.response"
@@ -11,7 +13,10 @@ import { ProjectResponse, toProjectResponse } from "./dto/project.response"
  */
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   /** Every project in the org — the caller must have confirmed `project:read_all` first. */
   async findManyByOrgId(orgId: string): Promise<ProjectResponse[]> {
@@ -61,6 +66,16 @@ export class ProjectsService {
       }
       return created
     })
+    // Recorded after the transaction commits, never inside it.
+    await this.audit.record({
+      orgId,
+      projectId: project.id,
+      actorId: userId,
+      action: "project.created",
+      entityType: "project",
+      entityId: project.id,
+      entityName: project.name,
+    })
     return toProjectResponse(project)
   }
 
@@ -73,17 +88,59 @@ export class ProjectsService {
   }
 
   /** Full replace: a `description` omitted from the body is written back as null. */
-  async update(projectId: string, dto: ProjectBodyDto): Promise<ProjectResponse> {
+  async update(projectId: string, actorId: string, dto: ProjectBodyDto): Promise<ProjectResponse> {
+    // The raw Prisma row supplies the camelCase `orgId` the audit entry needs; the method
+    // itself has no org parameter.
+    const before = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { orgId: true, name: true, description: true },
+    })
     const project = await this.prisma.project.update({
       where: { id: projectId },
       data: { name: dto.name, description: dto.description ?? null },
       select: PROJECT_SELECT,
     })
+    // A null `before` means the row vanished between the read and the update; the update
+    // then throws P2025 before this line, so the guard only satisfies the type checker.
+    if (before) {
+      const changes = diffFields(
+        { name: before.name, description: before.description },
+        { name: project.name, description: project.description },
+        ["name", "description"],
+      )
+      await this.audit.record({
+        orgId: before.orgId,
+        projectId,
+        actorId,
+        action: "project.updated",
+        entityType: "project",
+        entityId: projectId,
+        entityName: project.name,
+        changes,
+      })
+    }
     return toProjectResponse(project)
   }
 
   /** Uses `deleteMany`, so deleting an already-gone project is a no-op rather than a P2025/404. */
-  async remove(projectId: string): Promise<void> {
+  async remove(projectId: string, actorId: string): Promise<void> {
+    const before = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { orgId: true, name: true },
+    })
     await this.prisma.project.deleteMany({ where: { id: projectId } })
+    // Recorded after the delete: the audit table has no project FK, so a post-delete insert
+    // is safe — unlike orgs. A missing `before` means the no-op delete path; record nothing.
+    if (before) {
+      await this.audit.record({
+        orgId: before.orgId,
+        projectId,
+        actorId,
+        action: "project.deleted",
+        entityType: "project",
+        entityId: projectId,
+        entityName: before.name,
+      })
+    }
   }
 }
