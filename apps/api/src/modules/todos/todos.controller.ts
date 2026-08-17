@@ -16,6 +16,7 @@ import { TodoBodyDto } from "./dto/todo-body.dto"
 import { ListTodosDto } from "./dto/list-todos.dto"
 import { BulkDeleteDto } from "./dto/bulk-delete.dto"
 import { CurrentUser } from "@shared/decorators/current-user.decorator"
+import { CurrentOrg } from "@shared/decorators/current-org.decorator"
 import { CurrentProject } from "@shared/decorators/current-project.decorator"
 import { RequirePermission } from "@shared/decorators/require-permission.decorator"
 import { ProjectScoped } from "@tenancy/scoped.decorators"
@@ -40,11 +41,12 @@ export class TodosController {
   @Post()
   @RequirePermission("todos:create")
   async create(
+    @CurrentOrg() org: { id: string },
     @CurrentProject() project: { id: string },
     @CurrentUser("id") userId: string,
     @Body() dto: TodoBodyDto,
   ): Promise<Payload<TodoResponse>> {
-    return { message: "Created", data: await this.todos.create(project.id, userId, dto) }
+    return { message: "Created", data: await this.todos.create(org.id, project.id, userId, dto) }
   }
 
   @Get(":todo_id")
@@ -59,31 +61,40 @@ export class TodosController {
   @Put(":todo_id")
   @RequirePermission("todos:update")
   async update(
+    @CurrentOrg() org: { id: string },
     @CurrentProject() project: { id: string },
+    @CurrentUser("id") userId: string,
     @Param("todo_id", ParseUUIDPipe) todoId: string,
     @Body() dto: TodoBodyDto,
   ): Promise<Payload<TodoResponse>> {
-    return { message: "OK", data: await this.todos.update(project.id, todoId, dto) }
+    return {
+      message: "OK",
+      data: await this.todos.update(org.id, project.id, userId, todoId, dto),
+    }
   }
 
   // Ids arrive as a comma-separated `ids` query param, 1-50 UUIDs; unmatched ids are ignored.
   @Delete()
   @RequirePermission("todos:delete")
   async bulkRemove(
+    @CurrentOrg() org: { id: string },
     @CurrentProject() project: { id: string },
+    @CurrentUser("id") userId: string,
     @Query() query: BulkDeleteDto,
   ): Promise<Payload<null>> {
-    await this.todos.removeMany(project.id, query.ids)
+    await this.todos.removeMany(org.id, project.id, userId, query.ids)
     return { message: "OK", data: null }
   }
 
   @Delete(":todo_id")
   @RequirePermission("todos:delete")
   async removeOne(
+    @CurrentOrg() org: { id: string },
     @CurrentProject() project: { id: string },
+    @CurrentUser("id") userId: string,
     @Param("todo_id", ParseUUIDPipe) todoId: string,
   ): Promise<Payload<null>> {
-    await this.todos.removeOne(project.id, todoId)
+    await this.todos.removeOne(org.id, project.id, userId, todoId)
     return { message: "OK", data: null }
   }
 }

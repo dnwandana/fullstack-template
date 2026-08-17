@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common"
 import { randomUUID } from "crypto"
+import { AuditService } from "@core/audit/audit.service"
+import { diffFields } from "@core/audit/diff-fields"
 import { PrismaService } from "@core/database/prisma.service"
 import { PaginationService } from "@shared/pagination/pagination.service"
 import { TodoBodyDto } from "./dto/todo-body.dto"
@@ -18,6 +20,7 @@ export class TodosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pagination: PaginationService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -57,7 +60,12 @@ export class TodosService {
   }
 
   /** Omitted body fields take creation defaults: `description` null, `is_completed` false. */
-  async create(projectId: string, userId: string, dto: TodoBodyDto): Promise<TodoResponse> {
+  async create(
+    orgId: string,
+    projectId: string,
+    userId: string,
+    dto: TodoBodyDto,
+  ): Promise<TodoResponse> {
     const todo = await this.prisma.todo.create({
       data: {
         id: randomUUID(),
@@ -69,6 +77,15 @@ export class TodosService {
       },
       select: TODO_SELECT,
     })
+    await this.audit.record({
+      orgId,
+      projectId,
+      actorId: userId,
+      action: "todo.created",
+      entityType: "todo",
+      entityId: todo.id,
+      entityName: todo.title,
+    })
     return toTodoResponse(todo)
   }
 
@@ -77,7 +94,18 @@ export class TodosService {
    * same `?? null` / `?? false` fallbacks `create()` uses. Throws 404 when no todo with that id
    * exists inside this project.
    */
-  async update(projectId: string, todoId: string, dto: TodoBodyDto): Promise<TodoResponse> {
+  async update(
+    orgId: string,
+    projectId: string,
+    actorId: string,
+    todoId: string,
+    dto: TodoBodyDto,
+  ): Promise<TodoResponse> {
+    // Read before the write: the audit diff needs the pre-update field values.
+    const before = await this.prisma.todo.findFirst({
+      where: { id: todoId, projectId },
+      select: TODO_SELECT,
+    })
     // Scoped by projectId as well as id: ProjectGuard ties the project to the org, but nothing
     // ties this todo to that project, so this is what blocks a cross-tenant update by foreign id.
     const result = await this.prisma.todo.updateMany({
@@ -93,16 +121,77 @@ export class TodosService {
       where: { id: todoId },
       select: TODO_SELECT,
     })
+    // Diff over the response shapes so the `changes` keys match the wire format the UI
+    // shows. The spread copies each class instance into a plain record for `diffFields`.
+    const changes = before
+      ? diffFields({ ...toTodoResponse(before) }, { ...toTodoResponse(todo) }, [
+          "title",
+          "description",
+          "is_completed",
+        ])
+      : null
+    await this.audit.record({
+      orgId,
+      projectId,
+      actorId,
+      action: "todo.updated",
+      entityType: "todo",
+      entityId: todoId,
+      entityName: todo.title,
+      changes,
+    })
     return toTodoResponse(todo)
   }
 
   /** Silent: ids outside this project are simply not deleted, never a 404. */
-  async removeMany(projectId: string, ids: string[]): Promise<void> {
+  async removeMany(
+    orgId: string,
+    projectId: string,
+    actorId: string,
+    ids: string[],
+  ): Promise<void> {
+    // Read the rows before the delete: the audit entries need their ids and titles.
+    const rows = await this.prisma.todo.findMany({
+      where: { projectId, id: { in: ids } },
+      select: { id: true, title: true },
+    })
     await this.prisma.todo.deleteMany({ where: { projectId, id: { in: ids } } })
+    for (const row of rows) {
+      await this.audit.record({
+        orgId,
+        projectId,
+        actorId,
+        action: "todo.deleted",
+        entityType: "todo",
+        entityId: row.id,
+        entityName: row.title,
+      })
+    }
   }
 
   /** Idempotent: deleting a missing or foreign-project todo is a no-op, not a 404. */
-  async removeOne(projectId: string, todoId: string): Promise<void> {
-    await this.prisma.todo.deleteMany({ where: { projectId, id: todoId } })
+  async removeOne(
+    orgId: string,
+    projectId: string,
+    actorId: string,
+    todoId: string,
+  ): Promise<void> {
+    // Read the row before the delete: the audit entry needs its title.
+    const row = await this.prisma.todo.findFirst({
+      where: { id: todoId, projectId },
+      select: { id: true, title: true },
+    })
+    const result = await this.prisma.todo.deleteMany({ where: { projectId, id: todoId } })
+    if (row && result.count === 1) {
+      await this.audit.record({
+        orgId,
+        projectId,
+        actorId,
+        action: "todo.deleted",
+        entityType: "todo",
+        entityId: row.id,
+        entityName: row.title,
+      })
+    }
   }
 }
