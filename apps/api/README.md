@@ -112,7 +112,7 @@ cp .env.example .env
 
 # 3. Set up the database
 corepack pnpm db:migrate       # prisma migrate deploy
-corepack pnpm db:seed          # prisma db seed — 17 canonical permissions (idempotent)
+corepack pnpm db:seed          # prisma db seed — 18 canonical permissions (idempotent)
 
 # 4. Start development server
 corepack pnpm dev
@@ -145,6 +145,7 @@ Create a `.env` file in the project root with the following variables:
 | `APP_BASE_URL`             | Public SPA origin for invite links                                              | `http://localhost:8080`            | No\*     |
 | `RATE_LIMIT_AUTH_MAX`      | Auth endpoint rate limit (per 15min)                                            | `10` (max 50)                      | No       |
 | `RATE_LIMIT_GENERAL_MAX`   | Global rate limit (per 15min, shared across instances) — integer ≥ 1            | `1000`                             | No       |
+| `AUDIT_RETENTION_DAYS`     | Retention window for audit log entries — positive integer, in days              | `90`                               | No       |
 
 `REDIS_URL` is required in every environment and has **no default** — Redis backs the job queue, and BullMQ ships no in-memory driver, so an optional Redis with a fallback would mean jobs are accepted and never run while `/health/ready` still reports healthy. Local development uses `redis://localhost:6379`. The local Docker stack ships a `redis` service, so inside that container the host must be the compose service name (`redis://redis:6379`) — `localhost` there is the API process itself. The production stack ships no Redis container: point `REDIS_URL` at a managed instance (`rediss://` for TLS), the same way `DATABASE_URL` points at a managed PostgreSQL. `.env.test` deliberately points at **database 1** (`redis://localhost:6379/1`) so the test suite's writes and flushes cannot evict whatever local development is keeping on db 0.
 
@@ -304,12 +305,12 @@ corepack pnpm format           # Apply formatting with Prettier
 ```bash
 corepack pnpm db:migrate        # prisma migrate deploy (apply pending migrations)
 corepack pnpm migrate:dev       # prisma migrate dev (create a new migration in dev)
-corepack pnpm db:seed           # prisma db seed (17 canonical permissions, idempotent)
+corepack pnpm db:seed           # prisma db seed (18 canonical permissions, idempotent)
 corepack pnpm db:generate       # prisma generate (regenerate the client after schema edits)
 corepack pnpm prisma:pull       # prisma db pull (introspect the DB into schema.prisma)
 ```
 
-Migrations never run automatically — apply them explicitly on every environment. The seed idempotently upserts the 17 canonical permissions; it does not populate demo data.
+Migrations never run automatically — apply them explicitly on every environment. The seed idempotently upserts the 18 canonical permissions; it does not populate demo data.
 
 ## API Documentation
 
@@ -441,6 +442,14 @@ Create and update bodies take `permission_ids: string[]`.
 | POST   | `/api/v1/invitations/:invitation_id/accept`              | Accept invitation — body `{ token }` | Access Token        | —                    |
 | POST   | `/api/v1/invitations/:invitation_id/decline`             | Decline invitation                   | Access Token        | —                    |
 
+### Audit Log Endpoints (nested under org)
+
+| Method | Endpoint                          | Description                                         | Permission   |
+| ------ | --------------------------------- | --------------------------------------------------- | ------------ |
+| GET    | `/api/v1/orgs/:org_id/audit-logs` | List audit logs (paginated, filterable, searchable) | `audit:read` |
+
+The list is newest-first by default. Optional query filters: `project_id`, `actor_id`, `action`, `entity_type`, `date_from`, `date_to`; `search` matches the entity name.
+
 ### Permissions Endpoint
 
 | Method | Endpoint              | Description                 | Auth Required | Permission |
@@ -463,10 +472,13 @@ Authentication uses **httpOnly cookies** set by the server. Tokens are never exp
 ## System Roles & Permissions
 
 There are 4 built-in system roles per organization — `owner`, `admin`, `member`, `viewer` — and
-custom roles can be created with any combination of the 17 system permissions. Which permission
+custom roles can be created with any combination of the 18 system permissions. Which permission
 each role holds is documented in [`AGENTS.md`](AGENTS.md#permissions), derived from
 `src/modules/orgs/system-roles.ts` and seeded (with descriptions) by `prisma/seed.ts`. Which permission
 each endpoint requires is the **Permission** column of [API Endpoints](#api-endpoints) above.
+
+`audit:read` ("Read the org audit log page and endpoint") is held by `owner` and `admin`;
+`member` and `viewer` do not hold it. Custom roles can select it.
 
 ## Project Structure
 

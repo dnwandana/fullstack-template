@@ -35,6 +35,8 @@ URLs redirect to the matching route via a `beforeEnter` guard (`redirectLegacyTa
 
 `/orgs`, `/invitations`, `/login`, `/signup`, and `/invite/:invitationId` carry no `meta.permission` at all. `OrgRoles` gates on `org:read` rather than `org:manage_roles` on purpose — listing roles needs only `org:read` on the API side; editing is gated separately, in-template, on `org:manage_roles`.
 
+**Audit log page**: `OrgAuditLog` (`/orgs/:orgId/audit-logs`) shows the org audit log and carries `meta.permission: "audit:read"`; the `SideNav` item and the `AppBreadcrumb` label key off the same route name. The page follows the standard chain: `views/orgs/OrgAuditLogView.vue` → `composables/useAuditLogs.ts` → `stores/auditLogs.ts` → `api/auditLogs.ts`. `components/AuditLogTable.vue` renders the table, with expandable rows for the `changes` diff.
+
 **Navigation guard**: Unauthenticated users on `requiresAuth` routes are redirected to `/login` with `?redirect=`. Authenticated users on `requiresGuest` routes are redirected to `/orgs`. Routes carrying **neither** flag are public in any session state — the guard only acts on those two meta flags. `/invite/:invitationId` relies on that deliberately: `requiresAuth` would bounce a brand-new invitee to `/login` before they could see what they were invited to, and `requiresGuest` would bounce a signed-in user to `/orgs` before they could accept. Auth store is initialized on first navigation via `GET /auth/me`.
 
 **Invite landing page**: `/invite/:invitationId?token=<64hex>` reads the token from the query string, calls the public preview endpoint, and renders one of `loading | no-token | invalid | expired | handled | guest | wrong-account | ready`. Arriving without `?token=` short-circuits to `no-token`, which is deliberately distinct from `invalid` — "no credential supplied" is not "credential rejected", and the in-app invitation list links here by id without a token, so telling those users the invitation is invalid would be a lie. That is also why `MyInvitationsView`'s primary action is **"Open invitation"** (navigation to `/invite/:id`) rather than "Accept": that view has no token and cannot redeem directly. Decline still works there, since declining requires no token.
@@ -74,7 +76,7 @@ Custom fetch-based client (NOT Axios). Key behaviors:
 
 ## Stores
 
-Eight Pinia setup stores in `src/stores/`; the file exports a `use<Name>Store` factory (`stores/auth.ts` → `useAuthStore`). Read the file for its state and actions. What the source does not make obvious:
+Nine Pinia setup stores in `src/stores/`; the file exports a `use<Name>Store` factory (`stores/auth.ts` → `useAuthStore`). Read the file for its state and actions. What the source does not make obvious:
 
 `lastAcceptUrl` (in `stores/invitations.ts`) holds `response.data.data?.accept_url` from the most recent invite/resend, so the UI can surface the raw link — no mail provider ships with the template.
 
@@ -89,11 +91,11 @@ Without this, the SPA keeps rendering actions the API will now reject, and — w
 
 ## Composables
 
-Eight composables in `src/composables/`, one per domain plus `usePermissions`. The split is visible in every one: state is re-exposed as `computed()` (read-only to the view), pure store actions are **delegated by reference**, and only the wrappers that add modal state or a confirmation live in the composable itself. The `clear*` family is pure delegation — it lets a view reset store state without importing the store (`TodoDetailView` calls `clearCurrentTodo()` when the `:id` route param disappears). Most of the family is currently re-exported but unused by any view; keep it wired rather than assuming it is dead.
+Nine composables in `src/composables/`, one per domain plus `usePermissions`. The split is visible in every one: state is re-exposed as `computed()` (read-only to the view), pure store actions are **delegated by reference**, and only the wrappers that add modal state or a confirmation live in the composable itself. The `clear*` family is pure delegation — it lets a view reset store state without importing the store (`TodoDetailView` calls `clearCurrentTodo()` when the `:id` route param disappears). Most of the family is currently re-exported but unused by any view; keep it wired rather than assuming it is dead.
 
 ## Components
 
-Fifteen components in `src/components/`; names are self-describing and the files are short. Two contracts worth stating:
+Sixteen components in `src/components/`; names are self-describing and the files are short. Two contracts worth stating:
 
 `MembersTable` renders Name, Email, Role, Joined (`joined_at`), Actions. Role renders an inline change dropdown when `canUpdateRole`, otherwise a static tag; the Actions column is **appended only when `canRemove`** and holds a Popconfirm-guarded remove button. A caller that forgets those props silently gets a read-only table. This one is conditional rather than structural, which is why it is not visible from the props alone.
 

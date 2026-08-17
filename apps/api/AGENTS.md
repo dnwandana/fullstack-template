@@ -25,7 +25,7 @@ Every script is listed and annotated in [`README.md`](README.md#development-comm
 
 | Directory      | Holds                                                                                                                           | May import from                |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `src/core/`    | Infrastructure that owns a connection or global wiring: `config/`, `database/`, `redis/`, `queue/`, `filters/`, `interceptors/` | `shared/` only                 |
+| `src/core/`    | Infrastructure that owns a connection or global wiring: `config/`, `database/`, `redis/`, `queue/`, `audit/`, `filters/`, `interceptors/` | `shared/` only                 |
 | `src/shared/`  | Stateless helpers with no infrastructure of their own: `dto/`, `pagination/`, `decorators/`, `validators/`, `utils/`            | nothing in this app            |
 | `src/tenancy/` | The org/project guard chain and `MembershipService` — cross-cutting authorization, not a feature                                | `core/`, `shared/`             |
 | `src/modules/` | One self-contained feature module per directory                                                                                 | `core/`, `shared/`, `tenancy/` |
@@ -154,6 +154,7 @@ Every route is served under `/api/v1`. `API_PREFIX` (`"api"`) and `API_VERSION` 
 - `ScheduleModule.forRoot()` — required for `@Cron` to fire at all. Without it `CleanupService`'s job is silently inert.
 - `RedisModule` (`src/core/redis/`) — a **global** module providing the `REDIS_CLIENT` token (an ioredis client), used by the throttler storage and by BullMQ.
 - `QueueModule` (`src/core/queue/`) — registers the BullMQ `notifications` queue and its `NotificationProcessor`.
+- `AuditModule` (`src/core/audit/`) — a **global** module providing `AuditService`; mutation services inject it without a module import. See [Audit log](#audit-log).
 
 ### Redis and the notification queue
 
@@ -180,6 +181,22 @@ its container healthcheck — because that healthcheck probes `/health/live`, wh
 touches a dependency. `/health/ready` does not probe `REDIS_CLIENT` either, so nothing in the
 running system reports the degradation. Treat the requirement as an operational contract, not
 something the process enforces on itself.
+
+### Audit log
+
+The global `AuditModule` (`src/core/audit/`) provides `AuditService`. Mutation services call
+`AuditService.record` after each successful write. Three invariants:
+
+- **Writes are best-effort.** `record` swallows every failure and logs it through `Logger` — an
+  audit failure must never fail the user's mutation. Do not wrap a call to `record` in error
+  handling of your own, and do not await it inside the mutation's transaction.
+- **Rows are append-only.** No code path updates or deletes an `audit_logs` row; the retention
+  sweep in `CleanupService` is the only deleter.
+- **`org.deleted` entries do not survive their org.** The `AuditLog.organization` relation cascades on
+  delete, so an org deletion removes its own audit trail with it.
+
+`audit-action.ts` owns the `AuditAction` union. `@fullstack/contracts` is type-only and cannot
+export a runtime list, so the SPA keeps its own display map and falls back to the raw string.
 
 ### Guard stack (auth → tenant → permission)
 
@@ -257,6 +274,8 @@ Signin hardening: every attempt runs one Argon2 verify against a real or dummy h
 | admin  | All except `org:delete` and `org:manage_roles`                    |
 | member | `org:read`, `project:read`, `todos:*` (create/read/update/delete) |
 | viewer | `org:read`, `project:read`, `todos:read`                          |
+
+`audit:read` gates the audit-log endpoint; owner and admin hold it by default.
 
 `project:read_all` ("view all projects in the organization, not only those you belong to") is the most recently added permission; owner and admin have it, member and viewer do not. It exists so cross-project visibility is a grantable permission instead of a role-name special case.
 
