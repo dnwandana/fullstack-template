@@ -47,11 +47,12 @@ export class ProjectMembersController {
   @Delete(":user_id")
   @RequirePermission("project:manage_members")
   async remove(
+    @CurrentOrg() org: { id: string },
     @CurrentProject() project: { id: string },
     @CurrentUser("id") actingUserId: string,
     @Param("user_id", ParseUUIDPipe) targetUserId: string,
   ) {
-    await this.members.removeProjectMember(project.id, actingUserId, targetUserId)
+    await this.members.removeProjectMember(org.id, project.id, actingUserId, targetUserId)
     return { message: "OK", data: null }
   }
 }

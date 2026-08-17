@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { PrismaService } from "@core/database/prisma.service"
+import { AuditService } from "@core/audit/audit.service"
 import { PaginationService } from "@shared/pagination/pagination.service"
 import { toSnakeKeys } from "@shared/utils/to-snake-keys"
 import { ListQueryDto } from "@shared/pagination/list-query.dto"
@@ -16,6 +17,7 @@ export class MembersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pagination: PaginationService,
+    private readonly audit: AuditService,
   ) {}
 
   // Serializes the owner-invariant checks per org: without it, two concurrent demotions each
@@ -137,7 +139,9 @@ export class MembersService {
     roleId: string,
     actorPermissions: string[],
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    // The transaction returns the response plus the names the audit entry needs; the entry is
+    // recorded after the commit, so a rolled-back change leaves no entry.
+    const result = await this.prisma.$transaction(async (tx) => {
       await this.lockOrg(tx, orgId)
       const role = await tx.role.findFirst({
         where: { id: roleId, orgId },
@@ -150,7 +154,7 @@ export class MembersService {
 
       const target = await tx.orgMember.findUnique({
         where: { userId_orgId: { userId: targetUserId, orgId } },
-        select: { role: { select: { name: true } } },
+        select: { role: { select: { name: true } }, user: { select: { name: true } } },
       })
       if (!target) throw new NotFoundException("User is not a member of this organization")
 
@@ -185,12 +189,27 @@ export class MembersService {
       })
       const { user, role: updatedRole, ...cols } = updated
       return {
-        ...toSnakeKeys(cols),
-        name: user.name,
-        email: user.email,
-        role_name: updatedRole.name,
+        response: {
+          ...toSnakeKeys(cols),
+          name: user.name,
+          email: user.email,
+          role_name: updatedRole.name,
+        },
+        targetName: target.user.name,
+        oldRoleName: target.role.name,
+        newRoleName: updatedRole.name,
       }
     })
+    await this.audit.record({
+      orgId,
+      actorId: actingUserId,
+      action: "member.role_changed",
+      entityType: "member",
+      entityId: targetUserId,
+      entityName: result.targetName,
+      changes: { role: { from: result.oldRoleName, to: result.newRoleName } },
+    })
+    return result.response
   }
 
   /**
@@ -199,11 +218,13 @@ export class MembersService {
    * demotion cannot slip past the last-owner check and strand the org ownerless.
    */
   async removeOrgMember(orgId: string, actingUserId: string, targetUserId: string) {
-    await this.prisma.$transaction(async (tx) => {
+    // The transaction returns the target's name; the audit entry is recorded after the commit,
+    // so a rolled-back removal leaves no entry.
+    const targetName = await this.prisma.$transaction(async (tx) => {
       await this.lockOrg(tx, orgId)
       const target = await tx.orgMember.findUnique({
         where: { userId_orgId: { userId: targetUserId, orgId } },
-        select: { role: { select: { name: true } } },
+        select: { role: { select: { name: true } }, user: { select: { name: true } } },
       })
       if (!target) throw new NotFoundException("User is not a member of this organization")
 
@@ -220,6 +241,15 @@ export class MembersService {
       await tx.orgMember.delete({
         where: { userId_orgId: { userId: targetUserId, orgId } },
       })
+      return target.user.name
+    })
+    await this.audit.record({
+      orgId,
+      actorId: actingUserId,
+      action: "member.removed",
+      entityType: "member",
+      entityId: targetUserId,
+      entityName: targetName,
     })
   }
 
@@ -252,7 +282,7 @@ export class MembersService {
     this.assertGrantablePermissions(role, actorPermissions)
     const target = await this.prisma.projectMember.findUnique({
       where: { userId_projectId: { userId: targetUserId, projectId } },
-      select: { userId: true },
+      select: { role: { select: { name: true } }, user: { select: { name: true } } },
     })
     if (!target) throw new NotFoundException("User is not a member of this project")
     const updated = await this.prisma.projectMember.update({
@@ -268,6 +298,16 @@ export class MembersService {
       },
     })
     const { user, role: updatedRole, ...cols } = updated
+    await this.audit.record({
+      orgId,
+      projectId,
+      actorId: actingUserId,
+      action: "member.role_changed",
+      entityType: "member",
+      entityId: targetUserId,
+      entityName: target.user.name,
+      changes: { role: { from: target.role.name, to: updatedRole.name } },
+    })
     return {
       ...toSnakeKeys(cols),
       name: user.name,
@@ -277,15 +317,29 @@ export class MembersService {
   }
 
   /** Throws 400 on self-removal and 404 when the user is not a member of the project. */
-  async removeProjectMember(projectId: string, actingUserId: string, targetUserId: string) {
+  async removeProjectMember(
+    orgId: string,
+    projectId: string,
+    actingUserId: string,
+    targetUserId: string,
+  ) {
     if (actingUserId === targetUserId) throw new BadRequestException("You cannot remove yourself")
     const target = await this.prisma.projectMember.findUnique({
       where: { userId_projectId: { userId: targetUserId, projectId } },
-      select: { userId: true },
+      select: { user: { select: { name: true } } },
     })
     if (!target) throw new NotFoundException("User is not a member of this project")
     await this.prisma.projectMember.delete({
       where: { userId_projectId: { userId: targetUserId, projectId } },
+    })
+    await this.audit.record({
+      orgId,
+      projectId,
+      actorId: actingUserId,
+      action: "member.removed",
+      entityType: "member",
+      entityId: targetUserId,
+      entityName: target.user.name,
     })
   }
 }
