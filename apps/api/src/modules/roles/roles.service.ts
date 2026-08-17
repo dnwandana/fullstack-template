@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common"
 import { Prisma } from "@prisma/client"
 import { randomUUID } from "crypto"
+import { AuditService } from "@core/audit/audit.service"
+import { diffFields } from "@core/audit/diff-fields"
 import { PrismaService } from "@core/database/prisma.service"
 import { CreateRoleDto } from "./dto/create-role.dto"
 import { UpdateRoleDto } from "./dto/update-role.dto"
@@ -20,7 +22,10 @@ const isForeignKeyViolation = (err: unknown): boolean =>
 /** Custom role CRUD within one org. System roles are read-only through it. */
 @Injectable()
 export class RolesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // Valid-UUID-but-unknown permission ids would otherwise surface as an FK
   // violation (P2003) → 500. Returns the deduped id list to insert.
@@ -75,7 +80,7 @@ export class RolesService {
   }
 
   /** Throws `400` for a duplicate name or an unknown permission id, never a `500`. */
-  async create(orgId: string, dto: CreateRoleDto): Promise<RoleResponse> {
+  async create(orgId: string, actorId: string, dto: CreateRoleDto): Promise<RoleResponse> {
     const permissionIds = await this.assertPermissionsExist(dto.permission_ids)
     try {
       const role = await this.prisma.$transaction(async (tx) => {
@@ -94,6 +99,15 @@ export class RolesService {
         })
         return created
       })
+      // Recorded after the transaction commits; `record` never throws.
+      await this.audit.record({
+        orgId,
+        actorId,
+        action: "role.created",
+        entityType: "role",
+        entityId: role.id,
+        entityName: role.name,
+      })
       return toRoleResponse(role, await this.permissionsOf(role.id))
     } catch (err) {
       if (isUniqueViolation(err)) {
@@ -107,10 +121,22 @@ export class RolesService {
    * Throws `400` for a system role or a duplicate name. `permission_ids`, when
    * given, wholly replaces the role's grants rather than merging into them.
    */
-  async update(orgId: string, roleId: string, dto: UpdateRoleDto): Promise<RoleResponse> {
+  async update(
+    orgId: string,
+    actorId: string,
+    roleId: string,
+    dto: UpdateRoleDto,
+  ): Promise<RoleResponse> {
+    // The permission ids ride along on the authorization read; the audit diff needs them.
     const role = await this.prisma.role.findFirst({
       where: { id: roleId, orgId },
-      select: { id: true, isSystem: true },
+      select: {
+        id: true,
+        isSystem: true,
+        name: true,
+        description: true,
+        rolePermissions: { select: { permissionId: true } },
+      },
     })
     if (!role) throw new NotFoundException("Role not found in this organization")
     if (role.isSystem) throw new BadRequestException("System roles cannot be modified")
@@ -133,7 +159,34 @@ export class RolesService {
         }
         return row
       })
-      return toRoleResponse(updated, await this.permissionsOf(roleId))
+      const permissions = await this.permissionsOf(roleId)
+      // Sorted copies: a reorder of the same permission set never registers as a change.
+      const beforeState = {
+        name: role.name,
+        description: role.description,
+        permission_ids: role.rolePermissions.map((rp) => rp.permissionId).toSorted(),
+      }
+      const afterState = {
+        name: updated.name,
+        description: updated.description,
+        permission_ids: permissions.map((p) => p.id).toSorted(),
+      }
+      const changes = diffFields(beforeState, afterState, [
+        "name",
+        "description",
+        "permission_ids",
+      ])
+      // Recorded after the transaction commits; `record` never throws.
+      await this.audit.record({
+        orgId,
+        actorId,
+        action: "role.updated",
+        entityType: "role",
+        entityId: roleId,
+        entityName: updated.name,
+        changes,
+      })
+      return toRoleResponse(updated, permissions)
     } catch (err) {
       if (isUniqueViolation(err)) {
         throw new BadRequestException("A role with this name already exists")
@@ -146,16 +199,16 @@ export class RolesService {
    * Throws `400` for a system role, and for one still assigned to any org or
    * project member — deleting a role must never strip memberships.
    */
-  async remove(orgId: string, roleId: string): Promise<void> {
+  async remove(orgId: string, actorId: string, roleId: string): Promise<void> {
     try {
-      await this.prisma.$transaction(async (tx) => {
+      const roleName = await this.prisma.$transaction(async (tx) => {
         // Same org-level advisory lock the member-management paths take, so a role
         // assignment racing this delete cannot slip past the in-use count below. Paths
         // that never take the lock are closed by the RESTRICT FKs — see the catch.
         await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${orgId}))::text`
         const role = await tx.role.findFirst({
           where: { id: roleId, orgId },
-          select: { id: true, isSystem: true },
+          select: { id: true, isSystem: true, name: true },
         })
         if (!role) throw new NotFoundException("Role not found in this organization")
         if (role.isSystem) throw new BadRequestException("System roles cannot be deleted")
@@ -166,6 +219,16 @@ export class RolesService {
           throw new BadRequestException("Cannot delete a role that is in use")
 
         await tx.role.delete({ where: { id: roleId } })
+        return role.name
+      })
+      // Recorded only after the delete commits; a failed delete leaves no entry.
+      await this.audit.record({
+        orgId,
+        actorId,
+        action: "role.deleted",
+        entityType: "role",
+        entityId: roleId,
+        entityName: roleName,
       })
     } catch (err) {
       // `OrgMember.role`/`ProjectMember.role` are `onDelete: Restrict`, so deleting an

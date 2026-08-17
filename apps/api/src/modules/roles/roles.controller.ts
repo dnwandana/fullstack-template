@@ -5,6 +5,7 @@ import { UpdateRoleDto } from "./dto/update-role.dto"
 import { RoleResponse } from "./dto/role.response"
 import type { Payload } from "@shared/dto/response.types"
 import { CurrentOrg } from "@shared/decorators/current-org.decorator"
+import { CurrentUser } from "@shared/decorators/current-user.decorator"
 import { RequirePermission } from "@shared/decorators/require-permission.decorator"
 import { OrgScoped } from "@tenancy/scoped.decorators"
 
@@ -26,9 +27,10 @@ export class RolesController {
   @RequirePermission("org:manage_roles")
   async create(
     @CurrentOrg() org: { id: string },
+    @CurrentUser("id") userId: string,
     @Body() dto: CreateRoleDto,
   ): Promise<Payload<RoleResponse>> {
-    return { message: "Created", data: await this.roles.create(org.id, dto) }
+    return { message: "Created", data: await this.roles.create(org.id, userId, dto) }
   }
 
   // `404` when the role belongs to another org, so ids cannot be probed across orgs.
@@ -46,10 +48,11 @@ export class RolesController {
   @RequirePermission("org:manage_roles")
   async update(
     @CurrentOrg() org: { id: string },
+    @CurrentUser("id") userId: string,
     @Param("role_id", ParseUUIDPipe) roleId: string,
     @Body() dto: UpdateRoleDto,
   ): Promise<Payload<RoleResponse>> {
-    return { message: "OK", data: await this.roles.update(org.id, roleId, dto) }
+    return { message: "OK", data: await this.roles.update(org.id, userId, roleId, dto) }
   }
 
   // `400` for a system role or one still assigned to an org or project member.
@@ -57,9 +60,10 @@ export class RolesController {
   @RequirePermission("org:manage_roles")
   async remove(
     @CurrentOrg() org: { id: string },
+    @CurrentUser("id") userId: string,
     @Param("role_id", ParseUUIDPipe) roleId: string,
   ): Promise<Payload<null>> {
-    await this.roles.remove(org.id, roleId)
+    await this.roles.remove(org.id, userId, roleId)
     return { message: "OK", data: null }
   }
 }

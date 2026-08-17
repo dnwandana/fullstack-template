@@ -6,6 +6,7 @@ import { AppModule } from "../../src/app.module"
 import { createTestApp } from "../create-test-app"
 import { PrismaService } from "@core/database/prisma.service"
 import { RolesService } from "@modules/roles/roles.service"
+import { AuditService } from "@core/audit/audit.service"
 import { truncateAll, seedPermissions } from "../setup-e2e"
 import { signupAndSignin, createOrg, getRoleId } from "../factory"
 import { randomUUID } from "crypto"
@@ -232,13 +233,18 @@ describe("Roles (e2e)", () => {
       code,
       clientVersion: Prisma.prismaVersion.client,
     })
-    const service = new RolesService({
-      $transaction: async () => {
-        throw fkError
-      },
-    } as unknown as PrismaService)
+    const service = new RolesService(
+      {
+        $transaction: async () => {
+          throw fkError
+        },
+      } as unknown as PrismaService,
+      { record: async () => undefined } as unknown as AuditService,
+    )
 
-    const err = await service.remove(randomUUID(), randomUUID()).catch((e: unknown) => e)
+    const err = await service
+      .remove(randomUUID(), randomUUID(), randomUUID())
+      .catch((e: unknown) => e)
     expect(err).toBeInstanceOf(BadRequestException)
     expect((err as BadRequestException).getStatus()).toBe(400)
     expect((err as BadRequestException).message).toBe("Cannot delete a role that is in use")
@@ -249,13 +255,18 @@ describe("Roles (e2e)", () => {
       code: "P2025",
       clientVersion: Prisma.prismaVersion.client,
     })
-    const service = new RolesService({
-      $transaction: async () => {
-        throw other
-      },
-    } as unknown as PrismaService)
+    const service = new RolesService(
+      {
+        $transaction: async () => {
+          throw other
+        },
+      } as unknown as PrismaService,
+      { record: async () => undefined } as unknown as AuditService,
+    )
 
-    const err = await service.remove(randomUUID(), randomUUID()).catch((e: unknown) => e)
+    const err = await service
+      .remove(randomUUID(), randomUUID(), randomUUID())
+      .catch((e: unknown) => e)
     expect(err).toBe(other)
   })
 
