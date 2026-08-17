@@ -1,5 +1,6 @@
 // The one barrel the workspace allows: this package's public entry point. It
 // re-exports sibling modules only — never another barrel.
+export type { AuditLog } from "./audit-log"
 export type { Envelope, ErrorEnvelope, PaginatedEnvelope } from "./envelope"
 export type {
   Invitation,
