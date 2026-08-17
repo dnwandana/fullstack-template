@@ -19,6 +19,7 @@ import {
   InvitationWithTokenResponse,
   MyInvitationResponse,
 } from "@modules/invitations/dto/invitation.response"
+import { AuditLogResponse } from "@modules/audit-logs/dto/audit-log.response"
 
 /**
  * Applies every global HTTP concern to an already-created Nest app, in place.
@@ -101,6 +102,7 @@ export function configureApp(app: INestApplication): void {
           InvitationListResponse,
           MyInvitationResponse,
           InvitationPreviewResponse,
+          AuditLogResponse,
         ],
       }),
     )

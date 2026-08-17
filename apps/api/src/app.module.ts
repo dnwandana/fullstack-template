@@ -10,6 +10,7 @@ import { PrismaModule } from "@core/database/prisma.module"
 import { RedisModule } from "@core/redis/redis.module"
 import { REDIS_CLIENT } from "@core/redis/redis.constants"
 import { QueueModule } from "@core/queue/queue.module"
+import { AuditModule } from "@core/audit/audit.module"
 import { validate } from "@core/config/env.validation"
 import { buildPinoHttpOptions } from "@core/config/pino.config"
 import { HealthModule } from "@modules/health/health.module"
@@ -22,6 +23,7 @@ import { MembersModule } from "@modules/members/members.module"
 import { ProjectsModule } from "@modules/projects/projects.module"
 import { TodosModule } from "@modules/todos/todos.module"
 import { InvitationsModule } from "@modules/invitations/invitations.module"
+import { AuditLogsModule } from "@modules/audit-logs/audit-logs.module"
 import { MaintenanceModule } from "@modules/maintenance/maintenance.module"
 import { JwtAuthGuard } from "@modules/auth/guards/jwt-auth.guard"
 import { TransformInterceptor } from "@core/interceptors/transform.interceptor"
@@ -45,6 +47,8 @@ import { AllExceptionsFilter } from "@core/filters/all-exceptions.filter"
     // Must come after RedisModule: its BullMQ root injects REDIS_CLIENT. @Global(),
     // so the notifier services inject the notifications queue without importing it.
     QueueModule,
+    // @Global(), so the mutation services inject AuditService without importing this module.
+    AuditModule,
     ThrottlerModule.forRootAsync({
       inject: [ConfigService, REDIS_CLIENT],
       // The object form, not the bare array: an array has nowhere to put `storage`,
@@ -76,6 +80,7 @@ import { AllExceptionsFilter } from "@core/filters/all-exceptions.filter"
     ProjectsModule,
     TodosModule,
     InvitationsModule,
+    AuditLogsModule,
     MaintenanceModule,
   ],
   providers: [
