@@ -95,9 +95,10 @@ export class InvitationsController {
   @OrgScoped("invitations:manage")
   async remove(
     @CurrentOrg() org: { id: string },
+    @CurrentUser("id") userId: string,
     @Param("invitation_id", ParseUUIDPipe) invitationId: string,
   ): Promise<Payload<null>> {
-    await this.invitations.remove(org.id, invitationId)
+    await this.invitations.remove(org.id, userId, invitationId)
     return { message: "OK", data: null }
   }
 
@@ -107,9 +108,15 @@ export class InvitationsController {
   @OrgScoped("invitations:manage")
   async resend(
     @CurrentOrg() org: { id: string },
+    @CurrentUser("id") userId: string,
     @Param("invitation_id", ParseUUIDPipe) invitationId: string,
   ): Promise<Payload<InvitationWithTokenResponse>> {
-    const data = await this.invitations.resend(org.id, invitationId, await this.orgName(org.id))
+    const data = await this.invitations.resend(
+      org.id,
+      userId,
+      invitationId,
+      await this.orgName(org.id),
+    )
     return { message: "OK", data }
   }
 

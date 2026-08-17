@@ -8,6 +8,7 @@ import { ConfigService } from "@nestjs/config"
 import { Prisma } from "@prisma/client"
 import { createHash, randomBytes, randomUUID } from "crypto"
 import { PrismaService } from "@core/database/prisma.service"
+import { AuditService } from "@core/audit/audit.service"
 import { InvitationNotifierService } from "./invitation-notifier.service"
 import { buildInvitationAcceptUrl } from "./invitation-url"
 import { CreateInvitationDto } from "./dto/create-invitation.dto"
@@ -40,6 +41,7 @@ export class InvitationsService {
     private readonly notifier: InvitationNotifierService,
     private readonly config: ConfigService,
     private readonly pagination: PaginationService,
+    private readonly audit: AuditService,
   ) {}
 
   private hash(raw: string): string {
@@ -130,6 +132,16 @@ export class InvitationsService {
       }
       throw err
     }
+    // After the transaction commits, so a rolled-back create leaves no entry. The raw token must
+    // never appear in an audit entry; the invitee email is the invitation's public subject.
+    await this.audit.record({
+      orgId,
+      actorId: inviterId,
+      action: "invitation.created",
+      entityType: "invitation",
+      entityId: invitation.id,
+      entityName: invitation.inviteeEmail ?? "unknown",
+    })
     // Awaited, not fire-and-forget: an unawaited rejection is an invitee who never gets the link
     // and a request that reported success.
     await this.notifier.sendInvitationEmail({
@@ -259,7 +271,9 @@ export class InvitationsService {
     userEmail: string,
     rawToken: string,
   ): Promise<null> {
-    return this.prisma.$transaction(async (tx) => {
+    // The transaction returns the row it consumed; the audit entries are recorded after the
+    // commit, so a rolled-back accept leaves no entry.
+    const accepted = await this.prisma.$transaction(async (tx) => {
       // Serialize concurrent accepts (parity with the Express SELECT ... FOR UPDATE) so the
       // status check below is race-free.
       await tx.$queryRaw`SELECT id FROM invitations WHERE id = ${invitationId}::uuid FOR UPDATE`
@@ -320,8 +334,31 @@ export class InvitationsService {
         where: { id: invitationId },
         data: { status: "accepted", inviteeId: userId },
       })
-      return null
+      return invitation
     })
+    // The invitee added themselves by accepting, so they are the actor of both entries. No row
+    // in the transaction holds the invitee's name, so one lookup resolves it here.
+    const invitee = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    })
+    await this.audit.record({
+      orgId: accepted.orgId,
+      actorId: userId,
+      action: "invitation.accepted",
+      entityType: "invitation",
+      entityId: accepted.id,
+      entityName: accepted.inviteeEmail ?? "unknown",
+    })
+    await this.audit.record({
+      orgId: accepted.orgId,
+      actorId: userId,
+      action: "member.added",
+      entityType: "member",
+      entityId: userId,
+      entityName: invitee?.name ?? "unknown",
+    })
+    return null
   }
 
   /**
@@ -331,7 +368,7 @@ export class InvitationsService {
   async decline(invitationId: string, userId: string, userEmail: string): Promise<void> {
     const invitation = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
-      select: { id: true, inviteeId: true, inviteeEmail: true, status: true },
+      select: { id: true, orgId: true, inviteeId: true, inviteeEmail: true, status: true },
     })
     if (!invitation) throw new NotFoundException("Invitation not found")
     if (invitation.inviteeId !== userId && invitation.inviteeEmail !== userEmail) {
@@ -343,14 +380,36 @@ export class InvitationsService {
       where: { id: invitationId },
       data: { status: "declined" },
     })
+    await this.audit.record({
+      orgId: invitation.orgId,
+      actorId: userId,
+      action: "invitation.declined",
+      entityType: "invitation",
+      entityId: invitation.id,
+      entityName: invitation.inviteeEmail ?? "unknown",
+    })
   }
 
   /** Admin revoke: hard-deletes the row, scoped to `orgId`. 404 when the pair matches nothing. */
-  async remove(orgId: string, invitationId: string): Promise<void> {
+  async remove(orgId: string, actorId: string, invitationId: string): Promise<void> {
+    // Read the email before the delete removes the row; the deleteMany count stays the 404 gate,
+    // so a row that a concurrent revoke already deleted records no entry.
+    const invitation = await this.prisma.invitation.findFirst({
+      where: { id: invitationId, orgId },
+      select: { inviteeEmail: true },
+    })
     const { count } = await this.prisma.invitation.deleteMany({
       where: { id: invitationId, orgId },
     })
     if (count === 0) throw new NotFoundException("Invitation not found")
+    await this.audit.record({
+      orgId,
+      actorId,
+      action: "invitation.revoked",
+      entityType: "invitation",
+      entityId: invitationId,
+      entityName: invitation?.inviteeEmail ?? "unknown",
+    })
   }
 
   /**
@@ -359,6 +418,7 @@ export class InvitationsService {
    */
   async resend(
     orgId: string,
+    actorId: string,
     invitationId: string,
     orgName: string,
   ): Promise<InvitationWithTokenResponse> {
@@ -376,6 +436,14 @@ export class InvitationsService {
       where: { id: invitationId },
       data: { tokenHash: this.hash(rawToken), expiresAt },
       select: INVITE_SELECT,
+    })
+    await this.audit.record({
+      orgId,
+      actorId,
+      action: "invitation.resent",
+      entityType: "invitation",
+      entityId: invitationId,
+      entityName: invitation.inviteeEmail ?? "unknown",
     })
     await this.notifier.sendInvitationEmail({
       email: invitation.inviteeEmail ?? "",
