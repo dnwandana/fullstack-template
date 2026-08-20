@@ -47,6 +47,9 @@ Guards run in order: **global guards first, then controller-level `@UseGuards`, 
 
 1. **`ThrottlerGuard`** (global) — rate limiting.
 2. **`JwtAuthGuard`** (global) — verifies the `access_token` cookie, sets `req.user = { id }`. Routes marked `@Public()` bypass it.
+
+   **`RefreshTokenGuard`** (`src/modules/auth/guards/refresh-token.guard.ts`) is a _second_ authentication path. `@UseGuards` applies it to `POST /api/v1/auth/refresh` and `POST /api/v1/auth/logout`. It verifies the `refresh_token` cookie, rejects a token whose `type` claim is not `"refresh"`, and also sets `req.user`.
+
 3. **`OrgGuard`** (applied by `@OrgScoped`/`@ProjectScoped`) — validates `org_id` is a UUID, loads the org, verifies membership, sets `req.org` + `req.permissions`. `400` invalid id, `404` unknown org, `403` non-member.
 4. **`ProjectGuard`** (added by `@ProjectScoped` on nested controllers) — validates `project_id`, loads the project scoped to the org, **merges project-level permissions into the org permissions**, sets `req.project`.
 5. **`PermissionsGuard`** — reads the `@RequirePermission("<name>")` metadata for the handler and throws `403` unless `req.permissions.includes(name)`.
@@ -164,11 +167,13 @@ Request validation lives in `class-validator` DTOs under `src/modules/categories
 
 ```typescript
 import { IsHexColor, IsOptional, IsString, MaxLength, MinLength } from "class-validator"
+import { IsPlainSingleLine } from "@shared/validators/control-chars"
 
 export class CategoryBodyDto {
   @IsString()
   @MinLength(1)
   @MaxLength(255)
+  @IsPlainSingleLine()
   name!: string
 
   @IsOptional()
@@ -176,6 +181,12 @@ export class CategoryBodyDto {
   color?: string
 }
 ```
+
+`IsPlainSingleLine` trims the value and rejects control characters, line separators and
+bidirectional overrides. Put it on every **single-line** free-text field that the SPA renders: a
+bidirectional override lets one name render as another, so a display name can impersonate a
+different organisation. Leave it off a multi-line `description`, because the rule rejects the
+newline.
 
 `src/modules/categories/dto/list-categories.dto.ts` — extend the shared pagination DTO and narrow the sortable columns:
 
@@ -196,7 +207,38 @@ export class ListCategoriesDto extends PaginationQueryDto {
 
 ### Step 4: Create the service
 
-Inject `PrismaService` and `PaginationService`. **Scope every query by `projectId`** — that is what enforces tenant isolation. Translate Prisma's camelCase rows back to the snake_case API contract with the shared `toSnakeKeys` helper — do not hand-roll a per-module converter.
+First give the module its row type. Keep the Prisma selection and the type it produces in one
+`<resource>-row.ts` file, and **derive** the type — never hand-write a second copy of the field
+list. A hand-written mirror drifts the moment somebody widens the selection, and nothing reports
+it. `Prisma.CategoryGetPayload` derives the type from the selection, so the two cannot disagree.
+
+`src/modules/categories/category-row.ts`:
+
+```typescript
+import { Prisma } from "@prisma/client"
+
+/**
+ * The Prisma selection and the row type it produces, kept together so a change to one is
+ * visibly a change to the other.
+ */
+export const CATEGORY_SELECT = {
+  id: true,
+  projectId: true,
+  userId: true,
+  name: true,
+  color: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.CategorySelect
+
+/** What `CATEGORY_SELECT` returns. */
+export type CategoryRow = Prisma.CategoryGetPayload<{ select: typeof CATEGORY_SELECT }>
+```
+
+`satisfies` rather than `as const`: it checks every key against the model, so a typo or a dropped
+column fails to compile, and it still keeps the literal type that `GetPayload` needs.
+
+Now the service. Inject `PrismaService` and `PaginationService`. **Scope every query by `projectId`** — that is what enforces tenant isolation. Translate Prisma's camelCase rows back to the snake_case API contract with the shared `toSnakeKeys` helper — do not hand-roll a per-module converter.
 
 `src/modules/categories/categories.service.ts`:
 
@@ -208,30 +250,11 @@ import { PaginationService } from "@shared/pagination/pagination.service"
 import { toSnakeKeys } from "@shared/utils/to-snake-keys"
 import { CategoryBodyDto } from "./dto/category-body.dto"
 import { ListCategoriesDto } from "./dto/list-categories.dto"
-
-const CATEGORY_SELECT = {
-  id: true,
-  projectId: true,
-  userId: true,
-  name: true,
-  color: true,
-  createdAt: true,
-  updatedAt: true,
-} as const
+import { CATEGORY_SELECT, type CategoryRow } from "./category-row"
 
 const SORT_COLUMN: Record<string, "createdAt" | "name"> = {
   created_at: "createdAt",
   name: "name",
-}
-
-type CategoryRow = {
-  id: string
-  projectId: string
-  userId: string
-  name: string
-  color: string | null
-  createdAt: Date
-  updatedAt: Date
 }
 
 // Prisma's `contains` passes `%`/`_` through as live ILIKE wildcards; escape them
@@ -440,11 +463,11 @@ corepack pnpm db:seed
 
 ### Step 8: Add an e2e test
 
-Add a spec under `test/` that boots the app with Supertest and asserts both the envelope and each permission gate. Follow `test/todos.e2e-spec.ts` as the template — create an org (which seeds the four system roles), a project, then exercise create/read/list/update/delete and assert a `403` for a role lacking the permission.
+Add a spec under `test/e2e/` that boots the app with Supertest and asserts both the envelope and each permission gate. Follow `test/e2e/todos.e2e-spec.ts` as the template — create an org (which seeds the four system roles), a project, then exercise create/read/list/update/delete and assert a `403` for a role lacking the permission.
 
 Specs do **not** call `Test.createTestingModule(...).createNestApplication()` directly. Boot through `test/create-test-app.ts`, which applies `configureApp` from `src/bootstrap.ts` and passes `bodyParser: false` exactly as `src/main.ts` does — that flag is what makes the 100kb body limit real, so a hand-rolled app under-tests the production configuration.
 
-Database state is the spec's responsibility. `test/setup-e2e.ts` is a Jest `globalSetup`: it applies migrations and seeds the 17 permissions **once** per run. There is no automatic per-test truncation — call the `truncateAll` it exports (and re-seed, since the truncate is `CASCADE`) from your own `beforeEach`.
+Database state is the spec's responsibility. `test/setup-e2e.ts` is a Jest `globalSetup`: it applies migrations and seeds the 18 permissions **once** per run. There is no automatic per-test truncation — call the `truncateAll` it exports (and re-seed, since the truncate is `CASCADE`) from your own `beforeEach`.
 
 The import block a new spec needs:
 
@@ -512,7 +535,7 @@ corepack pnpm migrate:dev    # prisma migrate dev — create + apply a migration
 corepack pnpm db:migrate     # prisma migrate deploy — apply pending migrations (prod)
 corepack pnpm db:generate    # prisma generate — regenerate the typed client after schema edits
 corepack pnpm prisma:pull    # prisma db pull — introspect an existing DB into schema.prisma
-corepack pnpm db:seed        # prisma db seed — idempotent upsert of the 17 canonical permissions
+corepack pnpm db:seed        # prisma db seed — idempotent upsert of the 18 canonical permissions
 ```
 
 **Best practices:**
