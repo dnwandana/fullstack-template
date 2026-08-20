@@ -12,6 +12,7 @@ describe("Todos (e2e)", () => {
   let prisma: PrismaService
   let cookies: string[]
   let projectId: string
+  let orgId: string
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile()
     app = await createTestApp(ref)
@@ -31,10 +32,9 @@ describe("Todos (e2e)", () => {
       .set("Cookie", cookies)
       .send({ name: "P" })
     projectId = proj.body.data.id
-    ;(globalThis as Record<string, unknown>).__orgId = org.id
+    orgId = org.id
   })
-  const base = () =>
-    `/api/v1/orgs/${(globalThis as Record<string, unknown>).__orgId}/projects/${projectId}/todos`
+  const base = () => `/api/v1/orgs/${orgId}/projects/${projectId}/todos`
 
   it("creates a todo (title required)", async () => {
     const missing = await agent()
@@ -48,7 +48,6 @@ describe("Todos (e2e)", () => {
   })
 
   it("denies a viewer creating a todo with 403", async () => {
-    const orgId = (globalThis as Record<string, unknown>).__orgId as string
     const viewer = await signupAndSignin(app)
     const viewerRoleId = await getRoleId(prisma, orgId, "viewer")
     await prisma.orgMember.create({
@@ -95,7 +94,6 @@ describe("Todos (e2e)", () => {
   it("will not update a todo through a sibling project's URL", async () => {
     const created = await agent().post(base()).set("Cookie", cookies).send({ title: "A" })
     const todoId = created.body.data.id
-    const orgId = (globalThis as Record<string, unknown>).__orgId
     const other = await agent()
       .post(`/api/v1/orgs/${orgId}/projects`)
       .set("Cookie", cookies)
