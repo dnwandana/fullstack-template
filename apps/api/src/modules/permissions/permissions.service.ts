@@ -15,7 +15,6 @@ export class PermissionsService {
         description: true,
         resource: true,
         action: true,
-        createdAt: true,
       },
       orderBy: { name: "asc" },
     })

@@ -35,4 +35,20 @@ describe("Permissions (e2e)", () => {
     expect(res.body.data.length).toBeGreaterThanOrEqual(16)
     expect(res.body.pagination).toBeUndefined()
   })
+
+  it("emits exactly the five contract keys per permission", async () => {
+    const { cookies } = await signupAndSignin(app)
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/permissions")
+      .set("Cookie", cookies)
+      .expect(200)
+
+    expect(Object.keys(res.body.data[0]).toSorted()).toEqual([
+      "action",
+      "description",
+      "id",
+      "name",
+      "resource",
+    ])
+  })
 })
