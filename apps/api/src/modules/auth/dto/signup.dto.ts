@@ -1,15 +1,13 @@
 import { Transform } from "class-transformer"
 import { IsEmail, IsString, Matches, MaxLength, MinLength } from "class-validator"
 import { Match } from "@shared/validators/match.validator"
-
-const CONTROL_CHARS = /^[^\p{Cc}\p{Zl}\p{Zp}‎‏‪-‮⁦-⁩]+$/u
+import { IsPlainSingleLine } from "@shared/validators/control-chars"
 
 export class SignupDto {
   @IsString()
   @MinLength(1)
   @MaxLength(100)
-  @Matches(CONTROL_CHARS, { message: "name must not contain control characters" })
-  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @IsPlainSingleLine()
   name!: string
 
   @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
