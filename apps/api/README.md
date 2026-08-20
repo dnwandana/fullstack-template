@@ -41,12 +41,12 @@ You can still run package-local commands from `apps/api` with `corepack pnpm`.
 - **Organization hierarchy**: Organization → Project → Todos with shared database tenant isolation via `org_id` and `project_id` columns
 - **Flexible membership**: Users can belong to multiple organizations and multiple projects (GitHub-style model)
 - **Custom RBAC**: 4 built-in system roles (owner, admin, member, viewer) plus custom roles with granular permission assignment
-- **17 system permissions**: covering org management, project management, invitation management, and todo operations. Cross-project visibility is granted by the `project:read_all` permission, not by a hard-coded role name, so a custom role can be given org-wide project visibility.
+- **18 system permissions**: covering org management, project management, invitation management, and todo operations. Cross-project visibility is granted by the `project:read_all` permission, not by a hard-coded role name, so a custom role can be given org-wide project visibility.
 - **Invitation system**: Invite by email, 7-day token expiry, accept/decline/revoke/resend flow; project invitations auto-add the invitee to the parent org as a viewer. A second pending invitation for the same email in the same scope is rejected with 400. Unregistered addresses can be invited — a public, token-gated preview endpoint lets a logged-out invitee see the invitation, and signup backfills the link between the new account and any invitations already waiting for its email. Accepting is authenticated **and** requires the raw token in the request body (`{ token: "<64 hex chars>" }`), so being logged in is not by itself enough. Email delivery is a single documented seam (`InvitationNotifierService`); the template ships no mail provider.
 
 ### Database & Architecture
 
-- **PostgreSQL**: Robust relational database (12 domain models)
+- **PostgreSQL**: Robust relational database (13 domain models)
 - **Prisma**: Type-safe ORM and migration engine; the schema is snake_case in the DB (`@map`/`@@map`) and camelCase in the client
 - **Modular NestJS layout**: `src/` splits four ways — `core/` (infrastructure), `shared/` (stateless helpers), `modules/<feature>/` (one self-contained feature module each: `*.module.ts`, `*.service.ts`, `*.controller.ts`, `dto/`), and `tenancy/` (the org/project guards). Services hold business logic and talk to Prisma, controllers stay thin. The layering rule is in [`AGENTS.md`](AGENTS.md#source-layout)
 - **Shared response contracts**: `@fullstack/contracts` (`packages/contracts`) is a dependency-free, type-only package; the API's response classes `implements` its interfaces so a drift between contract and payload is a compile error
@@ -57,7 +57,7 @@ You can still run package-local commands from `apps/api` with `corepack pnpm`.
 - **Request ID Tracking**: Automatic `X-Request-Id` correlation across logs and responses (accepts a dashed UUID or 32 hex characters, otherwise generates one) and exposed to browser JS via `Access-Control-Expose-Headers`
 - **Health Checks**: Separate liveness and readiness probes plus the combined legacy endpoint — `GET /health/live` (process only, never touches the database), `GET /health/ready` (database probe, 503 when unreachable), and `GET /health`. All three sit outside the `/api/v1` prefix, are public, and are exempt from rate limiting. `/health/ready` and `/health` report uptime and database details outside production and omit them in production; `/health/live` returns a fixed payload in every environment
 - **Logging**: Structured JSON logging via `nestjs-pino` (`pino-http`) with request IDs in every log entry; `pino-pretty` in non-production. Cookies, `Authorization`, and `Set-Cookie` are stripped from log records so no token material is ever written
-- **Scheduled Cleanup**: A `@nestjs/schedule` cron job (`CleanupService`, daily at 03:00) prunes refresh tokens that expired or were revoked more than 7 days ago, password-reset tokens expired more than 7 days ago, and invitations expired more than 30 days ago. Retention is measured from `expires_at`/`revoked_at`, never `created_at`, so a still-valid long-lived token is never deleted. It takes a non-blocking PostgreSQL advisory lock (`pg_try_advisory_xact_lock`) so exactly one replica does the work, and can be turned off with `CLEANUP_ENABLED=false`
+- **Scheduled Cleanup**: A `@nestjs/schedule` cron job (`CleanupService`, daily at 03:00) prunes refresh tokens that expired or were revoked more than 7 days ago, password-reset tokens expired more than 7 days ago, and invitations expired more than 30 days ago. For those three, retention is measured from `expires_at`/`revoked_at`, never `created_at`, so a still-valid long-lived token is never deleted. A fourth sweep prunes `audit_logs`, which has no expiry column, on `created_at` against `AUDIT_RETENTION_DAYS` (default 90). It takes a non-blocking PostgreSQL advisory lock (`pg_try_advisory_xact_lock`) so exactly one replica does the work, and can be turned off with `CLEANUP_ENABLED=false`
 - **Background Jobs**: A BullMQ queue on Redis (`src/core/queue/`) carries notification delivery. `InvitationNotifierService` and `PasswordResetNotifierService` enqueue a job instead of sending inline, so a slow or failing mail provider cannot stretch or fail the HTTP request that triggered it. Redis is therefore a hard requirement in every environment — BullMQ ships no in-memory driver
 
 ### Developer Experience
@@ -244,6 +244,7 @@ shapes, including the status mapping and the flattening of validation errors, is
 ```bash
 corepack pnpm dev          # nest start --watch (dev server)
 corepack pnpm start        # node dist/main (production runtime)
+corepack pnpm start:prod   # the same command as start — an alias kept for deploy scripts
 corepack pnpm build        # nest build → dist/
 ```
 
@@ -482,7 +483,7 @@ each endpoint requires is the **Permission** column of [API Endpoints](#api-endp
 
 ## Project Structure
 
-Per-module responsibilities are tabulated in [`AGENTS.md`](AGENTS.md#nestjs-module-layout); the
+Per-module responsibilities are tabulated in [`AGENTS.md`](AGENTS.md#source-layout); the
 `src/modules/` subdirectories below are exactly the modules in that table. The four top-level
 `src/` directories and the dependency rule between them are described in
 [`AGENTS.md`](AGENTS.md#source-layout).
@@ -498,6 +499,7 @@ apps/api/
 │   │   ├── database/         # PrismaService (Prisma client lifecycle)
 │   │   ├── redis/            # REDIS_CLIENT provider (ioredis), global RedisModule
 │   │   ├── queue/            # BullMQ notification queue + NotificationProcessor
+│   │   ├── audit/            # AuditService (global AuditModule) — best-effort append-only audit writes
 │   │   ├── filters/          # AllExceptionsFilter
 │   │   └── interceptors/     # TransformInterceptor (the response envelope)
 │   ├── shared/               # Stateless helpers with no infrastructure of their own
@@ -517,8 +519,9 @@ apps/api/
 │       ├── projects/         # Project CRUD, org-scoped
 │       ├── todos/            # Example project-scoped resource, paginated
 │       ├── invitations/      # Invite/preview/accept/decline/revoke/resend + notifier seam
+│       ├── audit-logs/       # Reads the org audit trail, gated by audit:read
 │       ├── health/           # GET /health, /health/live, /health/ready — outside the prefix, version-neutral
-│       └── maintenance/      # CleanupService — nightly cron pruning expired auth/invitation rows
+│       └── maintenance/      # CleanupService — nightly cron pruning expired auth/invitation rows and old audit logs
 ├── prisma/
 │   ├── schema.prisma         # Domain models (@map/@@map keep the DB snake_case)
 │   ├── migrations/           # Prisma migrations (single 0_init baseline)
@@ -542,7 +545,7 @@ apps/api/
 ├── nest-cli.json             # Nest CLI configuration (incl. the @nestjs/swagger plugin)
 ├── prisma.config.ts          # Prisma CLI config — imports dotenv/config, points db seed at seed.ts
 ├── tsconfig.json             # TypeScript configuration
-├── tsconfig.build.json       # Build-only overrides (excludes tests from dist/)
+├── tsconfig.build.json       # Build-only overrides — names its own source set (src/, minus specs)
 └── package.json
 ```
 

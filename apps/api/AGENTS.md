@@ -53,8 +53,9 @@ widening one silently widens the other.
 | `projects`    | Project CRUD, org-scoped                                                                                                                                                                                                 |
 | `todos`       | Example project-scoped resource, paginated                                                                                                                                                                               |
 | `invitations` | Invite/preview/accept/decline/revoke/resend + pending-account backfill                                                                                                                                                   |
+| `audit-logs`  | Reads the org audit trail; `GET /api/v1/orgs/:org_id/audit-logs`, gated by `audit:read`. Writes come from `core/audit/`.                                                                                                 |
 | `health`      | `GET /health`, `/health/live`, `/health/ready` — outside the global prefix, `VERSION_NEUTRAL`, `@Public()` and throttle-skipped at the class level                                                                       |
-| `maintenance` | `CleanupService` — `@Cron` job pruning expired auth/invitation rows (no controller)                                                                                                                                      |
+| `maintenance` | `CleanupService` — `@Cron` job pruning expired auth/invitation rows and old audit logs (no controller)                                                                                                                   |
 
 The annotated directory tree lives in [`README.md`](README.md#project-structure).
 
@@ -179,7 +180,9 @@ reconnects indefinitely with growing backoff, and `Nest application successfully
 **after** the first `ECONNREFUSED`. A Redis-less instance boots, listens, serves traffic, and passes
 its container healthcheck — because that healthcheck probes `/health/live`, which by design never
 touches a dependency. `/health/ready` does not probe `REDIS_CLIENT` either, so nothing in the
-running system reports the degradation. Treat the requirement as an operational contract, not
+running system reports the degradation. The writes do not fail fast either: ioredis keeps
+`enableOfflineQueue` at its default `true`, so it buffers each command and the awaiting request
+hangs. A caller sees a timeout, not an error. Treat the requirement as an operational contract, not
 something the process enforces on itself.
 
 ### Audit log
@@ -234,7 +237,7 @@ Prisma's `P2025` ("record not found", thrown by `update`/`delete` against a miss
 
 `PrismaService` (in `src/core/database/`) extends `PrismaClient` and manages its lifecycle (`$connect` on `onModuleInit`, `$disconnect` on `onModuleDestroy`). Inject it into any service with `constructor(private readonly prisma: PrismaService) {}`.
 
-The schema (`prisma/schema.prisma`) is snake_case in the DB but camelCase in the client (`@map`/`@@map`). Services translate the Prisma camelCase rows back to the **snake_case API contract** the SPA consumes (see the shared `toSnakeKeys` generic in `src/shared/utils/to-snake-keys.ts`, imported by the `invitations`, `members`, `todos`, `roles`, `permissions`, `projects`, and `orgs` services). It is shallow by design — `select` the fields you want first rather than relying on it to walk nested relations. Multi-row invariants use PostgreSQL locks inside `prisma.$transaction` — `pg_advisory_xact_lock` for the last-owner check, `SELECT … FOR UPDATE` for invitation accept, and the non-blocking `pg_try_advisory_xact_lock` for the nightly cleanup job.
+The schema (`prisma/schema.prisma`) is snake_case in the DB but camelCase in the client (`@map`/`@@map`). Services translate the Prisma camelCase rows back to the **snake_case API contract** the SPA consumes (see the shared `toSnakeKeys` generic in `src/shared/utils/to-snake-keys.ts`, imported by the `invitations`, `members`, `todos`, `roles`, `permissions`, `projects`, `orgs`, and `audit-logs` modules — in the `*.response.ts` class where the module has one, and in the service itself for `permissions` and `members`, which have none). It is shallow by design — `select` the fields you want first rather than relying on it to walk nested relations. Multi-row invariants use PostgreSQL locks inside `prisma.$transaction` — `pg_advisory_xact_lock` for the last-owner check, `SELECT … FOR UPDATE` for invitation accept, and the non-blocking `pg_try_advisory_xact_lock` for the nightly cleanup job.
 
 ### Request context
 
@@ -266,7 +269,7 @@ Signin hardening: every attempt runs one Argon2 verify against a real or dummy h
 
 ### Permissions
 
-**RBAC**: permission-per-role. Each org gets the four system roles in `SYSTEM_ROLE_NAMES` on creation; owners may add custom roles with granular permissions. The canonical permission list and the system-role → permission map live in **`src/modules/orgs/system-roles.ts`** (`ALL_PERMISSIONS`, which is module-private, and the exported `SYSTEM_ROLE_PERMISSIONS`):
+**RBAC**: permission-per-role. Each org gets the four system roles in `SYSTEM_ROLE_NAMES` on creation; owners may add custom roles with granular permissions. The canonical permission list and the system-role → permission map live in **`src/modules/orgs/system-roles.ts`** (`ALL_PERMISSIONS` and `SYSTEM_ROLE_PERMISSIONS`, both exported):
 
 | Role   | Permissions                                                       |
 | ------ | ----------------------------------------------------------------- |
@@ -279,7 +282,7 @@ Signin hardening: every attempt runs one Argon2 verify against a real or dummy h
 
 `project:read_all` ("view all projects in the organization, not only those you belong to") is the most recently added permission; owner and admin have it, member and viewer do not. It exists so cross-project visibility is a grantable permission instead of a role-name special case.
 
-**Invariant: `ALL_PERMISSIONS` in `src/modules/orgs/system-roles.ts` and `PERMISSION_NAMES` in `prisma/seed.ts` must hold the same set of names.** Nothing enforces it: `ALL_PERMISSIONS` is not exported, `test/integration/seed.int-spec.ts` only compares `PERMISSION_NAMES` against the seeded DB rows, and a name present in one and absent from the other compiles and seeds cleanly — it just silently fails to grant. Edit both in the same commit.
+**Invariant: `ALL_PERMISSIONS` in `src/modules/orgs/system-roles.ts` and `PERMISSION_NAMES` in `prisma/seed.ts` must hold the same set of names.** A unit spec enforces it: `src/modules/orgs/__tests__/system-roles.spec.ts` imports both lists and compares them sorted. A name in one list and not the other fails the unit tier. Order does not matter, because nothing reads either list by index. `test/integration/seed.int-spec.ts` covers the other half: it compares `PERMISSION_NAMES` against the seeded database rows. Edit both lists in the same commit.
 
 ### Invitation system
 
@@ -307,7 +310,7 @@ Two things to know when reading env values elsewhere:
 
 ### Scheduled maintenance
 
-`src/modules/maintenance/cleanup.service.ts` runs `@Cron(CronExpression.EVERY_DAY_AT_3AM)`. It returns immediately when `CLEANUP_ENABLED === "false"`. Deletes run in bounded batches (10k rows), each in its own short transaction that takes `pg_try_advisory_xact_lock(hashtext('auth-cleanup'))` — non-blocking, so a replica that loses the lock stops its sweep instead of queueing behind the winner. The lock is transaction-scoped, so it is released between batches: two replicas may interleave batches of the same sweep, which is harmless (disjoint rows, both make progress) — the lock prevents duplicated work, not concurrent runs. Batching caps WAL volume and lock time no matter how large the first-sweep backlog is. The swept `expires_at`/`revoked_at` columns are indexed (see `schema.prisma`). Grace periods: refresh tokens and password-reset tokens 7 days, invitations 30 days. Retention is always measured from `expiresAt`/`revokedAt`, never `createdAt`, so a long-lived token is not deleted while still valid.
+`src/modules/maintenance/cleanup.service.ts` runs `@Cron(CronExpression.EVERY_DAY_AT_3AM)`. It returns immediately when `CLEANUP_ENABLED === "false"`. Deletes run in bounded batches (10k rows), each in its own short transaction that takes `pg_try_advisory_xact_lock(hashtext('auth-cleanup'))` — non-blocking, so a replica that loses the lock stops its sweep instead of queueing behind the winner. The lock is transaction-scoped, so it is released between batches: two replicas may interleave batches of the same sweep, which is harmless (disjoint rows, both make progress) — the lock prevents duplicated work, not concurrent runs. Batching caps WAL volume and lock time no matter how large the first-sweep backlog is. The swept `expires_at`/`revoked_at` columns are indexed (see `schema.prisma`). Grace periods: refresh tokens and password-reset tokens 7 days, invitations 30 days. For those three sweeps retention is measured from `expiresAt`/`revokedAt`, never `createdAt`, so a long-lived token is not deleted while still valid. **The fourth sweep is the exception.** An audit log has no expiry column, so `audit_logs` is cut on `created_at` against `AUDIT_RETENTION_DAYS` (default 90). That column carries no dedicated index, which the service records as an accepted trade-off. Do not read the `never createdAt` rule as covering all four.
 
 ### Pagination
 

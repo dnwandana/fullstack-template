@@ -155,7 +155,7 @@ vitest projects) and checked with `vue-tsc -b`. Every SFC is `<script setup lang
 lint config rejects one that is not. API response types come from the workspace package
 [`@fullstack/contracts`](../../packages/contracts), consumed as `Wire<Entity>` because `Date` fields
 arrive over the wire as strings. The traps worth knowing before you add a file — which config owns
-which glob, why `node` types are kept out of the app project, and the three deliberate type
+which glob, why `node` types are kept out of the app project, and the two deliberate type
 suppressions — are in [`AGENTS.md`](AGENTS.md#typescript).
 
 ## Browser DevTools Setup

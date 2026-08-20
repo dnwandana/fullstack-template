@@ -33,7 +33,7 @@ Organization
 ```
 
 - **Multi-tenancy**: Shared PostgreSQL database, tenant-scoped via `org_id`/`project_id` columns
-- **RBAC**: 4 system roles (owner / admin / member / viewer) + custom roles, 17 granular permissions. Cross-project visibility is a permission (`project:read_all`), not a hard-coded role name
+- **RBAC**: 4 system roles (owner / admin / member / viewer) + custom roles, 18 granular permissions. Cross-project visibility is a permission (`project:read_all`), not a hard-coded role name
 - **Auth**: Dual-token JWT via httpOnly cookies, Argon2 password hashing, password complexity, account lockout, token-based password reset, and refresh-token reuse detection
 - **Invitations**: Invite by email with an accept/decline/revoke/resend flow. In short: creating an invitation issues a raw token (stored only as a hash) that expires after 7 days; the public `/invite/:id?token=…` landing page previews the invitation while logged out — possession of the raw token is the only credential; accepting requires being logged in **and** presenting that token in the request body; project invitations auto-add the invitee to the parent org as a viewer. Inviting an address with no account creates a pending-account invitation; signing up claims it. Email delivery is a single documented seam — no mail provider is shipped.
 
@@ -86,7 +86,7 @@ Run Prisma migrations and (optional) seed data:
 ```bash
 cd apps/api
 corepack pnpm db:migrate   # prisma migrate deploy
-corepack pnpm db:seed      # prisma db seed — inserts the 17 canonical permissions idempotently
+corepack pnpm db:seed      # prisma db seed — inserts the 18 canonical permissions idempotently
 ```
 
 Migrations never run automatically — apply them explicitly on every environment.
@@ -378,6 +378,7 @@ fullstack-template/
 │   │   │   │   ├── database/       # PrismaService (Prisma client lifecycle)
 │   │   │   │   ├── redis/          # RedisModule — the global REDIS_CLIENT ioredis provider
 │   │   │   │   ├── queue/          # BullMQ notifications queue + NotificationProcessor
+│   │   │   │   ├── audit/          # AuditModule — the global AuditService (append-only audit writes)
 │   │   │   │   ├── filters/        # AllExceptionsFilter (error envelope)
 │   │   │   │   └── interceptors/   # TransformInterceptor (success envelope)
 │   │   │   ├── shared/             # Stateless helpers, no infrastructure of their own (@shared/*)
@@ -385,11 +386,11 @@ fullstack-template/
 │   │   │   ├── tenancy/            # Org/Project/Permissions guards + membership resolution (@tenancy/*)
 │   │   │   └── modules/            # One self-contained feature module each (@modules/*)
 │   │   │       └── auth, users, permissions, orgs, roles, members,
-│   │   │           projects, todos, invitations, health, maintenance/
+│   │   │           projects, todos, invitations, audit-logs, health, maintenance/
 │   │   ├── prisma/
-│   │   │   ├── schema.prisma       # 12 domain models (@map/@@map keep the DB snake_case)
+│   │   │   ├── schema.prisma       # 13 domain models (@map/@@map keep the DB snake_case)
 │   │   │   ├── migrations/         # Prisma migrations (single 0_init baseline)
-│   │   │   └── seed.ts             # Idempotent seed of the 17 canonical permissions
+│   │   │   └── seed.ts             # Idempotent seed of the 18 canonical permissions
 │   │   └── test/                   # Shared helpers + both Jest configs; integration/ and e2e/ suites
 │   │                               #   (unit specs live in __tests__/ folders beside the code they cover)
 │   │

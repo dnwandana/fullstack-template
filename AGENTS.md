@@ -45,15 +45,27 @@ them, and a stale one that lands on plausible code misleads instead of announcin
 **Three contracts are not drift-protected.** `apps/api` has no response DTO class for auth or member
 rows — `SafeUser` is a private alias in `auth.service` and member rows are assembled inline in
 `members.service` — so `User`, `OrgMember` and `ProjectMember` exist in `packages/contracts` without
-an `implements` clause binding them to anything. `Todo`, `Org`, `Project`, `Role` and the
-`Invitation` family do have one, and a change to those breaks the API's build. Changing the shape of
-the three unbound types breaks only the frontend, and only if the frontend happens to read the
-changed field.
+an `implements` clause binding them to anything. Every other **entity** contract has one, and a
+change to those breaks the API's build. Do not keep a list of them here — read the tree instead,
+from the repository root:
+
+```bash
+grep -rho 'implements [A-Za-z]*' apps/api/src --include='*.response.ts' | sort -u
+```
+
+Changing the shape of the three unbound types breaks only the frontend, and only if the frontend
+happens to read the changed field.
+
+The count covers entity contracts only. `Envelope`, `ErrorEnvelope`, `PaginatedEnvelope` and `Wire`
+are envelope and wire helpers, and no `implements` clause binds them either. `Envelope` is still
+safe, because `src/shared/dto/response.types.ts` and `src/core/interceptors/transform.interceptor.ts`
+both reference it in a type position. The other three appear nowhere in `apps/api/src`, so they
+behave like the unbound three above: only `apps/app` reads them.
 
 ### Turborepo strips undeclared environment variables
 
 `turbo.json` declares `globalEnv: ["NODE_ENV"]` plus an explicit `env` allowlist on the `build` and
-`test` tasks — currently **17 entries each, identical including order**, matching the 17 keys in the
+`test` tasks — currently **18 entries each, identical including order**, matching the 18 keys in the
 API's Joi schema one for one. The two arrays must stay identical — read both before adding a
 variable. Turborepo 2.x runs tasks in strict env mode by default, which has two consequences:
 
@@ -157,8 +169,10 @@ worth knowing:
 
 - **Nothing orders `api` startup in production** — it has no `depends_on`, boots immediately, and
   ioredis retries `REDIS_URL` with backoff indefinitely. An unreachable managed Redis therefore
-  yields a container that passes `/health/live`, reports healthy, and serves traffic while every
-  queue and rate-limit write fails.
+  yields a container that passes `/health/live`, reports healthy, and serves traffic. The queue
+  writes and the rate-limit writes do not fail fast: ioredis keeps `enableOfflineQueue` at its
+  default `true`, so it buffers each command and the awaiting request hangs. Expect timeouts, not
+  errors.
 - **Hostname `redis` is a local-stack fact only.** In `docker-compose.local.yml` it is the compose
   service name and is mandatory (inside the `api` container `localhost` is the API process itself);
   in production the host is whatever the managed provider gives you, and `rediss://` is the expected

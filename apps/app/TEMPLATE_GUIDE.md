@@ -1000,10 +1000,10 @@ Three gotchas worth knowing before you add tokens:
   *does* declare and no longer reads still passes. The shipped file carries one
   `@ts-expect-error` for exactly this case (`fontFamilyCode`); read the comment
   there before adding another.
-- **`theme/antd.test.ts` asserts the tokens still match the design system.** Each
-  value is annotated with the CSS custom property it mirrors; change one and
-  update the other. The test asserts the literal, so it stays green even for a
-  token antd ignores.
+- **`src/theme/__tests__/antd.test.ts` asserts the tokens still match the design
+  system.** Each value is annotated with the CSS custom property it mirrors;
+  change one and update the other. The test asserts the literal, so it stays
+  green even for a token antd ignores.
 
 ### CSS Variables
 
@@ -1099,7 +1099,7 @@ corepack pnpm typecheck     # vue-tsc only; `build` runs this first anyway
 
 Vitest runs in a jsdom environment with `@vue/test-utils` for mounting components. Configuration lives in `vitest.config.ts`, which merges `vite.config.ts` so the `@` alias has a single definition.
 
-Tests live beside the code they cover and are picked up by the `src/**/*.test.ts` glob — for example `src/stores/auth.test.ts`, `src/composables/useAuth.test.ts`, and `src/views/auth/SignupView.test.ts`. They are excluded from `tsconfig.app.json` and type-checked by `tsconfig.vitest.json` instead, so a test file still has to compile — it just does not enter the app build.
+Tests live beside the code they cover and are picked up by the `src/**/*.test.ts` glob — for example `src/stores/__tests__/auth.test.ts`, `src/composables/__tests__/useAuth.test.ts`, and `src/views/auth/__tests__/SignupView.test.ts`. They are excluded from `tsconfig.app.json` and type-checked by `tsconfig.vitest.json` instead, so a test file still has to compile — it just does not enter the app build.
 
 **Mocking convention**: mock exactly one application boundary — `@/utils/http`. Composables, stores, and API service modules run for real, so a wrong argument order anywhere in the view → composable → store → api chain fails the test. Mocking `@/api/*` or `@/stores/*` defeats this. `vue-router` and Ant Design Vue's `message` are stubbed only as environment shims; `@/utils/storage` is left real because jsdom provides `localStorage`.
 
@@ -1120,10 +1120,10 @@ Four things about typed tests:
   `Date` objects, because that is what `Wire<T>` says arrives.
 - **A `vi.mock` factory is hoisted above the file**, so any variable it closes
   over has to come from `vi.hoisted()` or it is still in its temporal dead zone
-  when the factory runs. `src/stores/roles.test.ts` shows the pattern.
+  when the factory runs. `src/stores/__tests__/roles.test.ts` shows the pattern.
 - **Stub `window.matchMedia`** in any test that mounts an AntD grid or overlay —
   jsdom does not implement it, and antd's responsive observer subscribes on mount.
-  `src/components/OrgSwitcher.test.ts` has a copyable stub.
+  `src/components/__tests__/OrgSwitcher.test.ts` has a copyable stub.
 
 Store and composable tests call `setActivePinia(createPinia())` in `beforeEach`; component tests pass a fresh pinia via `mount(Component, { global: { plugins: [createPinia()] } })`.
 
