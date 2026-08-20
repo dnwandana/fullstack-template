@@ -7,12 +7,12 @@ describe("seed", () => {
   afterAll(async () => {
     // This suite truncates the shared permissions table; leave it fully seeded
     // so later suites (which rely on the rows surviving truncateAll) still find
-    // all 17 — even if an assertion above threw.
+    // every permission — even if an assertion above threw.
     await seedPermissions(prisma)
     await prisma.$disconnect()
   })
 
-  it("inserts the 17 permissions idempotently", async () => {
+  it("inserts every permission idempotently", async () => {
     await prisma.$executeRawUnsafe("TRUNCATE TABLE role_permissions, permissions CASCADE")
     await seedPermissions(prisma)
     await seedPermissions(prisma) // idempotent — no duplicate-key error

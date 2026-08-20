@@ -1,7 +1,7 @@
 // `project:read_all` makes cross-project visibility a grantable permission rather
 // than a role-name special case: a custom role granted it behaves like owner/admin.
 // Do not reintroduce role-name checks such as the old `ADMIN_ROLES` set.
-const ALL_PERMISSIONS = [
+export const ALL_PERMISSIONS = [
   "org:read",
   "org:update",
   "org:delete",
@@ -31,8 +31,8 @@ export type SystemRoleName = (typeof SYSTEM_ROLE_NAMES)[number]
 
 /**
  * `ALL_PERMISSIONS` here and `PERMISSION_NAMES` in `prisma/seed.ts` must hold the
- * same set of names, and nothing enforces it: a name present in only one compiles
- * and seeds cleanly, then silently fails to grant. Edit both in the same change.
+ * same set of names. `__tests__/system-roles.spec.ts` compares the two sorted, so a
+ * name present in only one fails the unit tier. Edit both in the same change.
  */
 export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleName, string[]> = {
   owner: ALL_PERMISSIONS,

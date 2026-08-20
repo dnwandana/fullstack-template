@@ -3,8 +3,9 @@ import { randomUUID } from "crypto"
 
 /**
  * The canonical permission set, also consumed by test/setup-e2e.ts. Must hold exactly the same
- * names as ALL_PERMISSIONS in src/modules/orgs/system-roles.ts: nothing enforces it, and a name
- * in one but not the other compiles and seeds cleanly while silently failing to grant.
+ * names as ALL_PERMISSIONS in src/modules/orgs/system-roles.ts. The unit spec beside that file,
+ * src/modules/orgs/__tests__/system-roles.spec.ts, compares the two sorted and fails on a
+ * name that appears in only one.
  */
 export const PERMISSION_NAMES = [
   "org:read",
