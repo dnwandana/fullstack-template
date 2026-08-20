@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client"
+
 /**
  * One projection for every role response — list returning fewer fields than detail
  * was accidental drift (L-27), and `description` is what a role-picker UI renders.
@@ -10,7 +12,7 @@ export const ROLE_SELECT = {
   isSystem: true,
   createdAt: true,
   updatedAt: true,
-} as const
+} satisfies Prisma.RoleSelect
 
 /** Shared by the list and detail paths so both emit an identical permission shape. */
 export const PERMISSION_SELECT = {
@@ -19,15 +21,7 @@ export const PERMISSION_SELECT = {
   resource: true,
   action: true,
   description: true,
-} as const
+} satisfies Prisma.PermissionSelect
 
 /** The row `ROLE_SELECT` produces; `toRoleResponse` adds `permissions` on top. */
-export type RoleRow = {
-  id: string
-  orgId: string
-  name: string
-  description: string | null
-  isSystem: boolean
-  createdAt: Date
-  updatedAt: Date
-}
+export type RoleRow = Prisma.RoleGetPayload<{ select: typeof ROLE_SELECT }>

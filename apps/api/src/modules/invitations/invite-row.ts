@@ -1,3 +1,5 @@
+import { Prisma } from "@prisma/client"
+
 /**
  * Prisma projection for an invitation row; key order mirrors the response, which `toSnakeKeys`
  * preserves. Not shared with roles.service.ts's own select on purpose — one projection across two
@@ -15,19 +17,7 @@ export const INVITE_SELECT = {
   expiresAt: true,
   createdAt: true,
   updatedAt: true,
-} as const
+} satisfies Prisma.InvitationSelect
 
-/** Hand-written mirror of `INVITE_SELECT`; nothing derives one from the other, so edit both. */
-export type InviteRow = {
-  id: string
-  orgId: string
-  projectId: string | null
-  inviterId: string
-  inviteeEmail: string | null
-  inviteeId: string | null
-  roleId: string
-  status: string
-  expiresAt: Date
-  createdAt: Date
-  updatedAt: Date
-}
+/** What `INVITE_SELECT` returns — the input side of `toInvitationResponse`. */
+export type InviteRow = Prisma.InvitationGetPayload<{ select: typeof INVITE_SELECT }>
