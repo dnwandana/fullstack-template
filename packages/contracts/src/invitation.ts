@@ -1,8 +1,8 @@
 import type { PaginationMeta } from "./pagination"
 
-// `status` is a plain string on purpose: the Prisma column is a string with no
-// database-level constraint, so publishing a union would claim an invariant the
-// schema does not enforce.
+// `status` is a plain string on purpose. A union here would duplicate the Prisma enum, and
+// this package is dependency-free, so nothing compares the two. The database does constrain
+// the column: 0_init creates the InvitationStatus enum and declares it NOT NULL.
 export type Invitation = {
   id: string
   org_id: string

@@ -14,7 +14,11 @@ import { REDIS_CLIENT } from "./redis.constants"
       useFactory: (config: ConfigService): Redis => {
         // maxRetriesPerRequest: null is required by BullMQ — with a finite value its blocking
         // consumer throws. lazyConnect stays at ioredis' default false deliberately, so an
-        // unreachable Redis complains at boot; it retries forever, so /health/ready must reject.
+        // unreachable Redis complains at boot. It then retries forever, and /health/ready does
+        // NOT probe Redis, so the instance reports ready and serves traffic. The queue writes
+        // and the rate-limit writes do not fail fast. enableOfflineQueue is at its default true,
+        // so ioredis buffers each command. The awaiting request hangs instead of getting an
+        // error. Both AGENTS.md files record this gap.
         const client = new Redis(config.getOrThrow<string>("REDIS_URL"), {
           maxRetriesPerRequest: null,
         })
