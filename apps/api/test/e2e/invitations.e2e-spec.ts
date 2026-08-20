@@ -22,6 +22,21 @@ describe("Invitations (e2e)", () => {
   afterAll(async () => app.close())
   const agent = () => request(app.getHttpServer())
 
+  // InvitationResponse's eleven wire keys — the base every subclass below adds to.
+  const INVITATION_KEYS = [
+    "created_at",
+    "expires_at",
+    "id",
+    "invitee_email",
+    "invitee_id",
+    "inviter_id",
+    "org_id",
+    "project_id",
+    "role_id",
+    "status",
+    "updated_at",
+  ]
+
   it("creates an org invitation, surfaces it to the invitee, and accepts it", async () => {
     const owner = await signupAndSignin(app)
     const org = await createOrg(app, owner.cookies)
@@ -442,5 +457,88 @@ describe("Invitations (e2e)", () => {
       .set("Cookie", member.cookies)
       .send({ email: "another@x.io", role_id: memberRoleId })
     expect(forbidden.status).toBe(403)
+  })
+
+  // Only toInvitationResponse has a key-set spec. All three subclasses spread its result
+  // into a literal, so a widened INVITE_SELECT still compiles. InvitationPreviewResponse does not
+  // spread it, and a widened INVITE_SELECT cannot reach it. A sibling it() cannot read another
+  // it()'s local const, so each test below builds its own fixture.
+  it("emits exactly the declared keys for a created invitation", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+
+    const created = await agent()
+      .post(`/api/v1/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "invitee@x.io", role_id: memberRoleId })
+
+    expect(Object.keys(created.body.data).toSorted()).toEqual(
+      [...INVITATION_KEYS, "accept_url", "token"].toSorted(),
+    )
+  })
+
+  it("emits exactly the declared keys for an org invitation list row", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+    await agent()
+      .post(`/api/v1/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "invitee@x.io", role_id: memberRoleId })
+
+    const listed = await agent()
+      .get(`/api/v1/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+
+    expect(Object.keys(listed.body.data[0]).toSorted()).toEqual(
+      [...INVITATION_KEYS, "invitee_name", "inviter_name", "role_name"].toSorted(),
+    )
+  })
+
+  it("emits exactly the declared keys for my own invitation", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+    await agent()
+      .post(`/api/v1/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "invitee@x.io", role_id: memberRoleId })
+
+    const invitee = await signupAndSignin(app, { email: "invitee@x.io" })
+    const mine = await agent().get(`/api/v1/invitations`).set("Cookie", invitee.cookies)
+
+    expect(Object.keys(mine.body.data[0]).toSorted()).toEqual(
+      [...INVITATION_KEYS, "inviter_name", "org_name", "project_name", "role_name"].toSorted(),
+    )
+  })
+
+  // InvitationPreviewResponse does not extend InvitationResponse, so its ten keys are written
+  // out in full rather than spread from INVITATION_KEYS.
+  it("emits exactly the declared keys for an invitation preview", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+    const created = await agent()
+      .post(`/api/v1/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "invitee@x.io", role_id: memberRoleId })
+
+    const preview = await agent().get(
+      `/api/v1/invitations/${created.body.data.id}/preview?token=${created.body.data.token}`,
+    )
+
+    expect(Object.keys(preview.body.data).toSorted()).toEqual([
+      "expires_at",
+      "id",
+      "invitee_email",
+      "inviter_name",
+      "is_expired",
+      "org_name",
+      "project_name",
+      "requires_signup",
+      "role_name",
+      "status",
+    ])
   })
 })

@@ -20,8 +20,10 @@ export class TodoListResponse implements TodoList {
   @ApiProperty({ type: PaginationMetaResponse }) pagination!: PaginationMetaResponse
 }
 
-// The return annotation is the guard: widening TODO_SELECT without updating
-// TodoResponse stops compiling here instead of silently changing the public API.
+// The return annotation catches a narrowing only: drop a field from TODO_SELECT and this stops
+// compiling. Adding one does not stop compiling, because the return value is not an object
+// literal, so no excess property check runs. The key-set test in __tests__/todo.response.spec.ts
+// is what catches an added field.
 export function toTodoResponse(row: TodoRow): TodoResponse {
   return toSnakeKeys<TodoRow>(row)
 }

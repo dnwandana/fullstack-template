@@ -11,8 +11,9 @@ import { toSnakeKeys } from "@shared/utils/to-snake-keys"
 import { PaginationMetaResponse } from "@shared/dto/pagination-meta.response"
 import type { InviteRow } from "../invite-row"
 
-// `status` is a plain string on purpose: the Prisma column has no database-level constraint, so
-// publishing a union would claim an invariant the schema does not enforce.
+// `status` stays a plain string because the contract in packages/contracts declares it as
+// one, and the SPA compares it to literals. The database does constrain it: 0_init creates
+// the InvitationStatus enum and declares the column NOT NULL against it.
 export class InvitationResponse implements Invitation {
   @ApiProperty({ format: "uuid" }) id!: string
   @ApiProperty({ format: "uuid" }) org_id!: string
@@ -70,9 +71,10 @@ export class InvitationPreviewResponse implements InvitationPreview {
   @ApiProperty() requires_signup!: boolean
 }
 
-// The return annotation is the guard: `toSnakeKeys<InviteRow>` yields `SnakeKeys<InviteRow>`, so
-// widening INVITE_SELECT without updating InvitationResponse stops compiling here instead of
-// silently changing the public API.
+// The return annotation catches a narrowing only: drop a field from INVITE_SELECT and this stops
+// compiling. Adding one does not stop compiling, because the return value is not an object
+// literal, so no excess property check runs. The key-set test in
+// __tests__/invitation.response.spec.ts is what catches an added field.
 export function toInvitationResponse(row: InviteRow): InvitationResponse {
   return toSnakeKeys<InviteRow>(row)
 }

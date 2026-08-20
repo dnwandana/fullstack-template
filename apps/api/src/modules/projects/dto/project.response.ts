@@ -13,8 +13,10 @@ export class ProjectResponse implements Project {
   @ApiProperty({ format: "date-time" }) updated_at!: Date
 }
 
-// The return annotation is the guard: widening PROJECT_SELECT without updating
-// ProjectResponse stops compiling here instead of silently changing the public API.
+// The return annotation catches a narrowing only: drop a field from PROJECT_SELECT and this stops
+// compiling. Adding one does not stop compiling, because the return value is not an object
+// literal, so no excess property check runs. The key-set test in __tests__/project.response.spec.ts
+// is what catches an added field.
 export function toProjectResponse(row: ProjectRow): ProjectResponse {
   return toSnakeKeys<ProjectRow>(row)
 }

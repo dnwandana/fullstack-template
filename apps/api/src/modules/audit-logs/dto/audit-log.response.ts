@@ -19,8 +19,10 @@ export class AuditLogResponse implements AuditLog {
   @ApiProperty({ format: "date-time" }) created_at!: Date
 }
 
-// The return annotation is the guard: widening AUDIT_LOG_SELECT without updating
-// AuditLogResponse stops compiling here instead of silently changing the public API.
+// The return annotation catches a narrowing only: drop a field from AUDIT_LOG_SELECT and this
+// stops compiling. Adding one does not stop compiling, because the added key arrives through the
+// ...mapped spread, and a spread property is exempt from the excess property check. The key-set
+// test in __tests__/audit-log.response.spec.ts is what catches an added field.
 export function toAuditLogResponse(row: AuditLogRow): AuditLogResponse {
   const mapped = toSnakeKeys<AuditLogRow>(row)
   return {
