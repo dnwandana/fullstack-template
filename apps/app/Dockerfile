@@ -1,5 +1,5 @@
 # Stage 1: build Vue app
-FROM node:24-alpine AS builder
+FROM node:24.21.0-alpine AS builder
 RUN corepack enable pnpm
 
 WORKDIR /app
