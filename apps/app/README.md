@@ -68,7 +68,7 @@ an earlier standalone backend implementing the same auth and todo contract.
 
 ## Prerequisites
 
-- **Node.js**: `>=24.0.0` — declared as `engines.node` in this package's `package.json` and in
+- **Node.js**: `>=24.21.0` — declared as `engines.node` in this package's `package.json` and in
   every other workspace package, pinned by the repo-root `.nvmrc`. `engineStrict: true` in
   `pnpm-workspace.yaml` makes it a hard gate: an older Node fails `corepack pnpm install` outright
   rather than warning and installing anyway.
@@ -135,10 +135,8 @@ corepack pnpm format
 ## Project structure
 
 The layer architecture — view → composable → store → api service → HTTP client — is documented in
-[`AGENTS.md`](AGENTS.md#layered-architecture). What lives in each directory is best read straight
-off `ls src/<layer>/`; `AGENTS.md` records only the contracts the filenames do not reveal, under
-[Stores](AGENTS.md#stores), [Composables](AGENTS.md#composables), and
-[API Service Layer](AGENTS.md#api-service-layer).
+[`AGENTS.md`](AGENTS.md#layers). What lives in each directory is best read straight off
+`ls src/<layer>/`; `AGENTS.md` records only the contracts the filenames do not reveal.
 
 ## Code style
 
@@ -146,7 +144,7 @@ Prettier plus Oxlint and ESLint, all configured in this directory — the config
 authoritative. Note that `corepack pnpm lint` here is `run-s lint:*`, which **auto-fixes** with both
 linters, and `format` is scoped to `src/`, so `*.md` in this package has no Prettier owner. The
 naming conventions that are not mechanically enforced are in
-[`AGENTS.md`](AGENTS.md#file-naming).
+[`AGENTS.md`](AGENTS.md#naming).
 
 ## TypeScript
 

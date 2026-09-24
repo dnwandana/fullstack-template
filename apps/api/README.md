@@ -1,6 +1,6 @@
 # NestJS API Template
 
-A production-ready RESTful API template built with NestJS 11, featuring PostgreSQL via Prisma, JWT authentication over httpOnly cookies, and a multi-tenant architecture with organization-based access control. Designed to jumpstart your next Node.js API project.
+A production-ready RESTful API template built with NestJS 12, featuring PostgreSQL via Prisma, JWT authentication over httpOnly cookies, and a multi-tenant architecture with organization-based access control. Designed to jumpstart your next Node.js API project.
 
 ## Monorepo Usage
 
@@ -30,8 +30,8 @@ You can still run package-local commands from `apps/api` with `corepack pnpm`.
 - **Security Headers**: Helmet with strict Content Security Policy, referrer protection, and HSTS (1-year max-age with preload)
 - **CORS**: Configurable allowed origins with credentials support for cookie-based auth
 - **Rate Limiting**: `@nestjs/throttler` with a `general` limiter (`RATE_LIMIT_GENERAL_MAX`, 15-minute window) wired through `ThrottlerModule.forRootAsync`, plus a stricter class-level `@Throttle` override on the auth controller (`RATE_LIMIT_AUTH_MAX`). The health routes are exempt. Counters live in **Redis** (`@nest-lab/throttler-storage-redis`), so limits are shared across every API instance rather than counted per process.
-- **Input Validation**: `class-validator` DTOs with a global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`); ILIKE wildcard sanitization on search
-- **Environment Validation**: Startup checks (Joi) for required variables, secret strength, and placeholder detection — fail-fast before boot
+- **Input Validation**: Zod request schemas, checked by a global `SchemaValidationPipe` (strict objects, so unknown keys are rejected; parsed values with defaults reach the handler); ILIKE wildcard sanitization on search
+- **Environment Validation**: Startup checks (a Zod schema) for required variables, secret strength, and placeholder detection — fail-fast before boot
 - **Body Size Limits**: 100kb cap on JSON and URL-encoded payloads
 - **Request ID Validation**: Incoming `X-Request-Id` headers are shape-checked against a dashed UUID or 32 undashed hex characters (nginx's `$request_id`); anything else is silently replaced with a freshly generated UUID, so nothing unvalidated reaches the log stream
 - **Pagination & Search**: Reusable list DTO (page, limit, sort, search) with case-insensitive, sanitized search
@@ -47,10 +47,10 @@ You can still run package-local commands from `apps/api` with `corepack pnpm`.
 ### Database & Architecture
 
 - **PostgreSQL**: Robust relational database (13 domain models)
-- **Prisma**: Type-safe ORM and migration engine; the schema is snake_case in the DB (`@map`/`@@map`) and camelCase in the client
-- **Modular NestJS layout**: `src/` splits four ways — `core/` (infrastructure), `shared/` (stateless helpers), `modules/<feature>/` (one self-contained feature module each: `*.module.ts`, `*.service.ts`, `*.controller.ts`, `dto/`), and `tenancy/` (the org/project guards). Services hold business logic and talk to Prisma, controllers stay thin. The layering rule is in [`AGENTS.md`](AGENTS.md#source-layout)
+- **Prisma**: Type-safe ORM and migration engine; the schema is snake_case in the DB (`@map`/`@@map`) and camelCase in the client. The `prisma-client` generator writes the client to `src/generated/prisma` (gitignored), and it connects through the `@prisma/adapter-pg` driver adapter
+- **Modular NestJS layout**: `src/` splits four ways — `core/` (infrastructure), `shared/` (stateless helpers), `modules/<feature>/` (one self-contained feature module each: `*.module.ts`, `*.service.ts`, `*.controller.ts`, `dto/`), and `tenancy/` (the org/project guards). Services hold business logic and talk to Prisma, controllers stay thin. The layering rule is in [`AGENTS.md`](AGENTS.md#layout-and-imports)
 - **Shared response contracts**: `@fullstack/contracts` (`packages/contracts`) is a dependency-free, type-only package; the API's response classes `implements` its interfaces so a drift between contract and payload is a compile error
-- **TypeScript**: Compiled to CommonJS (`nest build` → `dist/`)
+- **TypeScript**: TypeScript 6, compiled to CommonJS (`nest build` → `dist/`)
 
 ### Observability & Reliability
 
@@ -71,34 +71,34 @@ You can still run package-local commands from `apps/api` with `corepack pnpm`.
 
 ## Tech Stack
 
-| Component          | Version                                | Description                        |
-| ------------------ | -------------------------------------- | ---------------------------------- |
-| **Runtime**        | Node.js >=24.0.0                       | JavaScript runtime                 |
-| **Framework**      | NestJS ^11.1.28                        | Progressive Node.js framework      |
-| **HTTP Platform**  | Express ^5.2.1                         | Underlying HTTP adapter            |
-| **Database**       | PostgreSQL                             | Relational database                |
-| **ORM**            | Prisma ^6.19.3                         | Type-safe ORM & migrations         |
-| **Cache / Queue**  | Redis, ioredis ^5.11.1                 | Queue backend & throttler store    |
-| **Job Queue**      | BullMQ ^5.81.2, @nestjs/bullmq ^11.0.4 | Asynchronous notification delivery |
-| **Authentication** | @nestjs/jwt ^11.0.2, Argon2 ^0.45.1    | Token-based auth & hashing         |
-| **Cookies**        | cookie-parser ^1.4.7                   | httpOnly cookie management         |
-| **Validation**     | class-validator ^0.15.1, Joi ^18.2.3   | DTO validation & env checks        |
-| **Security**       | Helmet ^8.3.0                          | Security middleware                |
-| **Rate Limiting**  | @nestjs/throttler ^6.5.0               | Request throttling                 |
-| **Scheduling**     | @nestjs/schedule ^6.1.3                | Cron-based maintenance jobs        |
-| **API Docs**       | @nestjs/swagger ^11.4.6                | OpenAPI spec & Swagger UI          |
-| **Logging**        | nestjs-pino ^4.6.1, pino-http ^11.0.0  | Structured logging                 |
-| **Testing**        | Jest ^30.4.2, Supertest ^7.2.2         | Test runner & HTTP testing         |
-| **Code Quality**   | Oxlint ^1.75.0, Prettier ^3.9.6        | Linting and formatting             |
+| Component          | Version                               | Description                        |
+| ------------------ | ------------------------------------- | ---------------------------------- |
+| **Runtime**        | Node.js >=24.21.0                     | JavaScript runtime                 |
+| **Framework**      | NestJS ^12.1.0                        | Progressive Node.js framework      |
+| **HTTP Platform**  | Express ^5.2.1                        | Underlying HTTP adapter            |
+| **Database**       | PostgreSQL                            | Relational database                |
+| **ORM**            | Prisma ^7.10.0, @prisma/adapter-pg    | Type-safe ORM & migrations         |
+| **Cache / Queue**  | Redis, ioredis ^6.0.0                 | Queue backend & throttler store    |
+| **Job Queue**      | BullMQ ^6.3.8, @nestjs/bullmq ^12.0.0 | Asynchronous notification delivery |
+| **Authentication** | @nestjs/jwt ^12.0.2, Argon2 ^0.45.1   | Token-based auth & hashing         |
+| **Cookies**        | cookie-parser ^1.4.7                  | httpOnly cookie management         |
+| **Validation**     | Zod ^4.6.5                            | DTO validation & env checks        |
+| **Security**       | Helmet ^8.3.0                         | Security middleware                |
+| **Rate Limiting**  | @nestjs/throttler ^6.7.0              | Request throttling                 |
+| **Scheduling**     | @nestjs/schedule ^12.0.2              | Cron-based maintenance jobs        |
+| **API Docs**       | @nestjs/swagger ^12.0.2               | OpenAPI spec & Swagger UI          |
+| **Logging**        | nestjs-pino ^5.2.0, pino-http ^11.0.0 | Structured logging                 |
+| **Testing**        | Jest ^30.5.2, Supertest ^7.2.2        | Test runner & HTTP testing         |
+| **Code Quality**   | Oxlint ^1.75.0, Prettier ^3.9.6       | Linting and formatting             |
 
 ## Prerequisites
 
-- **Node.js** v24 or higher ([Download](https://nodejs.org/))
+- **Node.js** 24.21.0 or higher ([Download](https://nodejs.org/))
 - **PostgreSQL** database server ([Download](https://www.postgresql.org/download/))
 - **Redis** server ([Download](https://redis.io/downloads/)) — required, not optional; see `REDIS_URL` under [Configuration](#configuration)
 - **Git** for cloning the repository
 
-Node 24 is a hard floor: `prisma.config.ts` runs the database seed as `node prisma/seed.ts`, relying on Node's native TypeScript type-stripping — no ts-node/tsx is installed, and Node ≤ 22 fails there with a confusing syntax error.
+Node 24.21 is a hard floor: the NestJS 12 packages are ESM-only, and this CommonJS build loads them through `require(esm)`. An older Node fails at the first import.
 
 ## Quick Start
 
@@ -111,8 +111,9 @@ cp .env.example .env
 # Edit .env with your database credentials and secrets
 
 # 3. Set up the database
+corepack pnpm db:generate      # prisma generate — the client in src/generated/prisma
 corepack pnpm db:migrate       # prisma migrate deploy
-corepack pnpm db:seed          # prisma db seed — 18 canonical permissions (idempotent)
+corepack pnpm db:seed          # nest build, then prisma db seed — 18 canonical permissions (idempotent)
 
 # 4. Start development server
 corepack pnpm dev
@@ -122,7 +123,7 @@ The API will be available at `http://localhost:3000/api/v1` (health probes at `h
 
 ## Configuration
 
-This table is the canonical environment reference for the monorepo. The root `README.md` lists only the variables required to boot and links here; `AGENTS.md` does not restate it. Validation lives in `src/core/config/env.validation.ts` and runs at startup with `abortEarly: false`, so a bad `.env` fails fast with every problem listed at once.
+This table is the canonical environment reference for the monorepo. The root `README.md` lists only the variables required to boot and links here; `AGENTS.md` does not restate it. Validation lives in `src/core/config/env.validation.ts` and runs at startup and reports every failed variable, so a bad `.env` fails fast with every problem listed at once.
 
 Create a `.env` file in the project root with the following variables:
 
@@ -158,6 +159,8 @@ Both token lifetimes must match the grammar `<number><s|m|h|d>` (e.g. `15m`, `7d
 ```
 postgresql://username:password@localhost:5432/database_name
 ```
+
+Prisma 7 connects through `pg`. `pg` verifies the server's TLS certificate when the URL sets `sslmode=require`, and its pool holds 10 connections by default. A managed database with a private CA needs that CA in the trust store, or the boot fails with a certificate error.
 
 **Security Note:** JWT secrets must be at least 32 characters, must differ from each other, and must not contain placeholder values like "changeme". The server validates all required environment variables at startup and will refuse to start with missing, weak, or placeholder secrets. Generate secrets with:
 
@@ -235,7 +238,7 @@ Every success response is `{ message, data }`, with `pagination` added on pagina
 use `{ message, data: null, request_id }` — `request_id` appears on errors only, so a failure can
 always be correlated to a log line. How the interceptor and the exception filter produce these
 shapes, including the status mapping and the flattening of validation errors, is documented in
-[`AGENTS.md`](AGENTS.md#response-envelope).
+[`AGENTS.md`](AGENTS.md#request-pipeline).
 
 ## Development Commands
 
@@ -285,7 +288,7 @@ mechanisms apply, and the asymmetry is deliberate:
   tier. It calls `flushRedis`, which issues `flushdb` (not `flushall`); `.env.test` pins the
   connection to **database 1**, so the blast radius is exactly the data the run owns. This exists
   because throttle counters and BullMQ job hashes are now process-external and would otherwise carry
-  across suites — a full e2e pass signs in far more than the Joi-capped `RATE_LIMIT_AUTH_MAX`.
+  across suites — a full e2e pass signs in far more than `RATE_LIMIT_AUTH_MAX`, which the env schema caps at 50.
 
 Every module has an e2e spec — auth (including account lockout, cookie-based auth, token rotation,
 and password reset), health (live/ready), orgs, roles, members, projects, todos, permissions,
@@ -305,9 +308,9 @@ corepack pnpm format           # Apply formatting with Prettier
 
 ```bash
 corepack pnpm db:migrate        # prisma migrate deploy (apply pending migrations)
-corepack pnpm migrate:dev       # prisma migrate dev (create a new migration in dev)
-corepack pnpm db:seed           # prisma db seed (18 canonical permissions, idempotent)
-corepack pnpm db:generate       # prisma generate (regenerate the client after schema edits)
+corepack pnpm migrate:dev       # prisma migrate dev, then prisma generate (create a new migration in dev)
+corepack pnpm db:seed           # nest build, then prisma db seed (node dist/seed.js; 18 permissions, idempotent)
+corepack pnpm db:generate       # prisma generate (write the client after a fresh clone or a schema edit)
 corepack pnpm prisma:pull       # prisma db pull (introspect the DB into schema.prisma)
 ```
 
@@ -324,7 +327,7 @@ http://localhost:3000/api/docs
 ```
 
 - **Enabled by**: `SWAGGER_ENABLED` — defaults to `true` outside production and `false` when `NODE_ENV=production`. The check is fail-closed (`=== "true"`), so an unset or malformed value in production leaves the spec unpublished.
-- **Route metadata** comes from the Nest decorators; DTO property types, optionality, and validation come from the `@nestjs/swagger` CLI plugin configured in `nest-cli.json` (`introspectComments: true`, `dtoFileNameSuffix: [".dto.ts", ".response.ts"]`), so plain DTOs and response classes alike need no `@ApiProperty()` boilerplate.
+- **Route metadata** comes from the Nest decorators. Request bodies and queries come from the Zod schemas passed to `@Body({ schema })` and `@Query({ schema })`, which `@nestjs/swagger` converts to JSON Schema. Response class property types, optionality, and descriptions come from the `@nestjs/swagger` CLI plugin configured in `nest-cli.json` (`introspectComments: true`, `dtoFileNameSuffix: [".response.ts"]`), so neither needs `@ApiProperty()` boilerplate.
 - **Auth** is declared as the `access_token` cookie (`addCookieAuth`), not a bearer header — "Try it out" works from a browser session that has already signed in.
 - **Paths** carry the `/api/v1` prefix because the document is built after `setGlobalPrefix` and `enableVersioning`, matching what clients actually call. The three health probes appear unversioned, as they are.
 - **The docs route itself is not versioned.** Swagger UI is mounted at `api/docs` directly on the Express instance, so it is unaffected by `enableVersioning` and there is no `/api/v1/docs`.
@@ -340,7 +343,7 @@ This section is the canonical route list for the monorepo — the root `README.m
 means the route has no permission gate beyond authentication. Tables without an **Auth Required**
 column are entirely `access_token`-authenticated; where the column is present, it is authoritative.
 Why the guards run in that order, and why health sits outside the `/api` prefix, is explained in
-[`AGENTS.md`](AGENTS.md#endpoints).
+[`AGENTS.md`](AGENTS.md#request-pipeline).
 
 ### Health Check
 
@@ -474,8 +477,8 @@ Authentication uses **httpOnly cookies** set by the server. Tokens are never exp
 
 There are 4 built-in system roles per organization — `owner`, `admin`, `member`, `viewer` — and
 custom roles can be created with any combination of the 18 system permissions. Which permission
-each role holds is documented in [`AGENTS.md`](AGENTS.md#permissions), derived from
-`src/modules/orgs/system-roles.ts` and seeded (with descriptions) by `prisma/seed.ts`. Which permission
+each role holds is defined by `SYSTEM_ROLE_PERMISSIONS` in `src/modules/orgs/system-roles.ts`
+and seeded (with descriptions) by `src/seed.ts`. Which permission
 each endpoint requires is the **Permission** column of [API Endpoints](#api-endpoints) above.
 
 `audit:read` ("Read the org audit log page and endpoint") is held by `owner` and `admin`;
@@ -483,10 +486,9 @@ each endpoint requires is the **Permission** column of [API Endpoints](#api-endp
 
 ## Project Structure
 
-Per-module responsibilities are tabulated in [`AGENTS.md`](AGENTS.md#source-layout); the
-`src/modules/` subdirectories below are exactly the modules in that table. The four top-level
-`src/` directories and the dependency rule between them are described in
-[`AGENTS.md`](AGENTS.md#source-layout).
+The `src/modules/` subdirectories below are the feature modules; `ls src/modules/` is the
+authoritative list. The four top-level `src/` directories and the dependency rule between them are
+described in [`AGENTS.md`](AGENTS.md#layout-and-imports).
 
 ```
 apps/api/
@@ -495,8 +497,8 @@ apps/api/
 │   ├── bootstrap.ts          # helmet/cors/cookie-parser, setGlobalPrefix + enableVersioning, pino, Swagger
 │   ├── app.module.ts         # Root module: global pipe/filter/interceptor/guards + feature modules
 │   ├── core/                 # Infrastructure — owns connections, config, and global cross-cutting wiring
-│   │   ├── config/           # env.validation.ts (Joi, fail-fast), pino.config.ts, auth-throttle.ts, api-version.ts
-│   │   ├── database/         # PrismaService (Prisma client lifecycle)
+│   │   ├── config/           # env.validation.ts (Zod, fail-fast), pino.config.ts, auth-throttle.ts, api-version.ts
+│   │   ├── database/         # PrismaService (Prisma client lifecycle), createPrismaAdapter
 │   │   ├── redis/            # REDIS_CLIENT provider (ioredis), global RedisModule
 │   │   ├── queue/            # BullMQ notification queue + NotificationProcessor
 │   │   ├── audit/            # AuditService (global AuditModule) — best-effort append-only audit writes
@@ -506,9 +508,11 @@ apps/api/
 │   │   ├── dto/              # Envelope/Payload response types
 │   │   ├── pagination/       # pagination.dto.ts and friends
 │   │   ├── decorators/       # @CurrentUser and other parameter decorators
-│   │   ├── validators/       # custom class-validator rules
+│   │   ├── validation/       # SchemaValidationPipe + shared Zod field rules
 │   │   └── utils/            # to-snake-keys.ts, duration.ts
 │   ├── tenancy/              # OrgGuard, ProjectGuard, PermissionsGuard, MembershipService, @OrgScoped/@ProjectScoped
+│   ├── generated/            # Prisma client output (gitignored; `db:generate` writes it)
+│   ├── seed.ts               # Idempotent seed of the canonical permissions (runs as node dist/seed.js)
 │   └── modules/              # One self-contained feature module per directory
 │       ├── auth/             # Signup/signin/refresh/logout, password reset, JWT, cookies, token rotation
 │       ├── users/            # User lookups shared by other modules
@@ -524,8 +528,7 @@ apps/api/
 │       └── maintenance/      # CleanupService — nightly cron pruning expired auth/invitation rows and old audit logs
 ├── prisma/
 │   ├── schema.prisma         # Domain models (@map/@@map keep the DB snake_case)
-│   ├── migrations/           # Prisma migrations (single 0_init baseline)
-│   └── seed.ts               # Idempotent seed of the canonical permissions
+│   └── migrations/           # Prisma migrations (single 0_init baseline)
 ├── test/                     # Jest configs + shared helpers, globalSetup, Redis reset hook
 │   ├── integration/          # .int-spec.ts suites (PostgreSQL + Redis)
 │   └── e2e/                  # .e2e-spec.ts suites (PostgreSQL + Redis)
@@ -543,7 +546,7 @@ apps/api/
 ├── README.md                 # This file
 ├── TEMPLATE_GUIDE.md         # Guide for extending this template
 ├── nest-cli.json             # Nest CLI configuration (incl. the @nestjs/swagger plugin)
-├── prisma.config.ts          # Prisma CLI config — imports dotenv/config, points db seed at seed.ts
+├── prisma.config.ts          # Prisma CLI config — loads dotenv, points db seed at dist/seed.js
 ├── tsconfig.json             # TypeScript configuration
 ├── tsconfig.build.json       # Build-only overrides — names its own source set (src/, minus specs)
 └── package.json
@@ -575,11 +578,10 @@ corepack pnpm start
 
 ### Dependency Placement
 
-Three dependency choices look wrong at first glance and are deliberate — do not "fix" them:
+Two dependency choices look wrong at first glance and are deliberate — do not "fix" them:
 
-- **`prisma` and `dotenv` are production dependencies** on purpose. The runtime Docker image runs `prisma migrate deploy` and `prisma db seed`, and `prisma.config.ts` imports `dotenv/config` at runtime — moving either to `devDependencies` breaks migrations and seeding in the deployed container.
+- **`prisma` and `dotenv` are production dependencies** on purpose. The runtime Docker image runs `prisma migrate deploy` and `prisma db seed`, and `prisma.config.ts` imports `dotenv` at runtime — moving either to `devDependencies` breaks migrations and seeding in the deployed container.
 - **`express` is a direct dependency** because `bootstrap.ts` imports the `json`/`urlencoded` body parsers from it as values, rather than reaching them through `@nestjs/platform-express`.
-- The auto-generated banner in `prisma.config.ts` suggests installing `prisma` with `--save-dev`. That advice is wrong for this image; ignore it.
 
 ### Security Considerations
 

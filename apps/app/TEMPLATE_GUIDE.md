@@ -39,7 +39,7 @@ Edit `package.json` to rename the workspace package. The template ships as
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.21.0"
   }
 }
 ```

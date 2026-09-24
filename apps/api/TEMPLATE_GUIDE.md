@@ -4,15 +4,15 @@ This guide explains how to use this NestJS API template as a starting point for 
 
 ## Introduction
 
-This template provides a production-ready foundation for building RESTful APIs with NestJS 11, PostgreSQL (via Prisma), and JWT authentication. It includes:
+This template provides a production-ready foundation for building RESTful APIs with NestJS 12 on Node.js 24.21.0 or later and TypeScript 6, PostgreSQL (via Prisma 7), and JWT authentication. It includes:
 
 - Modular NestJS architecture (one module per feature)
 - JWT authentication with access/refresh tokens delivered as httpOnly cookies
 - Password complexity requirements and account lockout protection
 - Multi-tenant RBAC (Organization → Project → Resource) enforced by guards
 - A standardized success/error response envelope
-- Input validation with `class-validator` DTOs and a global `ValidationPipe`
-- Type-safe database access and migrations with Prisma
+- Input validation with Zod schemas and a global `SchemaValidationPipe`
+- Type-safe database access and migrations with Prisma. The `prisma-client` generator writes the client to `src/generated/prisma`, and code imports it through the `@generated/*` alias
 - Security best practices (Helmet, CORS, Argon2)
 - Structured logging with `nestjs-pino`
 
@@ -29,14 +29,14 @@ src/modules/<feature>/
 ├── <feature>.module.ts       # Wires the controller + providers, imports TenancyModule
 ├── <feature>.service.ts      # Business logic; injects PrismaService
 ├── <feature>.controller.ts   # Thin HTTP layer (params → service → envelope)
-└── dto/                      # class-validator DTOs (request bodies + query params)
+└── dto/                      # Zod request schemas (bodies + queries) and response classes
 ```
 
 Services hold the business logic and talk to Prisma; controllers stay thin — they read request context via param decorators, call the service, and return a plain payload that the global interceptor wraps into the response envelope.
 
 The cross-cutting providers are registered once in `src/app.module.ts`:
 
-- `APP_PIPE` → `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })` — unknown body fields are rejected, DTOs are class-transformed.
+- `APP_PIPE` → `SchemaValidationPipe` (`src/shared/validation/schema-validation.pipe.ts`). It validates each `@Body({ schema })` and `@Query({ schema })` parameter and gives the parsed value to the handler. It throws an error for a body or query parameter that has no schema.
 - `APP_INTERCEPTOR` → `TransformInterceptor` — normalizes every response into the success envelope.
 - `APP_FILTER` → `AllExceptionsFilter` — normalizes every error into the error envelope.
 - `APP_GUARD` → `ThrottlerGuard` (rate limiting) then `JwtAuthGuard` (authentication).
@@ -85,7 +85,7 @@ The **success** envelope:
 }
 ```
 
-The **error** envelope (from `AllExceptionsFilter`) is always `{ "message": "…", "data": null, "request_id": "…" }` with the thrown `HttpException`'s status. `class-validator` failures (arrays of messages) are flattened to a single `"; "`-joined string.
+The **error** envelope (from `AllExceptionsFilter`) is always `{ "message": "…", "data": null, "request_id": "…" }` with the thrown `HttpException`'s status. A validation failure gives an array of messages, and the filter joins them into one string with `"; "`.
 
 ### Prisma access
 
@@ -152,58 +152,72 @@ model Category {
 }
 ```
 
-Add the back-relations on `Project` and `User` (`categories Category[]`), then create the migration and regenerate the client:
+Add the back-relations on `Project` and `User` (`categories Category[]`). Then create the migration:
 
 ```bash
-corepack pnpm migrate:dev   # prisma migrate dev — prompts for a migration name, applies it
-corepack pnpm db:generate   # prisma generate — refresh the typed client
+corepack pnpm migrate:dev   # prisma migrate dev, then prisma generate
 ```
+
+`migrate:dev` also regenerates the client in `src/generated/prisma`. After a schema edit without a migration, run `corepack pnpm db:generate`.
 
 ### Step 3: Create the DTOs
 
-Request validation lives in `class-validator` DTOs under `src/modules/categories/dto/`. The global `ValidationPipe` rejects unknown fields and transforms types automatically.
+Request validation lives in Zod schemas under `src/modules/categories/dto/`. Each DTO file exports two things:
+
+- the schema, named `<name>Schema`
+- the type, named `<Name>Dto`, which is `z.infer` of the schema
+
+Reuse the field rules in `src/shared/validation/fields.ts`. Do not write a rule again in a DTO.
 
 `src/modules/categories/dto/category-body.dto.ts`:
 
 ```typescript
-import { IsHexColor, IsOptional, IsString, MaxLength, MinLength } from "class-validator"
-import { IsPlainSingleLine } from "@shared/validators/control-chars"
+import { z } from "zod"
+import { plainSingleLine } from "@shared/validation/fields"
 
-export class CategoryBodyDto {
-  @IsString()
-  @MinLength(1)
-  @MaxLength(255)
-  @IsPlainSingleLine()
-  name!: string
+export const categoryBodySchema = z
+  .strictObject({
+    name: plainSingleLine(255),
+    color: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/, "color must be a hex color such as #3B82F6")
+      .optional(),
+  })
+  .meta({ id: "CategoryBodyDto" })
 
-  @IsOptional()
-  @IsHexColor()
-  color?: string
-}
+export type CategoryBodyDto = z.infer<typeof categoryBodySchema>
 ```
 
-`IsPlainSingleLine` trims the value and rejects control characters, line separators and
-bidirectional overrides. Put it on every **single-line** free-text field that the SPA renders: a
-bidirectional override lets one name render as another, so a display name can impersonate a
-different organisation. Leave it off a multi-line `description`, because the rule rejects the
-newline.
+Obey these rules for a request schema:
 
-`src/modules/categories/dto/list-categories.dto.ts` — extend the shared pagination DTO and narrow the sortable columns:
+- **Use `z.strictObject`.** An unknown key then gives a `400` with the message `Unrecognized key: "k"`.
+- **Give a body schema a `.meta({ id })`.** The id is the name of the schema in the OpenAPI document.
+- **Give a derived schema its own id.** `.extend()` and `.partial()` do not keep the id of the base schema. See `updateRoleSchema` in `src/modules/roles/dto/update-role.dto.ts`.
+- **Never give a query schema an id.** With an id, Swagger emits no query parameters.
+
+`plainSingleLine` trims the value and rejects control characters, line separators and
+bidirectional overrides. Use it for every **single-line** free-text field that the SPA renders: a
+bidirectional override lets one name render as another, so a display name can impersonate a
+different organisation. Do not use it for a multi-line `description`, because the rule rejects the
+newline. Use `optionalDescription` for that field.
+
+`src/modules/categories/dto/list-categories.dto.ts` — extend the shared pagination schema and narrow the sortable columns:
 
 ```typescript
-import { IsIn, IsOptional } from "class-validator"
-import { PaginationQueryDto } from "@shared/pagination/pagination.dto"
+import { z } from "zod"
+import { paginationQuerySchema } from "@shared/pagination/pagination.dto"
 
 const SORTABLE = ["created_at", "name"] as const
 
-export class ListCategoriesDto extends PaginationQueryDto {
-  @IsOptional()
-  @IsIn(SORTABLE)
-  sort_by?: (typeof SORTABLE)[number] = undefined
-}
+// No `.meta({ id })`: this is a query schema.
+export const listCategoriesSchema = paginationQuerySchema.extend({
+  sort_by: z.enum(SORTABLE).optional(),
+})
+
+export type ListCategoriesDto = z.infer<typeof listCategoriesSchema>
 ```
 
-`PaginationQueryDto` already provides `page`, `limit`, `sort_order`, and `search` with defaults.
+`paginationQuerySchema` already gives `page`, `limit`, `sort_order`, and `search` with defaults. Query values arrive as strings, so `page` and `limit` use `queryInt`, which coerces them to numbers.
 
 ### Step 4: Create the service
 
@@ -215,7 +229,7 @@ it. `Prisma.CategoryGetPayload` derives the type from the selection, so the two 
 `src/modules/categories/category-row.ts`:
 
 ```typescript
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 
 /**
  * The Prisma selection and the row type it produces, kept together so a change to one is
@@ -248,8 +262,8 @@ import { randomUUID } from "crypto"
 import { PrismaService } from "@core/database/prisma.service"
 import { PaginationService } from "@shared/pagination/pagination.service"
 import { toSnakeKeys } from "@shared/utils/to-snake-keys"
-import { CategoryBodyDto } from "./dto/category-body.dto"
-import { ListCategoriesDto } from "./dto/list-categories.dto"
+import type { CategoryBodyDto } from "./dto/category-body.dto"
+import type { ListCategoriesDto } from "./dto/list-categories.dto"
 import { CATEGORY_SELECT, type CategoryRow } from "./category-row"
 
 const SORT_COLUMN: Record<string, "createdAt" | "name"> = {
@@ -336,7 +350,7 @@ export class CategoriesService {
 
 ### Step 5: Create the controller
 
-The controller applies the guard stack via `@ProjectScoped()`, declares the required permission per handler, and reads context with param decorators. Validate UUID path params with `ParseUUIDPipe`.
+The controller applies the guard stack via `@ProjectScoped()`, declares the required permission per handler, and reads context with param decorators. Pass the schema to `@Body` and `@Query`. Validate UUID path params with `ParseUUIDPipe`.
 
 `src/modules/categories/categories.controller.ts`:
 
@@ -353,8 +367,8 @@ import {
   Query,
 } from "@nestjs/common"
 import { CategoriesService } from "./categories.service"
-import { CategoryBodyDto } from "./dto/category-body.dto"
-import { ListCategoriesDto } from "./dto/list-categories.dto"
+import { categoryBodySchema, type CategoryBodyDto } from "./dto/category-body.dto"
+import { listCategoriesSchema, type ListCategoriesDto } from "./dto/list-categories.dto"
 import { CurrentUser } from "@shared/decorators/current-user.decorator"
 import { CurrentProject } from "@shared/decorators/current-project.decorator"
 import { RequirePermission } from "@shared/decorators/require-permission.decorator"
@@ -367,7 +381,10 @@ export class CategoriesController {
 
   @Get()
   @RequirePermission("categories:read")
-  async list(@CurrentProject() project: { id: string }, @Query() query: ListCategoriesDto) {
+  async list(
+    @CurrentProject() project: { id: string },
+    @Query({ schema: listCategoriesSchema }) query: ListCategoriesDto,
+  ) {
     const { data, pagination } = await this.categories.list(project.id, query)
     return { message: "OK", data, pagination }
   }
@@ -377,7 +394,7 @@ export class CategoriesController {
   async create(
     @CurrentProject() project: { id: string },
     @CurrentUser("id") userId: string,
-    @Body() dto: CategoryBodyDto,
+    @Body({ schema: categoryBodySchema }) dto: CategoryBodyDto,
   ) {
     return { message: "Created", data: await this.categories.create(project.id, userId, dto) }
   }
@@ -396,7 +413,7 @@ export class CategoriesController {
   async update(
     @CurrentProject() project: { id: string },
     @Param("category_id", ParseUUIDPipe) categoryId: string,
-    @Body() dto: CategoryBodyDto,
+    @Body({ schema: categoryBodySchema }) dto: CategoryBodyDto,
   ) {
     return { message: "OK", data: await this.categories.update(project.id, categoryId, dto) }
   }
@@ -452,14 +469,18 @@ export class AppModule {}
 
 New permission names must be added in **two** places so they exist in the DB and are granted to the right system roles:
 
-1. `prisma/seed.ts` — add each name to `PERMISSION_NAMES` and a human description to `PERMISSION_DESCRIPTIONS`.
+1. `src/seed.ts` — add each name to `PERMISSION_NAMES` and a human description to `PERMISSION_DESCRIPTIONS`.
 2. `src/modules/orgs/system-roles.ts` — add each name to `ALL_PERMISSIONS`, and to the per-role lists in `SYSTEM_ROLE_PERMISSIONS` (e.g. grant `categories:read` to `viewer`/`member`, the write permissions to `member`/`admin`/`owner`).
+
+The unit spec `src/modules/orgs/__tests__/system-roles.spec.ts` fails if the two lists do not hold the same names.
 
 Then re-seed (idempotent upsert):
 
 ```bash
-corepack pnpm db:seed
+corepack pnpm db:seed   # nest build, then prisma db seed, which runs node dist/seed.js
 ```
+
+The seed is compiled with the app, because it imports the generated client, which is TypeScript source.
 
 ### Step 8: Add an e2e test
 
@@ -503,7 +524,7 @@ describe("Categories (e2e)", () => {
 ```
 
 ```bash
-corepack pnpm test   # jest --config test/jest-e2e.json (real PostgreSQL from .env.test)
+corepack pnpm test   # jest --config test/jest-e2e.json (real PostgreSQL and Redis from .env.test)
 ```
 
 ### Step 9: Try it with cURL
@@ -531,11 +552,11 @@ Prisma is the single source of truth for the schema and migrations.
 ### Workflow
 
 ```bash
-corepack pnpm migrate:dev    # prisma migrate dev — create + apply a migration in dev
+corepack pnpm migrate:dev    # prisma migrate dev + prisma generate — create and apply a migration in dev
 corepack pnpm db:migrate     # prisma migrate deploy — apply pending migrations (prod)
-corepack pnpm db:generate    # prisma generate — regenerate the typed client after schema edits
+corepack pnpm db:generate    # prisma generate — regenerate the client in src/generated/prisma
 corepack pnpm prisma:pull    # prisma db pull — introspect an existing DB into schema.prisma
-corepack pnpm db:seed        # prisma db seed — idempotent upsert of the 18 canonical permissions
+corepack pnpm db:seed        # nest build + prisma db seed — idempotent upsert of the 18 canonical permissions
 ```
 
 **Best practices:**
@@ -584,29 +605,40 @@ Read context with `@CurrentUser("id")`, `@CurrentOrg()`, `@CurrentProject()`, an
 
 ## Input Validation
 
-Validation is declarative via `class-validator` DTOs — no manual schema calls inside handlers. The global `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })` rejects unknown fields and coerces types.
+Validation is declarative. A handler never calls a schema itself. The global `SchemaValidationPipe` validates each parameter that has a schema, and the handler gets the parsed value, with the defaults and the trims applied.
 
 ### Request body
 
 ```typescript
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator"
+import { z } from "zod"
+import { plainSingleLine } from "@shared/validation/fields"
 
-export class CreateWidgetDto {
-  @IsString()
-  @MaxLength(255)
-  name!: string
+export const createWidgetSchema = z
+  .strictObject({
+    name: plainSingleLine(255),
+    priority: z.int().min(0).max(100).optional(),
+  })
+  .meta({ id: "CreateWidgetDto" })
 
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(100)
-  priority?: number
-}
+export type CreateWidgetDto = z.infer<typeof createWidgetSchema>
+```
+
+```typescript
+@Post()
+create(@Body({ schema: createWidgetSchema }) dto: CreateWidgetDto) {}
+```
+
+Always pass `{ schema }`. A `@Body()` or `@Query()` parameter without a schema makes the pipe throw an error, because an unchecked parameter would accept any input.
+
+For an update schema that makes every field optional, call `.partial()` on the base schema and set a new id:
+
+```typescript
+export const updateRoleSchema = z.strictObject(roleFields).partial().meta({ id: "UpdateRoleDto" })
 ```
 
 ### Query parameters
 
-Extend `PaginationQueryDto` for list endpoints (it supplies `page`, `limit`, `sort_order`, `search`), and narrow `sort_by` with `@IsIn([...])` as shown in Step 3.
+Extend `paginationQuerySchema` for list endpoints (it gives `page`, `limit`, `sort_order`, `search`), and narrow `sort_by` with `z.enum([...])` as shown in Step 3. Do not give a query schema an id.
 
 ### Path parameters
 
@@ -617,7 +649,16 @@ Validate UUID params inline with `ParseUUIDPipe`:
 read(@Param("widget_id", ParseUUIDPipe) widgetId: string) {}
 ```
 
-A validation failure is thrown as a `400`, and `AllExceptionsFilter` flattens class-validator's message array into a single `"; "`-joined string.
+A UUID in a body or a query uses `uuid` from `fields.ts` (`z.uuid()`). It accepts the same values as `ParseUUIDPipe`: RFC 9562 versions 1-8, the nil UUID and the max UUID.
+
+### Error messages
+
+A validation failure gives a `400`. `formatIssues` in `schema-validation.pipe.ts` makes one message for each issue:
+
+- A message that starts with its field name goes out unchanged, for example `token must be a 64-character hex string`.
+- Every other message gets the prefix `<path>: `, so a default Zod message still names its field.
+
+`AllExceptionsFilter` joins the messages into one string with `"; "`.
 
 ## Error Handling
 
@@ -645,17 +686,17 @@ You do **not** write try/catch-and-`next()` blocks — unhandled throws are caug
 
 ## API Response Format
 
-The envelope and its error form are documented in [`AGENTS.md`](AGENTS.md#response-envelope). What matters when adding a resource: return the payload directly from the service — the interceptor wraps it — and never construct the envelope by hand.
+The envelope and its error form are documented in [`AGENTS.md`](AGENTS.md#request-pipeline). What matters when adding a resource: return the payload directly from the service — the interceptor wraps it — and never construct the envelope by hand.
 
 ## Common Patterns and Recipes
 
 ### Pagination
 
-Extend `PaginationQueryDto`, then let the service do count + page fetch and hand off to `PaginationService.buildMeta` (see Step 4). The controller just forwards `{ data, pagination }` into the envelope.
+Extend `paginationQuerySchema`, then let the service do count + page fetch and hand off to `PaginationService.buildMeta` (see Step 4). The controller just forwards `{ data, pagination }` into the envelope.
 
 ### Sorting
 
-Map the DTO's whitelisted `sort_by` (snake_case, API-facing) to the Prisma camelCase column, then pass `orderBy`:
+Map the DTO's `sort_by` enum value (snake_case, API-facing) to the Prisma camelCase column, then pass `orderBy`:
 
 ```typescript
 const SORT_COLUMN: Record<string, "createdAt" | "name"> = { created_at: "createdAt", name: "name" }
@@ -694,7 +735,7 @@ Fetch related rows with Prisma `select`/`include` rather than hand-written joins
 
 ### Security
 
-1. **Environment variables** — never commit `.env`; use strong, distinct JWT secrets (≥32 chars), validated at startup by `src/core/config/env.validation.ts` (fail-fast).
+1. **Environment variables** — never commit `.env`; use strong, distinct JWT secrets (≥32 chars), validated at startup by the Zod schema in `src/core/config/env.validation.ts` (fail-fast).
 2. **Database** — restrict the DB user's privileges, enable SSL for production connections, and keep `DATABASE_URL` out of source control.
 3. **API** — rate limiting is on by default (`@nestjs/throttler`); keep dependencies patched with `corepack pnpm audit`; always serve over HTTPS in production.
 
@@ -717,7 +758,7 @@ Fetch related rows with Prisma `select`/`include` rather than hand-written joins
 
 **`403 Forbidden` on a valid route**
 
-- The handler's `@RequirePermission(...)` name isn't in `req.permissions`. Confirm the permission is granted to the caller's role in `src/modules/orgs/system-roles.ts` and seeded in `prisma/seed.ts`, then re-seed.
+- The handler's `@RequirePermission(...)` name isn't in `req.permissions`. Confirm the permission is granted to the caller's role in `src/modules/orgs/system-roles.ts` and seeded in `src/seed.ts`, then re-seed.
 
 **`404` on a resource you know exists**
 
@@ -739,7 +780,7 @@ Fetch related rows with Prisma `select`/`include` rather than hand-written joins
 
 - [NestJS Documentation](https://docs.nestjs.com/)
 - [Prisma Documentation](https://www.prisma.io/docs)
-- [class-validator](https://github.com/typestack/class-validator)
+- [Zod](https://zod.dev/)
 - [PostgreSQL Documentation](https://www.postgresql.org/docs/)
 - [Argon2 Hashing](https://github.com/ranisalt/node-argon2)
 

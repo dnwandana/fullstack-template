@@ -6,7 +6,7 @@ A production-ready monorepo for building multi-tenant SaaS applications. Combine
 
 | Package              | Stack                                          | Purpose                                 |
 | -------------------- | ---------------------------------------------- | --------------------------------------- |
-| `apps/api`           | NestJS 11, PostgreSQL, Prisma, Redis           | REST API with auth, RBAC, multi-tenancy |
+| `apps/api`           | NestJS 12, PostgreSQL, Prisma, Redis           | REST API with auth, RBAC, multi-tenancy |
 | `apps/app`           | Vue 3, TypeScript, Pinia, Ant Design Vue, Vite | Single-page app consuming the API       |
 | `packages/contracts` | TypeScript declarations only, no deps          | Response shapes shared by API and SPA   |
 
@@ -39,7 +39,7 @@ Organization
 
 ## Prerequisites
 
-- Node.js `>=24.0.0` — declared as `engines.node` in all four workspace `package.json`s and pinned
+- Node.js `>=24.21.0` — declared as `engines.node` in all four workspace `package.json`s and pinned
   by `.nvmrc`. It is enforced, not advisory: `engineStrict: true` in `pnpm-workspace.yaml` makes
   `corepack pnpm install` exit non-zero on an older Node instead of warning and installing anyway.
 - Corepack (bundled with Node 24+)
@@ -50,7 +50,8 @@ Organization
   Redis just as it needs a managed PostgreSQL. Running the API outside Docker means running one
   yourself.
 
-Node 24+ is a hard floor, not a preference: `apps/api/prisma.config.ts` runs the database seed as `node prisma/seed.ts`, relying on Node's native TypeScript type-stripping (no ts-node/tsx is installed). Node ≤ 22 fails there with a confusing syntax error.
+Node 24.21 is a hard floor, not a preference. The NestJS 12 packages are ESM-only, and the CommonJS
+build of `apps/api` loads them through `require(esm)`. An older Node fails at the first import.
 
 For production deployment:
 
@@ -85,8 +86,9 @@ Run Prisma migrations and (optional) seed data:
 
 ```bash
 cd apps/api
+corepack pnpm db:generate  # prisma generate — writes the client to src/generated/prisma
 corepack pnpm db:migrate   # prisma migrate deploy
-corepack pnpm db:seed      # prisma db seed — inserts the 18 canonical permissions idempotently
+corepack pnpm db:seed      # nest build, then prisma db seed — inserts the 18 permissions idempotently
 ```
 
 Migrations never run automatically — apply them explicitly on every environment.
@@ -158,7 +160,7 @@ Success responses are `{ message, data }`, with `pagination` added on list endpo
 `{ message, data: null, request_id }` — `request_id` appears on errors only, so a failure can always
 be correlated to a log line. The envelope's fields, and how the transform interceptor and the
 exception filter produce them, are documented in
-[`apps/api/AGENTS.md`](apps/api/AGENTS.md#response-envelope).
+[`apps/api/AGENTS.md`](apps/api/AGENTS.md#request-pipeline).
 
 ### Authentication cookies
 
@@ -373,8 +375,10 @@ fullstack-template/
 │   │   │   ├── main.ts             # Entry point — creates the Nest app, calls configureApp, listens
 │   │   │   ├── bootstrap.ts        # helmet/cors/cookie-parser, global prefix + URI versioning, pino, Swagger
 │   │   │   ├── app.module.ts       # Root module: global pipe/filter/interceptor/guards + feature modules
+│   │   │   ├── seed.ts             # Idempotent seed of the 18 canonical permissions (runs from dist/)
+│   │   │   ├── generated/          # Prisma client output (gitignored; `db:generate` writes it) (@generated/*)
 │   │   │   ├── core/               # Infrastructure that owns a connection or global wiring (@core/*)
-│   │   │   │   ├── config/         # env.validation.ts (Joi, fail-fast), api-version.ts, pino.config.ts
+│   │   │   │   ├── config/         # env.validation.ts (Zod, fail-fast), api-version.ts, pino.config.ts
 │   │   │   │   ├── database/       # PrismaService (Prisma client lifecycle)
 │   │   │   │   ├── redis/          # RedisModule — the global REDIS_CLIENT ioredis provider
 │   │   │   │   ├── queue/          # BullMQ notifications queue + NotificationProcessor
@@ -382,15 +386,14 @@ fullstack-template/
 │   │   │   │   ├── filters/        # AllExceptionsFilter (error envelope)
 │   │   │   │   └── interceptors/   # TransformInterceptor (success envelope)
 │   │   │   ├── shared/             # Stateless helpers, no infrastructure of their own (@shared/*)
-│   │   │   │   ├── dto/, pagination/, decorators/, validators/, utils/
+│   │   │   │   ├── dto/, pagination/, decorators/, validation/, utils/
 │   │   │   ├── tenancy/            # Org/Project/Permissions guards + membership resolution (@tenancy/*)
 │   │   │   └── modules/            # One self-contained feature module each (@modules/*)
 │   │   │       └── auth, users, permissions, orgs, roles, members,
 │   │   │           projects, todos, invitations, audit-logs, health, maintenance/
 │   │   ├── prisma/
 │   │   │   ├── schema.prisma       # 13 domain models (@map/@@map keep the DB snake_case)
-│   │   │   ├── migrations/         # Prisma migrations (single 0_init baseline)
-│   │   │   └── seed.ts             # Idempotent seed of the 18 canonical permissions
+│   │   │   └── migrations/         # Prisma migrations (single 0_init baseline)
 │   │   └── test/                   # Shared helpers + both Jest configs; integration/ and e2e/ suites
 │   │                               #   (unit specs live in __tests__/ folders beside the code they cover)
 │   │
@@ -438,4 +441,4 @@ so root markdown and `apps/app/*.md` have no formatter — edit them by hand.
 
 The conventions that are *not* mechanically enforced are noted in
 [`apps/api/AGENTS.md`](apps/api/AGENTS.md#code-style) and
-[`apps/app/AGENTS.md`](apps/app/AGENTS.md#file-naming).
+[`apps/app/AGENTS.md`](apps/app/AGENTS.md#naming).
