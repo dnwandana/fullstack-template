@@ -1,28 +1,14 @@
-import {
-  ArrayMinSize,
-  IsArray,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-  MinLength,
-} from "class-validator"
-import { IsPlainSingleLine } from "@shared/validators/control-chars"
+import { z } from "zod"
+import { optionalDescription, plainSingleLine, uuid } from "@shared/validation/fields"
 
-export class CreateRoleDto {
-  @IsString()
-  @MinLength(1)
-  @MaxLength(50)
-  @IsPlainSingleLine()
-  name!: string
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(5000)
-  description?: string
-
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsUUID("all", { each: true })
-  permission_ids!: string[]
+// Shared with UpdateRoleDto. The `.meta({ id })` stays off this object, because a derived
+// schema does not inherit it.
+export const roleFields = {
+  name: plainSingleLine(50),
+  description: optionalDescription,
+  permission_ids: z.array(uuid).min(1),
 }
+
+export const createRoleSchema = z.strictObject(roleFields).meta({ id: "CreateRoleDto" })
+
+export type CreateRoleDto = z.infer<typeof createRoleSchema>

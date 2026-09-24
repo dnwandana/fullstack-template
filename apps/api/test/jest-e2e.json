@@ -15,7 +15,8 @@
     "^@modules/(.*)$": "<rootDir>/src/modules/$1",
     "^@tenancy/(.*)$": "<rootDir>/src/tenancy/$1",
     "^@test/(.*)$": "<rootDir>/test/$1",
-    "^@app/(.*)$": "<rootDir>/src/$1"
+    "^@app/(.*)$": "<rootDir>/src/$1",
+    "^@generated/(.*)$": "<rootDir>/src/generated/$1"
   },
   "setupFiles": ["<rootDir>/test/load-test-env.ts"],
   "setupFilesAfterEnv": ["<rootDir>/test/reset-redis-state.ts"],

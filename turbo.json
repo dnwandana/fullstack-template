@@ -2,12 +2,16 @@
   "$schema": "https://v2-10-4.turborepo.dev/schema.json",
   "globalEnv": ["NODE_ENV"],
   "tasks": {
+    "db:generate": {
+      "cache": false
+    },
     "dev": {
+      "dependsOn": ["db:generate"],
       "cache": false,
       "persistent": true
     },
     "build": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "db:generate"],
       "outputs": ["dist/**"],
       "env": [
         "DATABASE_URL",
@@ -34,11 +38,11 @@
       "outputs": []
     },
     "typecheck": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "db:generate"],
       "outputs": []
     },
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "db:generate"],
       "outputs": ["coverage/**"],
       "env": [
         "DATABASE_URL",

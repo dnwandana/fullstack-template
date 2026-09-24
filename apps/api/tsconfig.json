@@ -10,7 +10,6 @@
     "target": "ES2023",
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
     "strict": true,
@@ -18,13 +17,16 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "resolveJsonModule": true,
+    // TS 6 defaults `types` to []. The ambient globals of Node and Jest must be listed.
+    "types": ["node", "jest"],
     "paths": {
-      "@core/*": ["src/core/*"],
-      "@shared/*": ["src/shared/*"],
-      "@modules/*": ["src/modules/*"],
-      "@tenancy/*": ["src/tenancy/*"],
-      "@test/*": ["test/*"],
-      "@app/*": ["src/*"]
+      "@core/*": ["./src/core/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@tenancy/*": ["./src/tenancy/*"],
+      "@test/*": ["./test/*"],
+      "@app/*": ["./src/*"],
+      "@generated/*": ["./src/generated/*"]
     }
   },
   "include": ["src/**/*", "test/**/*", "prisma/**/*", "prisma.config.ts"],

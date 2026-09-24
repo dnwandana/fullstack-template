@@ -1,7 +1,7 @@
 import { Controller, Get, Query } from "@nestjs/common"
 import { AuditLogsService } from "./audit-logs.service"
 import { AuditLogResponse } from "./dto/audit-log.response"
-import { ListAuditLogsDto } from "./dto/list-audit-logs.dto"
+import { listAuditLogsSchema, type ListAuditLogsDto } from "./dto/list-audit-logs.dto"
 import type { Payload } from "@shared/dto/response.types"
 import { CurrentOrg } from "@shared/decorators/current-org.decorator"
 import { RequirePermission } from "@shared/decorators/require-permission.decorator"
@@ -17,7 +17,7 @@ export class AuditLogsController {
   @RequirePermission("audit:read")
   async list(
     @CurrentOrg() org: { id: string },
-    @Query() query: ListAuditLogsDto,
+    @Query({ schema: listAuditLogsSchema }) query: ListAuditLogsDto,
   ): Promise<Payload<AuditLogResponse[]>> {
     return { message: "OK", ...(await this.auditLogs.list(org.id, query)) }
   }

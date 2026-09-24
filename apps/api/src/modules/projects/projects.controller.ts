@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Post, Put } from "@nestjs/common"
 import { ProjectsService } from "./projects.service"
 import { ProjectResponse } from "./dto/project.response"
 import type { Payload } from "@shared/dto/response.types"
-import { ProjectBodyDto } from "./dto/project-body.dto"
+import { projectBodySchema, type ProjectBodyDto } from "./dto/project-body.dto"
 import { CurrentUser } from "@shared/decorators/current-user.decorator"
 import { CurrentOrg } from "@shared/decorators/current-org.decorator"
 import { CurrentPermissions } from "@shared/decorators/current-permissions.decorator"
@@ -35,7 +35,7 @@ export class ProjectsController {
   async create(
     @CurrentUser("id") userId: string,
     @CurrentOrg() org: { id: string },
-    @Body() dto: ProjectBodyDto,
+    @Body({ schema: projectBodySchema }) dto: ProjectBodyDto,
   ): Promise<Payload<ProjectResponse>> {
     return { message: "Created", data: await this.projects.create(org.id, userId, dto) }
   }
@@ -51,7 +51,7 @@ export class ProjectsController {
   async update(
     @CurrentUser("id") userId: string,
     @CurrentProject() project: { id: string },
-    @Body() dto: ProjectBodyDto,
+    @Body({ schema: projectBodySchema }) dto: ProjectBodyDto,
   ): Promise<Payload<ProjectResponse>> {
     return { message: "OK", data: await this.projects.update(project.id, userId, dto) }
   }

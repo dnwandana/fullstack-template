@@ -3,9 +3,9 @@ import { JwtService } from "@nestjs/jwt"
 import { ConfigService } from "@nestjs/config"
 import { randomUUID } from "crypto"
 
-// Mirrors the Joi grammar (/^\d+[smhd]$/) for *_TOKEN_EXPIRES_IN — a strict subset of the `ms`
-// StringValue union jsonwebtoken accepts for `expiresIn`. (`ms` is a transitive dep whose types
-// are not resolvable here.)
+// Mirrors the env schema grammar (/^\d+[smhd]$/) for *_TOKEN_EXPIRES_IN — a strict subset of the
+// `ms` StringValue union jsonwebtoken accepts for `expiresIn`. (`ms` is a transitive dep whose
+// types are not resolvable here.)
 type Duration = `${number}${"s" | "m" | "h" | "d"}`
 
 /**
@@ -33,7 +33,7 @@ export class TokenService {
       {
         secret: this.config.get<string>("ACCESS_TOKEN_SECRET"),
         algorithm: "HS256",
-        // A narrowing backed by Joi's /^\d+[smhd]$/ validation at boot, not a lie.
+        // A narrowing backed by the env schema's /^\d+[smhd]$/ validation at boot, not a lie.
         expiresIn: this.config.getOrThrow<string>("ACCESS_TOKEN_EXPIRES_IN") as Duration,
         issuer: this.issuer,
         audience: this.audience,

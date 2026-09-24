@@ -13,9 +13,9 @@ import {
 import { InvitationsService } from "./invitations.service"
 import { OrgsService } from "@modules/orgs/orgs.service"
 import { UsersService } from "@modules/users/users.service"
-import { CreateInvitationDto } from "./dto/create-invitation.dto"
-import { PreviewQueryDto } from "./dto/preview-query.dto"
-import { AcceptInvitationDto } from "./dto/accept-invitation.dto"
+import { createInvitationSchema, type CreateInvitationDto } from "./dto/create-invitation.dto"
+import { previewQuerySchema, type PreviewQueryDto } from "./dto/preview-query.dto"
+import { acceptInvitationSchema, type AcceptInvitationDto } from "./dto/accept-invitation.dto"
 import {
   InvitationListItemResponse,
   InvitationPreviewResponse,
@@ -23,7 +23,7 @@ import {
   MyInvitationResponse,
 } from "./dto/invitation.response"
 import type { Payload } from "@shared/dto/response.types"
-import { ListQueryDto } from "@shared/pagination/list-query.dto"
+import { listQuerySchema, type ListQueryDto } from "@shared/pagination/list-query.dto"
 import { Public } from "@shared/decorators/public.decorator"
 import { CurrentUser } from "@shared/decorators/current-user.decorator"
 import { CurrentOrg } from "@shared/decorators/current-org.decorator"
@@ -53,7 +53,7 @@ export class InvitationsController {
   async createForOrg(
     @CurrentOrg() org: { id: string },
     @CurrentUser("id") userId: string,
-    @Body() dto: CreateInvitationDto,
+    @Body({ schema: createInvitationSchema }) dto: CreateInvitationDto,
   ): Promise<Payload<InvitationWithTokenResponse>> {
     return {
       message: "Created",
@@ -68,7 +68,7 @@ export class InvitationsController {
     @CurrentOrg() org: { id: string },
     @CurrentProject() project: { id: string },
     @CurrentUser("id") userId: string,
-    @Body() dto: CreateInvitationDto,
+    @Body({ schema: createInvitationSchema }) dto: CreateInvitationDto,
   ): Promise<Payload<InvitationWithTokenResponse>> {
     return {
       message: "Created",
@@ -86,7 +86,7 @@ export class InvitationsController {
   @OrgScoped("invitations:manage")
   async listForOrg(
     @CurrentOrg() org: { id: string },
-    @Query() query: ListQueryDto,
+    @Query({ schema: listQuerySchema }) query: ListQueryDto,
   ): Promise<Payload<InvitationListItemResponse[]>> {
     return { message: "OK", ...(await this.invitations.listForOrg(org.id, query)) }
   }
@@ -132,7 +132,7 @@ export class InvitationsController {
   @Get("invitations/:invitation_id/preview")
   async preview(
     @Param("invitation_id", ParseUUIDPipe) invitationId: string,
-    @Query() query: PreviewQueryDto,
+    @Query({ schema: previewQuerySchema }) query: PreviewQueryDto,
   ): Promise<Payload<InvitationPreviewResponse>> {
     return { message: "OK", data: await this.invitations.preview(invitationId, query.token) }
   }
@@ -143,7 +143,7 @@ export class InvitationsController {
   async accept(
     @Param("invitation_id", ParseUUIDPipe) invitationId: string,
     @CurrentUser("id") userId: string,
-    @Body() dto: AcceptInvitationDto,
+    @Body({ schema: acceptInvitationSchema }) dto: AcceptInvitationDto,
   ): Promise<Payload<null>> {
     const user = await this.users.findSafeById(userId)
     await this.invitations.accept(invitationId, userId, user?.email ?? "", dto.token)

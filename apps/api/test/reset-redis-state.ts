@@ -3,7 +3,8 @@ import { flushRedis } from "./setup-e2e"
 
 // Throttle counters and BullMQ job hashes live in Redis, which is process-external and shared
 // by every suite in a `--runInBand` run (counters carry a 15-minute TTL, so by consecutive runs
-// too): without a reset a full e2e pass exceeds RATE_LIMIT_AUTH_MAX, Joi-capped at 50.
+// too): without a reset a full e2e pass exceeds RATE_LIMIT_AUTH_MAX, which the env schema caps
+// at 50.
 let client: Redis | undefined
 
 function redis(): Redis {

@@ -1,12 +1,8 @@
-import { Transform } from "class-transformer"
-import { IsEmail, IsUUID, MaxLength } from "class-validator"
+import { z } from "zod"
+import { email, uuid } from "@shared/validation/fields"
 
-export class CreateInvitationDto {
-  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
-  @IsEmail()
-  @MaxLength(255)
-  email!: string
+export const createInvitationSchema = z
+  .strictObject({ email, role_id: uuid })
+  .meta({ id: "CreateInvitationDto" })
 
-  @IsUUID("all")
-  role_id!: string
-}
+export type CreateInvitationDto = z.infer<typeof createInvitationSchema>

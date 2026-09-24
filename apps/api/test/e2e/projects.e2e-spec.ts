@@ -79,7 +79,7 @@ describe("Projects (e2e)", () => {
     const { cookies } = await signupAndSignin(app)
     const org = await createOrg(app, cookies)
     const res = await agent()
-      .get(`/api/v1/orgs/${org.id}/projects/11111111-1111-1111-1111-111111111111`)
+      .get(`/api/v1/orgs/${org.id}/projects/11111111-1111-4111-8111-111111111111`)
       .set("Cookie", cookies)
     expect(res.status).toBe(404)
     expect(res.body.message).toBe("Project not found")

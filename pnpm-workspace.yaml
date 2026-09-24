@@ -2,12 +2,16 @@ packages:
   - "apps/*"
   - "packages/*"
 # Turns the `engines.node` field in every workspace package.json into a hard gate: pnpm exits
-# non-zero on an older Node instead of warning and installing anyway. Node 24 is a real floor —
-# prisma.config.ts seeds via `node prisma/seed.ts` and native type-stripping — so a warning that
-# scrolls past leaves a confusing syntax error at seed time as the first real symptom.
+# non-zero on an older Node instead of warning and installing anyway. Node 24.21 is a real floor:
+# the ESM-only NestJS 12 packages load through `require(esm)`, so a warning that scrolls past leaves
+# an import error at API boot as the first real symptom.
 # pnpm reads this here, not from `.npmrc`; the npm-era `engine-strict` key is silently ignored.
 engineStrict: true
 allowBuilds:
+  # Transitive dep of Jest 30 (jest-haste-map), used only by watch mode. The prebuilt binary
+  # comes from an optional dependency, and the install script only compiles from source when
+  # no prebuilt binary matches, so it stays denied.
+  '@parcel/watcher': false
   '@prisma/client': true
   '@prisma/engines': true
   # Transitive dep of @nestjs/swagger. Its postinstall is anonymous usage telemetry —
@@ -25,3 +29,19 @@ allowBuilds:
   unrs-resolver: true
 minimumReleaseAgeExclude:
   - pnpm@11.11.0
+  - '@nestjs/cli@12.0.5'
+  - '@nestjs/common@12.1.0'
+  - '@nestjs/config@12.0.1'
+  - '@nestjs/core@12.1.0'
+  - '@nestjs/platform-express@12.1.0'
+  - '@nestjs/schematics@12.0.5'
+  - '@nestjs/swagger@12.0.2'
+  - '@nestjs/testing@12.1.0'
+  - dotenv@18.0.3
+# @nest-lab/throttler-storage-redis 1.2.0 caps its @nestjs peers at ^11 and has no v12 release.
+# It needs only the @nestjs/common barrel at runtime, which v12 keeps, and the e2e suite exercises
+# it on every run. Remove these entries when upstream widens the range.
+peerDependencyRules:
+  allowedVersions:
+    '@nest-lab/throttler-storage-redis>@nestjs/common': '12'
+    '@nest-lab/throttler-storage-redis>@nestjs/core': '12'

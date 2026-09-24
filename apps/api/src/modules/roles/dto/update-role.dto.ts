@@ -1,30 +1,6 @@
-import {
-  ArrayMinSize,
-  IsArray,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-  MinLength,
-} from "class-validator"
-import { IsPlainSingleLine } from "@shared/validators/control-chars"
+import { z } from "zod"
+import { roleFields } from "./create-role.dto"
 
-export class UpdateRoleDto {
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(50)
-  @IsPlainSingleLine()
-  name?: string
+export const updateRoleSchema = z.strictObject(roleFields).partial().meta({ id: "UpdateRoleDto" })
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(5000)
-  description?: string
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsUUID("all", { each: true })
-  permission_ids?: string[]
-}
+export type UpdateRoleDto = z.infer<typeof updateRoleSchema>

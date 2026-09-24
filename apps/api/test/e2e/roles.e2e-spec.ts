@@ -1,6 +1,6 @@
 import { Test } from "@nestjs/testing"
 import { BadRequestException, INestApplication } from "@nestjs/common"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 import request from "supertest"
 import { AppModule } from "../../src/app.module"
 import { createTestApp } from "../create-test-app"
@@ -134,7 +134,7 @@ describe("Roles (e2e)", () => {
     )
 
     const missing = await agent()
-      .get(`/api/v1/orgs/${org.id}/roles/11111111-1111-1111-1111-111111111111`)
+      .get(`/api/v1/orgs/${org.id}/roles/11111111-1111-4111-8111-111111111111`)
       .set("Cookie", cookies)
     expect(missing.status).toBe(404)
   })

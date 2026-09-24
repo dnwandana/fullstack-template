@@ -1,4 +1,4 @@
-import { Module, ValidationPipe } from "@nestjs/common"
+import { Module } from "@nestjs/common"
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core"
 import { ConfigModule, ConfigService } from "@nestjs/config"
 import { LoggerModule } from "nestjs-pino"
@@ -28,6 +28,7 @@ import { MaintenanceModule } from "@modules/maintenance/maintenance.module"
 import { JwtAuthGuard } from "@modules/auth/guards/jwt-auth.guard"
 import { TransformInterceptor } from "@core/interceptors/transform.interceptor"
 import { AllExceptionsFilter } from "@core/filters/all-exceptions.filter"
+import { SchemaValidationPipe } from "@shared/validation/schema-validation.pipe"
 
 @Module({
   imports: [
@@ -50,6 +51,9 @@ import { AllExceptionsFilter } from "@core/filters/all-exceptions.filter"
     // @Global(), so the mutation services inject AuditService without importing this module.
     AuditModule,
     ThrottlerModule.forRootAsync({
+      // Empty, but required: the published typings of throttler 6.7 make `imports` mandatory
+      // (nestjs/throttler#2671).
+      imports: [],
       inject: [ConfigService, REDIS_CLIENT],
       // The object form, not the bare array: an array has nowhere to put `storage`,
       // and an array carrying a stray `storage` key is silently ignored.
@@ -63,7 +67,7 @@ import { AllExceptionsFilter } from "@core/filters/all-exceptions.filter"
             name: "general",
             ttl: 15 * 60 * 1000,
             // Via ConfigService, not process.env: the factory runs after ConfigModule validation,
-            // so Joi's coercion and default apply by construction. The old inline
+            // so the env schema's coercion and default apply by construction. The old inline
             // `Number(process.env.X ?? 100)` yielded NaN on a reorder — throttling silently off.
             limit: config.getOrThrow<number>("RATE_LIMIT_GENERAL_MAX"),
           },
@@ -86,14 +90,9 @@ import { AllExceptionsFilter } from "@core/filters/all-exceptions.filter"
   providers: [
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
-    {
-      provide: APP_PIPE,
-      useValue: new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-      }),
-    },
+    // Validates every @Body({ schema }) and @Query({ schema }) parameter. The schemas are
+    // z.strictObject, so an unknown key is a 400.
+    { provide: APP_PIPE, useValue: new SchemaValidationPipe() },
     // Registration order is a contract: ThrottlerGuard before JwtAuthGuard, so an unauthenticated
     // flood is rate-limited before it reaches token verification.
     { provide: APP_GUARD, useClass: ThrottlerGuard },

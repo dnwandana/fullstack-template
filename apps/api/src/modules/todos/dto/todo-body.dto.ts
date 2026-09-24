@@ -1,21 +1,12 @@
-import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from "class-validator"
-import { IsPlainSingleLine } from "@shared/validators/control-chars"
+import { z } from "zod"
+import { optionalDescription, plainSingleLine } from "@shared/validation/fields"
 
-export class TodoBodyDto {
-  @IsString()
-  @MinLength(1)
-  @MaxLength(255)
-  @IsPlainSingleLine()
-  title!: string
+export const todoBodySchema = z
+  .strictObject({
+    title: plainSingleLine(255),
+    description: optionalDescription,
+    is_completed: z.boolean().optional(),
+  })
+  .meta({ id: "TodoBodyDto" })
 
-  // No control-character rule here on purpose: the rule rejects the newline, and a
-  // description is multi-line free text.
-  @IsOptional()
-  @IsString()
-  @MaxLength(5000)
-  description?: string
-
-  @IsOptional()
-  @IsBoolean()
-  is_completed?: boolean
-}
+export type TodoBodyDto = z.infer<typeof todoBodySchema>

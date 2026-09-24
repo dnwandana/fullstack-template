@@ -1,18 +1,21 @@
-import { Transform } from "class-transformer"
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsUUID } from "class-validator"
+import { z } from "zod"
 
-export class BulkDeleteDto {
-  @Transform(({ value }) =>
-    typeof value === "string"
-      ? value
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : value,
-  )
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(50)
-  @IsUUID("all", { each: true, message: "ids must be 1-50 comma-separated valid UUIDs" })
-  ids!: string[]
-}
+const IDS_MESSAGE = "ids must be 1-50 comma-separated valid UUIDs"
+
+export const bulkDeleteSchema = z.strictObject({
+  // `?ids=a,b` arrives as one string. A repeated key (`?ids=a&ids=b`) arrives as an array and
+  // passes through.
+  ids: z.preprocess(
+    (value) =>
+      typeof value === "string"
+        ? value
+            .split(",")
+            .map((id) => id.trim())
+            .filter(Boolean)
+        : value,
+    // z.uuid() is the rule of the shared `uuid` field, called here to attach the one message.
+    z.array(z.uuid(IDS_MESSAGE), { error: IDS_MESSAGE }).min(1, IDS_MESSAGE).max(50, IDS_MESSAGE),
+  ),
+})
+
+export type BulkDeleteDto = z.infer<typeof bulkDeleteSchema>

@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Put, Query } from "@nestjs/common"
 import { MembersService } from "./members.service"
-import { UpdateMemberDto } from "./dto/update-member.dto"
-import { ListQueryDto } from "@shared/pagination/list-query.dto"
+import { updateMemberSchema, type UpdateMemberDto } from "./dto/update-member.dto"
+import { listQuerySchema, type ListQueryDto } from "@shared/pagination/list-query.dto"
 import { CurrentUser } from "@shared/decorators/current-user.decorator"
 import { CurrentOrg } from "@shared/decorators/current-org.decorator"
 import { CurrentProject } from "@shared/decorators/current-project.decorator"
@@ -18,7 +18,10 @@ export class ProjectMembersController {
   // Spreads the service's `{ data, pagination }` into the envelope; `limit` defaults to 50.
   @Get()
   @RequirePermission("project:read")
-  async list(@CurrentProject() project: { id: string }, @Query() query: ListQueryDto) {
+  async list(
+    @CurrentProject() project: { id: string },
+    @Query({ schema: listQuerySchema }) query: ListQueryDto,
+  ) {
     return { message: "OK", ...(await this.members.listProjectMembers(project.id, query)) }
   }
 
@@ -31,7 +34,7 @@ export class ProjectMembersController {
     @CurrentUser("id") actingUserId: string,
     @CurrentPermissions() actorPermissions: string[],
     @Param("user_id", ParseUUIDPipe) targetUserId: string,
-    @Body() dto: UpdateMemberDto,
+    @Body({ schema: updateMemberSchema }) dto: UpdateMemberDto,
   ) {
     const data = await this.members.updateProjectMemberRole(
       org.id,

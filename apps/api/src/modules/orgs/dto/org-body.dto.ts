@@ -1,17 +1,8 @@
-import { IsOptional, IsString, MaxLength, MinLength } from "class-validator"
-import { IsPlainSingleLine } from "@shared/validators/control-chars"
+import { z } from "zod"
+import { optionalDescription, plainSingleLine } from "@shared/validation/fields"
 
-export class OrgBodyDto {
-  @IsString()
-  @MinLength(1)
-  @MaxLength(100)
-  @IsPlainSingleLine()
-  name!: string
+export const orgBodySchema = z
+  .strictObject({ name: plainSingleLine(100), description: optionalDescription })
+  .meta({ id: "OrgBodyDto" })
 
-  // No control-character rule here on purpose: the rule rejects the newline, and a
-  // description is multi-line free text.
-  @IsOptional()
-  @IsString()
-  @MaxLength(5000)
-  description?: string
-}
+export type OrgBodyDto = z.infer<typeof orgBodySchema>

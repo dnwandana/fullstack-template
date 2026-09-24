@@ -1,6 +1,6 @@
 import { Test } from "@nestjs/testing"
 import { Controller, Get, INestApplication } from "@nestjs/common"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 import request from "supertest"
 import { AppModule } from "../../src/app.module"
 import { createTestApp } from "../create-test-app"
@@ -56,7 +56,7 @@ describe("Error envelope (e2e)", () => {
     assertErrorShape(res.body)
   })
 
-  it("400 (validation) flattens class-validator arrays to a single string", async () => {
+  it("400 (validation) flattens the validation message array to a single string", async () => {
     const res = await agent()
       .post("/api/v1/auth/signup")
       .send({ name: "", email: "nope", password: "weak", confirmation_password: "different" })
@@ -79,7 +79,7 @@ describe("Error envelope (e2e)", () => {
   it("404 (missing) keeps the shape", async () => {
     const { cookies } = await signupAndSignin(app)
     const notFound = await agent()
-      .get("/api/v1/orgs/11111111-1111-1111-1111-111111111111")
+      .get("/api/v1/orgs/11111111-1111-4111-8111-111111111111")
       .set("Cookie", cookies)
     expect(notFound.status).toBe(404)
     assertErrorShape(notFound.body)

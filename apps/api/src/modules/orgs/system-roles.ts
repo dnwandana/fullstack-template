@@ -30,7 +30,7 @@ export const SYSTEM_ROLE_NAMES = ["owner", "admin", "member", "viewer"] as const
 export type SystemRoleName = (typeof SYSTEM_ROLE_NAMES)[number]
 
 /**
- * `ALL_PERMISSIONS` here and `PERMISSION_NAMES` in `prisma/seed.ts` must hold the
+ * `ALL_PERMISSIONS` here and `PERMISSION_NAMES` in `src/seed.ts` must hold the
  * same set of names. `__tests__/system-roles.spec.ts` compares the two sorted, so a
  * name present in only one fails the unit tier. Edit both in the same change.
  */

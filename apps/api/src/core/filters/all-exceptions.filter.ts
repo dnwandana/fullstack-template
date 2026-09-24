@@ -7,7 +7,7 @@ import {
   Logger,
 } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 import { Request, Response } from "express"
 import { STATUS_CODES } from "http"
 
@@ -19,7 +19,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   /**
    * Writes the error envelope `{ message, data: null, request_id }`. Prisma P2025 becomes 404
-   * before the generic non-HttpException path, class-validator message arrays are joined with
+   * before the generic non-HttpException path, validation message arrays are joined with
    * "; ", and in production non-HttpException messages are replaced by generic status text.
    */
   catch(exception: unknown, host: ArgumentsHost): void {

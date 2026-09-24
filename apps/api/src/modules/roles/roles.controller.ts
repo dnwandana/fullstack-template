@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put } from "@nestjs/common"
 import { RolesService } from "./roles.service"
-import { CreateRoleDto } from "./dto/create-role.dto"
-import { UpdateRoleDto } from "./dto/update-role.dto"
+import { createRoleSchema, type CreateRoleDto } from "./dto/create-role.dto"
+import { updateRoleSchema, type UpdateRoleDto } from "./dto/update-role.dto"
 import { RoleResponse } from "./dto/role.response"
 import type { Payload } from "@shared/dto/response.types"
 import { CurrentOrg } from "@shared/decorators/current-org.decorator"
@@ -28,7 +28,7 @@ export class RolesController {
   async create(
     @CurrentOrg() org: { id: string },
     @CurrentUser("id") userId: string,
-    @Body() dto: CreateRoleDto,
+    @Body({ schema: createRoleSchema }) dto: CreateRoleDto,
   ): Promise<Payload<RoleResponse>> {
     return { message: "Created", data: await this.roles.create(org.id, userId, dto) }
   }
@@ -50,7 +50,7 @@ export class RolesController {
     @CurrentOrg() org: { id: string },
     @CurrentUser("id") userId: string,
     @Param("role_id", ParseUUIDPipe) roleId: string,
-    @Body() dto: UpdateRoleDto,
+    @Body({ schema: updateRoleSchema }) dto: UpdateRoleDto,
   ): Promise<Payload<RoleResponse>> {
     return { message: "OK", data: await this.roles.update(org.id, userId, roleId, dto) }
   }

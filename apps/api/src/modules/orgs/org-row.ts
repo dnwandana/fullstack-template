@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 
 /**
  * Kept beside `OrgRow` so a change to one is visibly a change to the other: if the

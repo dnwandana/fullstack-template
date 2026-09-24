@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 import { randomUUID } from "crypto"
 import { AuditService } from "@core/audit/audit.service"
 import { diffFields } from "@core/audit/diff-fields"
@@ -171,11 +171,7 @@ export class RolesService {
         description: updated.description,
         permission_ids: permissions.map((p) => p.id).toSorted(),
       }
-      const changes = diffFields(beforeState, afterState, [
-        "name",
-        "description",
-        "permission_ids",
-      ])
+      const changes = diffFields(beforeState, afterState, ["name", "description", "permission_ids"])
       // Recorded after the transaction commits; `record` never throws.
       await this.audit.record({
         orgId,

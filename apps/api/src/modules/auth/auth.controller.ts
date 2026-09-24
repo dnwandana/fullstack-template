@@ -5,10 +5,10 @@ import { AuthService } from "./auth.service"
 import { CookieService } from "./cookie.service"
 import { PasswordResetService } from "./password-reset.service"
 import { RefreshReuseException } from "./refresh-reuse.exception"
-import { SignupDto } from "./dto/signup.dto"
-import { SigninDto } from "./dto/signin.dto"
-import { ForgotPasswordDto } from "./dto/forgot-password.dto"
-import { ResetPasswordDto } from "./dto/reset-password.dto"
+import { signupSchema, type SignupDto } from "./dto/signup.dto"
+import { signinSchema, type SigninDto } from "./dto/signin.dto"
+import { forgotPasswordSchema, type ForgotPasswordDto } from "./dto/forgot-password.dto"
+import { resetPasswordSchema, type ResetPasswordDto } from "./dto/reset-password.dto"
 import { Public } from "@shared/decorators/public.decorator"
 import { CurrentUser } from "@shared/decorators/current-user.decorator"
 import { RefreshTokenGuard } from "./guards/refresh-token.guard"
@@ -21,7 +21,8 @@ import { authThrottleLimit } from "@core/config/auth-throttle"
 
 // Narrows the global "general" throttler to RATE_LIMIT_AUTH_MAX (default 10/15min) for every
 // route here. authThrottleLimit() reads process.env because decorator arguments run before the
-// DI container and Joi exist; it mirrors Joi's constraints and throws at import time.
+// DI container and the env schema exist; it mirrors the env schema's constraints and throws at
+// import time.
 @Throttle({
   general: { limit: authThrottleLimit(), ttl: 15 * 60 * 1000 },
 })
@@ -35,7 +36,7 @@ export class AuthController {
 
   @Public()
   @Post("signup")
-  async signup(@Body() dto: SignupDto) {
+  async signup(@Body({ schema: signupSchema }) dto: SignupDto) {
     const data = await this.auth.signup(dto)
     return { message: "Created", data }
   }
@@ -43,7 +44,10 @@ export class AuthController {
   @Public()
   @Post("signin")
   @HttpCode(200)
-  async signin(@Body() dto: SigninDto, @Res({ passthrough: true }) res: Response) {
+  async signin(
+    @Body({ schema: signinSchema }) dto: SigninDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const { user, accessToken, refreshToken } = await this.auth.signin(dto)
     this.cookies.setAccess(res, accessToken)
     this.cookies.setRefresh(res, refreshToken)
@@ -53,7 +57,7 @@ export class AuthController {
   @Public()
   @Post("forgot-password")
   @HttpCode(200)
-  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+  async forgotPassword(@Body({ schema: forgotPasswordSchema }) dto: ForgotPasswordDto) {
     await this.passwordReset.issue(dto.email)
     // Always the same reply: branching on whether the address exists would turn this endpoint
     // into an account-enumeration oracle.
@@ -66,7 +70,7 @@ export class AuthController {
   @Public()
   @Post("reset-password")
   @HttpCode(200)
-  async resetPassword(@Body() dto: ResetPasswordDto) {
+  async resetPassword(@Body({ schema: resetPasswordSchema }) dto: ResetPasswordDto) {
     await this.passwordReset.consume(dto.token, dto.password)
     return { message: "OK", data: null }
   }

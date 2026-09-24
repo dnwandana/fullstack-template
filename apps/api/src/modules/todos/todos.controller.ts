@@ -12,9 +12,9 @@ import {
 import { TodosService } from "./todos.service"
 import { TodoResponse } from "./dto/todo.response"
 import type { Payload } from "@shared/dto/response.types"
-import { TodoBodyDto } from "./dto/todo-body.dto"
-import { ListTodosDto } from "./dto/list-todos.dto"
-import { BulkDeleteDto } from "./dto/bulk-delete.dto"
+import { todoBodySchema, type TodoBodyDto } from "./dto/todo-body.dto"
+import { listTodosSchema, type ListTodosDto } from "./dto/list-todos.dto"
+import { bulkDeleteSchema, type BulkDeleteDto } from "./dto/bulk-delete.dto"
 import { CurrentUser } from "@shared/decorators/current-user.decorator"
 import { CurrentOrg } from "@shared/decorators/current-org.decorator"
 import { CurrentProject } from "@shared/decorators/current-project.decorator"
@@ -32,7 +32,7 @@ export class TodosController {
   @RequirePermission("todos:read")
   async list(
     @CurrentProject() project: { id: string },
-    @Query() query: ListTodosDto,
+    @Query({ schema: listTodosSchema }) query: ListTodosDto,
   ): Promise<Payload<TodoResponse[]>> {
     const { data, pagination } = await this.todos.list(project.id, query)
     return { message: "OK", data, pagination }
@@ -44,7 +44,7 @@ export class TodosController {
     @CurrentOrg() org: { id: string },
     @CurrentProject() project: { id: string },
     @CurrentUser("id") userId: string,
-    @Body() dto: TodoBodyDto,
+    @Body({ schema: todoBodySchema }) dto: TodoBodyDto,
   ): Promise<Payload<TodoResponse>> {
     return { message: "Created", data: await this.todos.create(org.id, project.id, userId, dto) }
   }
@@ -65,7 +65,7 @@ export class TodosController {
     @CurrentProject() project: { id: string },
     @CurrentUser("id") userId: string,
     @Param("todo_id", ParseUUIDPipe) todoId: string,
-    @Body() dto: TodoBodyDto,
+    @Body({ schema: todoBodySchema }) dto: TodoBodyDto,
   ): Promise<Payload<TodoResponse>> {
     return {
       message: "OK",
@@ -80,7 +80,7 @@ export class TodosController {
     @CurrentOrg() org: { id: string },
     @CurrentProject() project: { id: string },
     @CurrentUser("id") userId: string,
-    @Query() query: BulkDeleteDto,
+    @Query({ schema: bulkDeleteSchema }) query: BulkDeleteDto,
   ): Promise<Payload<null>> {
     await this.todos.removeMany(org.id, project.id, userId, query.ids)
     return { message: "OK", data: null }

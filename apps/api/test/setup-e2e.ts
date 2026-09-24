@@ -1,9 +1,10 @@
 import { config } from "dotenv"
 import { resolve } from "path"
 import { execSync } from "child_process"
-import type { PrismaClient } from "@prisma/client"
+import type { PrismaClient } from "../src/generated/prisma/client"
 import type Redis from "ioredis"
-import { seedPermissions } from "../prisma/seed"
+import { seedPermissions } from "../src/seed"
+import { createTestPrisma } from "./create-test-prisma"
 
 // Re-exported so e2e suites share ONE seeder implementation with the CLI seed. It upserts per
 // name, so it self-heals a partial permission table (e.g. after a new permission is added) —
@@ -15,7 +16,7 @@ export { seedPermissions }
  * suite starts.
  */
 export default async function globalSetup(): Promise<void> {
-  config({ path: resolve(__dirname, "../.env.test"), override: true })
+  config({ path: resolve(__dirname, "../.env.test"), override: true, quiet: true })
 
   execSync("pnpm exec prisma migrate deploy", {
     cwd: resolve(__dirname, ".."),
@@ -23,8 +24,7 @@ export default async function globalSetup(): Promise<void> {
     env: process.env,
   })
 
-  const { PrismaClient } = await import("@prisma/client")
-  const prisma = new PrismaClient()
+  const prisma = createTestPrisma()
   await seedPermissions(prisma)
   await prisma.$disconnect()
 }

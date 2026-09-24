@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 
 /**
  * The Prisma selection and the row type it produces, kept together so a change to one is

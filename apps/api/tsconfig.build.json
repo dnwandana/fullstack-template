@@ -1,5 +1,7 @@
 {
   "extends": "./tsconfig.json",
+  // TS 6 defaults rootDir to this folder, which would emit to dist/src/ instead of dist/.
+  "compilerOptions": { "rootDir": "./src" },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "test", "prisma", "prisma.config.ts", "**/*spec.ts"]
 }

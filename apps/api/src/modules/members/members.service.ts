@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 import { PrismaService } from "@core/database/prisma.service"
 import { AuditService } from "@core/audit/audit.service"
 import { PaginationService } from "@shared/pagination/pagination.service"

@@ -1,8 +1,8 @@
-import { PrismaClient } from "@prisma/client"
-import { seedPermissions, PERMISSION_NAMES } from "../../prisma/seed"
+import { seedPermissions, PERMISSION_NAMES } from "@app/seed"
+import { createTestPrisma } from "../create-test-prisma"
 
 describe("seed", () => {
-  const prisma = new PrismaClient()
+  const prisma = createTestPrisma()
   beforeAll(async () => prisma.$connect())
   afterAll(async () => {
     // This suite truncates the shared permissions table; leave it fully seeded

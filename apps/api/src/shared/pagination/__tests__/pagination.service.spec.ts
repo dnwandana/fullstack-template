@@ -36,7 +36,11 @@ describe("PaginationService.buildMeta", () => {
 
 describe("isUuid", () => {
   it("accepts a canonical uuid and rejects junk", () => {
-    expect(isUuid("11111111-1111-1111-1111-111111111111")).toBe(true)
+    expect(isUuid("11111111-1111-4111-8111-111111111111")).toBe(true)
     expect(isUuid("not-a-uuid")).toBe(false)
+  })
+
+  it("rejects an id outside the RFC 9562 variant, as ParseUUIDPipe does", () => {
+    expect(isUuid("11111111-1111-1111-1111-111111111111")).toBe(false)
   })
 })

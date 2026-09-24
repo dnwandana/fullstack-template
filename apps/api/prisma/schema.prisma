@@ -1,10 +1,15 @@
+// The client is TypeScript source under src/, so `nest build` compiles it into dist/ with the app.
+// CommonJS and extension-less imports match the rest of the API.
 generator client {
-  provider = "prisma-client-js"
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = ""
 }
 
+// The connection string comes from prisma.config.ts (CLI) and from the driver adapter (runtime).
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {

@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Put, Query } from "@nestjs/common"
 import { MembersService } from "./members.service"
-import { UpdateMemberDto } from "./dto/update-member.dto"
-import { ListQueryDto } from "@shared/pagination/list-query.dto"
+import { updateMemberSchema, type UpdateMemberDto } from "./dto/update-member.dto"
+import { listQuerySchema, type ListQueryDto } from "@shared/pagination/list-query.dto"
 import { CurrentUser } from "@shared/decorators/current-user.decorator"
 import { CurrentOrg } from "@shared/decorators/current-org.decorator"
 import { CurrentPermissions } from "@shared/decorators/current-permissions.decorator"
@@ -17,7 +17,10 @@ export class OrgMembersController {
   // Spreads the service's `{ data, pagination }` into the envelope; `limit` defaults to 50.
   @Get()
   @RequirePermission("org:read")
-  async list(@CurrentOrg() org: { id: string }, @Query() query: ListQueryDto) {
+  async list(
+    @CurrentOrg() org: { id: string },
+    @Query({ schema: listQuerySchema }) query: ListQueryDto,
+  ) {
     return { message: "OK", ...(await this.members.listOrgMembers(org.id, query)) }
   }
 
@@ -29,7 +32,7 @@ export class OrgMembersController {
     @CurrentUser("id") actingUserId: string,
     @CurrentPermissions() actorPermissions: string[],
     @Param("user_id", ParseUUIDPipe) targetUserId: string,
-    @Body() dto: UpdateMemberDto,
+    @Body({ schema: updateMemberSchema }) dto: UpdateMemberDto,
   ) {
     const data = await this.members.updateOrgMemberRole(
       org.id,

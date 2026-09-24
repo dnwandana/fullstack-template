@@ -204,7 +204,7 @@ describe("CleanupService", () => {
   })
 
   it("exposes the CLEANUP_ENABLED default through ConfigService", () => {
-    // .env.test does not set CLEANUP_ENABLED, so this value comes from Joi's default.
+    // .env.test does not set CLEANUP_ENABLED, so this value comes from the env schema's default.
     // (Asserting process.env is undefined would be wrong: @nestjs/config back-assigns
     // validated keys into process.env after validation.)
     expect(config.get<string>("CLEANUP_ENABLED")).toBe("true")

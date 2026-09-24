@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Post, Put } from "@nestjs/common"
 import { OrgsService } from "./orgs.service"
 import { OrgResponse } from "./dto/org.response"
 import type { Payload } from "@shared/dto/response.types"
-import { OrgBodyDto } from "./dto/org-body.dto"
+import { orgBodySchema, type OrgBodyDto } from "./dto/org-body.dto"
 import { CurrentUser } from "@shared/decorators/current-user.decorator"
 import { CurrentOrg } from "@shared/decorators/current-org.decorator"
 import { OrgScoped } from "@tenancy/scoped.decorators"
@@ -16,7 +16,7 @@ export class OrgsController {
   @Post()
   async create(
     @CurrentUser("id") userId: string,
-    @Body() dto: OrgBodyDto,
+    @Body({ schema: orgBodySchema }) dto: OrgBodyDto,
   ): Promise<Payload<OrgResponse>> {
     const data = await this.orgs.createWithSystemRoles(userId, dto)
     return { message: "Created", data }
@@ -42,7 +42,7 @@ export class OrgsController {
   async update(
     @CurrentUser("id") userId: string,
     @CurrentOrg() org: { id: string },
-    @Body() dto: OrgBodyDto,
+    @Body({ schema: orgBodySchema }) dto: OrgBodyDto,
   ): Promise<Payload<OrgResponse>> {
     const data = await this.orgs.update(org.id, userId, dto)
     return { message: "OK", data }

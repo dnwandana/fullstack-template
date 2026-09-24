@@ -1,14 +1,9 @@
-import { Transform } from "class-transformer"
-import { IsEmail, IsString, MaxLength, MinLength } from "class-validator"
+import { z } from "zod"
+import { email } from "@shared/validation/fields"
 
-export class SigninDto {
-  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
-  @IsEmail({}, { message: "email must be a valid email" })
-  @MaxLength(255)
-  email!: string
+// Length bounds only: the complexity rules apply when a password is set, not when it is checked.
+export const signinSchema = z
+  .strictObject({ email, password: z.string().min(8).max(128) })
+  .meta({ id: "SigninDto" })
 
-  @IsString()
-  @MinLength(8)
-  @MaxLength(128)
-  password!: string
-}
+export type SigninDto = z.infer<typeof signinSchema>

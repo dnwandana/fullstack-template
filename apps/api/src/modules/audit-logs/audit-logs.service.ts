@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 import type { PaginationMeta } from "@fullstack/contracts"
 import { PrismaService } from "@core/database/prisma.service"
 import { PaginationService } from "@shared/pagination/pagination.service"

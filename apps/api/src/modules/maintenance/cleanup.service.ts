@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config"
 import { Cron, CronExpression } from "@nestjs/schedule"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 import { PrismaService } from "@core/database/prisma.service"
 
 const DAY_MS = 86_400_000
@@ -48,7 +48,8 @@ export class CleanupService {
    */
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async handleCron(): Promise<void> {
-    // Read through ConfigService so Joi's default ("true") applies when the var is unset.
+    // Read through ConfigService so the env schema's default ("true") applies when the var is
+    // unset.
     if (this.config.get<string>("CLEANUP_ENABLED") === "false") return
     try {
       const r = await this.run()
@@ -78,7 +79,7 @@ export class CleanupService {
     const refreshCutoff = new Date(now - REFRESH_GRACE_MS)
     const resetCutoff = new Date(now - RESET_GRACE_MS)
     const invitationCutoff = new Date(now - INVITATION_GRACE_MS)
-    // Read through ConfigService so Joi's default (90) applies when the var is unset.
+    // Read through ConfigService so the env schema's default (90) applies when the var is unset.
     const auditRetentionDays = this.config.get<number>("AUDIT_RETENTION_DAYS", 90)
     const auditCutoff = new Date(now - auditRetentionDays * DAY_MS)
 

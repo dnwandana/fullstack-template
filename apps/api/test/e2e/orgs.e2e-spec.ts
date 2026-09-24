@@ -85,7 +85,7 @@ describe("Orgs (e2e)", () => {
     expect(notMember.status).toBe(403)
     expect(notMember.body.message).toBe("You are not a member of this organization")
     const missing = await agent()
-      .get("/api/v1/orgs/11111111-1111-1111-1111-111111111111")
+      .get("/api/v1/orgs/11111111-1111-4111-8111-111111111111")
       .set("Cookie", owner.cookies)
     expect(missing.status).toBe(404)
     expect(missing.body.message).toBe("Organization not found")

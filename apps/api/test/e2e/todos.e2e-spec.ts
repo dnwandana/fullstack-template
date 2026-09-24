@@ -85,7 +85,7 @@ describe("Todos (e2e)", () => {
 
   it("returns 404 when updating a todo that does not exist", async () => {
     const res = await agent()
-      .put(`${base()}/11111111-1111-1111-1111-111111111111`)
+      .put(`${base()}/11111111-1111-4111-8111-111111111111`)
       .set("Cookie", cookies)
       .send({ title: "ghost" })
     expect(res.status).toBe(404)
@@ -127,7 +127,7 @@ describe("Todos (e2e)", () => {
       project_id: projectId,
     })
     const missing = await agent()
-      .get(`${base()}/11111111-1111-1111-1111-111111111111`)
+      .get(`${base()}/11111111-1111-4111-8111-111111111111`)
       .set("Cookie", cookies)
     expect(missing.status).toBe(404)
   })
@@ -151,7 +151,7 @@ describe("Todos (e2e)", () => {
       .set("Cookie", cookies)
     expect(bulk.status).toBe(200)
     const single = await agent()
-      .delete(`${base()}/11111111-1111-1111-1111-111111111111`)
+      .delete(`${base()}/11111111-1111-4111-8111-111111111111`)
       .set("Cookie", cookies)
     expect(single.status).toBe(200)
   })

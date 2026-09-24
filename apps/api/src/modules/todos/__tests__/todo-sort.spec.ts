@@ -1,7 +1,5 @@
-import { plainToInstance } from "class-transformer"
-import { validateSync } from "class-validator"
 import { SORT_COLUMN, TODO_SORTABLE, DEFAULT_TODO_SORT } from "../todo-sort"
-import { ListTodosDto } from "../dto/list-todos.dto"
+import { listTodosSchema } from "../dto/list-todos.dto"
 
 describe("todo sort map", () => {
   it("derives the sortable list from the column map", () => {
@@ -19,14 +17,12 @@ describe("todo sort map", () => {
   })
 
   it("rejects a sort_by outside the column map", () => {
-    const dto = plainToInstance(ListTodosDto, { sort_by: "created_at" })
-    expect(validateSync(dto).length).toBeGreaterThan(0)
+    expect(listTodosSchema.safeParse({ sort_by: "created_at" }).success).toBe(false)
   })
 
   it("accepts every key the column map declares", () => {
     for (const key of TODO_SORTABLE) {
-      const dto = plainToInstance(ListTodosDto, { sort_by: key })
-      expect(validateSync(dto)).toHaveLength(0)
+      expect(listTodosSchema.safeParse({ sort_by: key }).success).toBe(true)
     }
   })
 })

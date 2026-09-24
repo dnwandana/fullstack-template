@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common"
 import { randomUUID } from "crypto"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 import { PrismaService } from "@core/database/prisma.service"
 import type { AuditEvent } from "./audit-action"
 

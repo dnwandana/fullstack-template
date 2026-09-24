@@ -42,9 +42,10 @@ export function configureApp(app: INestApplication): void {
 
   const config = app.get(ConfigService)
 
-  // Origins via ConfigService: Joi's default is the single source of truth, a literal diverges.
-  // `methods` is a whitelist — a PATCH route is rejected at preflight even if a controller defines
-  // it. X-Request-Id is exposed so SPA JS can read the correlation id back into a bug report.
+  // Origins via ConfigService: the env schema's default is the single source of truth, a literal
+  // diverges. `methods` is a whitelist — a PATCH route is rejected at preflight even if a
+  // controller defines it. X-Request-Id is exposed so SPA JS can read the correlation id back
+  // into a bug report.
   app.enableCors({
     origin: config
       .getOrThrow<string>("CORS_ALLOWED_ORIGINS")
@@ -69,9 +70,10 @@ export function configureApp(app: INestApplication): void {
   // cookie constants in @core/config/api-version do not — which is why both share API_VERSION.
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: API_VERSION })
 
-  // Via ConfigService, never process.env: @nestjs/config never writes Joi's NODE_ENV-derived
-  // default back there, so a production deploy with SWAGGER_ENABLED unset would publish the whole
-  // spec. The === "true" test is fail-closed, so an unexpected undefined also stays off.
+  // Via ConfigService, never process.env: @nestjs/config never writes the NODE_ENV-derived
+  // default of the env schema back there, so a production deploy with SWAGGER_ENABLED unset would
+  // publish the whole spec. The === "true" test is fail-closed, so an unexpected undefined also
+  // stays off.
   if (config.get<string>("SWAGGER_ENABLED") === "true") {
     const docs = new DocumentBuilder()
       .setTitle("Fullstack Template API")

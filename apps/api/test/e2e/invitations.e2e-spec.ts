@@ -170,12 +170,12 @@ describe("Invitations (e2e)", () => {
 
   it("guards the public preview endpoint by token shape and existence", async () => {
     const badShape = await agent().get(
-      `/api/v1/invitations/11111111-1111-1111-1111-111111111111/preview?token=nothex`,
+      `/api/v1/invitations/11111111-1111-4111-8111-111111111111/preview?token=nothex`,
     )
     expect(badShape.status).toBe(400)
 
     const wrongToken = await agent().get(
-      `/api/v1/invitations/11111111-1111-1111-1111-111111111111/preview?token=${"a".repeat(64)}`,
+      `/api/v1/invitations/11111111-1111-4111-8111-111111111111/preview?token=${"a".repeat(64)}`,
     )
     expect(wrongToken.status).toBe(404)
   })
@@ -255,12 +255,12 @@ describe("Invitations (e2e)", () => {
       .set("Cookie", owner.cookies)
       .send({ email: "dup@example.com", role_id: memberRoleId })
       .expect(400)
-    // Prisma's raw-query error carries Postgres's DETAIL line (unique-violation
-    // key columns), not the constraint name, so match on those.
+    // With the pg driver adapter, Prisma's raw-query error names the violated constraint
+    // and drops Postgres's DETAIL line, so match on the partial unique index name.
     await expect(
       prisma.$executeRaw`INSERT INTO invitations (id, org_id, inviter_id, invitee_email, role_id, status, expires_at, created_at, updated_at)
         VALUES (gen_random_uuid(), ${org.id}::uuid, ${owner.userId}::uuid, 'dup@example.com', ${memberRoleId}::uuid, 'pending', now() + interval '7 days', now(), now())`,
-    ).rejects.toThrow(/Key \(org_id, invitee_email\).*already exists/)
+    ).rejects.toThrow(/invitations_pending_org_email_unique/)
     // Both partial unique indexes back the race by name.
     const indexes = await prisma.$queryRaw<{ indexname: string }[]>`
       SELECT indexname FROM pg_indexes

@@ -48,6 +48,41 @@ describe("validate(env)", () => {
     )
   })
 
+  it("treats an empty variable as unset", () => {
+    expect(validate({ ...base, PORT: "" }).PORT).toBe(3000)
+    expect(() => validate({ ...base, DATABASE_URL: "" })).toThrow(/DATABASE_URL: is required/)
+  })
+
+  it("keeps variables the schema does not declare", () => {
+    expect(validate({ ...base, HOME: "/home/node" }).HOME).toBe("/home/node")
+  })
+
+  it("rejects a URL with the wrong scheme", () => {
+    expect(() => validate({ ...base, DATABASE_URL: "mysql://u:p@localhost/db" })).toThrow(
+      /DATABASE_URL/,
+    )
+    expect(() => validate({ ...base, REDIS_URL: "http://localhost:6379" })).toThrow(/REDIS_URL/)
+    expect(validate({ ...base, REDIS_URL: "rediss://cache.example.com:6380" }).REDIS_URL).toBe(
+      "rediss://cache.example.com:6380",
+    )
+  })
+
+  it("defaults SWAGGER_ENABLED from NODE_ENV and keeps an explicit value", () => {
+    expect(validate({ ...base }).SWAGGER_ENABLED).toBe("true")
+    expect(validate({ ...base, NODE_ENV: "production" }).SWAGGER_ENABLED).toBe("false")
+    expect(
+      validate({ ...base, NODE_ENV: "production", SWAGGER_ENABLED: "true" }).SWAGGER_ENABLED,
+    ).toBe("true")
+  })
+
+  it("reports every offending variable in one error", () => {
+    const { JWT_ISSUER: _JWT_ISSUER, ...rest } = base
+    const run = () => validate({ ...rest, PORT: "0", LOG_LEVEL: "trace" })
+    expect(run).toThrow(/^ {2}- JWT_ISSUER: is required$/m)
+    expect(run).toThrow(/^ {2}- PORT: /m)
+    expect(run).toThrow(/^ {2}- LOG_LEVEL: /m)
+  })
+
   describe("AUDIT_RETENTION_DAYS", () => {
     it("defaults to 90", () => {
       const value = validate({ ...base })
@@ -55,9 +90,7 @@ describe("validate(env)", () => {
     })
 
     it("rejects zero and negatives", () => {
-      expect(() => validate({ ...base, AUDIT_RETENTION_DAYS: "0" })).toThrow(
-        /AUDIT_RETENTION_DAYS/,
-      )
+      expect(() => validate({ ...base, AUDIT_RETENTION_DAYS: "0" })).toThrow(/AUDIT_RETENTION_DAYS/)
       expect(() => validate({ ...base, AUDIT_RETENTION_DAYS: "-5" })).toThrow(
         /AUDIT_RETENTION_DAYS/,
       )

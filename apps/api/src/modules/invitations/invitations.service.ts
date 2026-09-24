@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config"
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 import { createHash, randomBytes, randomUUID } from "crypto"
 import { PrismaService } from "@core/database/prisma.service"
 import { AuditService } from "@core/audit/audit.service"

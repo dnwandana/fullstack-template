@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 
 /**
  * One projection for every role response — list returning fewer fields than detail

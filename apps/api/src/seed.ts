@@ -1,5 +1,8 @@
-import { PrismaClient } from "@prisma/client"
 import { randomUUID } from "crypto"
+// Relative imports, not aliases: Jest loads this file from test/setup-e2e.ts, and Jest's
+// globalSetup does not apply moduleNameMapper.
+import { PrismaClient } from "./generated/prisma/client"
+import { createPrismaAdapter } from "./core/database/prisma-adapter"
 
 /**
  * The canonical permission set, also consumed by test/setup-e2e.ts. Must hold exactly the same
@@ -81,7 +84,10 @@ export async function seedPermissions(prisma: PrismaClient): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const prisma = new PrismaClient()
+  // `prisma db seed` passes on the environment that prisma.config.ts loaded from .env.
+  const url = process.env.DATABASE_URL
+  if (!url) throw new Error("Seed failed: DATABASE_URL is not set. Set it in .env or the shell.")
+  const prisma = new PrismaClient({ adapter: createPrismaAdapter(url) })
   try {
     await seedPermissions(prisma)
     // eslint-disable-next-line no-console
@@ -91,10 +97,8 @@ async function main(): Promise<void> {
   }
 }
 
-// Run only when executed directly (e.g. `prisma db seed` → `node prisma/seed.ts`).
-// Uses argv[1] rather than `require.main`/`import.meta` so the guard holds under
-// both Node's ESM syntax-detection (direct run) and ts-jest's CommonJS (test import).
-const entry = process.argv[1] ?? ""
-if (entry.endsWith("seed.ts") || entry.endsWith("seed.js")) {
+// Run only when executed directly (`prisma db seed` runs `node dist/seed.js`), not when a test
+// imports this file for `seedPermissions`.
+if (require.main === module) {
   void main()
 }

@@ -1,5 +1,5 @@
 import { ALL_PERMISSIONS, SYSTEM_ROLE_PERMISSIONS } from "../system-roles"
-import { PERMISSION_NAMES } from "../../../../prisma/seed"
+import { PERMISSION_NAMES } from "@app/seed"
 
 describe("ALL_PERMISSIONS", () => {
   // The seed inserts PERMISSION_NAMES. system-roles.ts grants ALL_PERMISSIONS. A name in

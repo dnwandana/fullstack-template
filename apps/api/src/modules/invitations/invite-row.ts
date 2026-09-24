@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client"
+import { Prisma } from "@generated/prisma/client"
 
 /**
  * Prisma projection for an invitation row; key order mirrors the response, which `toSnakeKeys`

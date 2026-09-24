@@ -9,7 +9,7 @@ async function bootstrap() {
   // NestFactory add its defaults first would make that limit dead configuration.
   const app = await NestFactory.create(AppModule, { bufferLogs: true, bodyParser: false })
   configureApp(app)
-  // PORT through ConfigService — Joi owns the 3000 default; no duplicated literal here.
+  // PORT through ConfigService — the env schema owns the 3000 default; no duplicated literal here.
   await app.listen(app.get(ConfigService).getOrThrow<number>("PORT"))
 }
 bootstrap().catch((err) => {

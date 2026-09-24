@@ -9,10 +9,9 @@ import { validate } from "@core/config/env.validation"
 // SwaggerModule registers its routes straight on the Express instance, so these responses
 // bypass TransformInterceptor entirely — the document is the whole body, not body.data.
 //
-// The CLI plugin that infers @ApiProperty from class-validator decorators is configured in
-// nest-cli.json, which only governs `nest build`. test/jest-e2e.json runs it under ts-jest
-// too, via test/swagger-plugin.transformer.js — without that shim every DTO schema below
-// would be `{ type: "object", properties: {} }` and the schema assertions would be vacuous.
+// Request schemas come from the Zod DTOs through Nest's Standard Schema conversion. Response
+// schemas come from the CLI plugin, which nest-cli.json configures for `nest build` only.
+// test/jest-e2e.json runs it under ts-jest too, via test/swagger-plugin.transformer.js.
 
 const base = {
   DATABASE_URL: "postgresql://u:p@localhost:5432/db",
@@ -80,18 +79,37 @@ describe("GET /api/docs (enabled)", () => {
     expect(res.body.components.schemas.AcceptInvitationDto.required).toContain("token")
   })
 
-  it("infers DTO constraints from class-validator decorators", async () => {
+  it("converts the Zod DTO constraints into the body schema", async () => {
     const res = await request(app.getHttpServer()).get("/api/docs-json")
     const { properties, required } = res.body.components.schemas.SignupDto
-    // These come from @MinLength(8)/@MaxLength(128)/@IsEmail on SignupDto — nothing in src/
-    // writes @ApiProperty by hand, so an empty properties object here means the plugin
-    // stopped running and every schema in the published spec is silently blank.
+    // These come from the password and email rules in shared/validation/fields.ts. An empty
+    // properties object here means the conversion stopped and the published spec is blank.
     expect(properties.password.minLength).toBe(8)
     expect(properties.password.maxLength).toBe(128)
     expect(properties.email.format).toBe("email")
     expect(required).toEqual(
       expect.arrayContaining(["name", "email", "password", "confirmation_password"]),
     )
+  })
+
+  it("documents each query schema field as a query parameter", async () => {
+    const res = await request(app.getHttpServer()).get("/api/docs-json")
+    const op = res.body.paths["/api/v1/orgs/{org_id}/projects/{project_id}/todos"].get
+    const query = Object.fromEntries(
+      op.parameters
+        .filter((p: { in: string }) => p.in === "query")
+        .map((p: { name: string; schema: unknown }) => [p.name, p.schema]),
+    )
+    // A query schema with a `.meta({ id })` would emit no parameters at all.
+    expect(Object.keys(query).toSorted()).toEqual([
+      "limit",
+      "page",
+      "search",
+      "sort_by",
+      "sort_order",
+    ])
+    expect(query.limit).toMatchObject({ type: "integer", minimum: 1, maximum: 100, default: 10 })
+    expect(query.sort_by).toMatchObject({ enum: ["updated_at", "title"] })
   })
 
   it("documents cookie auth, not bearer auth", async () => {
@@ -143,7 +161,7 @@ describe("GET /api/docs (disabled)", () => {
     const disabled = validate({ ...process.env, SWAGGER_ENABLED: "false" })
     const ref = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ConfigService)
-      // Delegates to the real Joi-validated config (so numeric coercion and every other
+      // Delegates to the real schema-validated config (so numeric coercion and every other
       // default survive) with only SWAGGER_ENABLED forced off. getOrThrow must mirror the
       // real service's contract — configureApp uses it for CORS_ALLOWED_ORIGINS.
       .useValue({

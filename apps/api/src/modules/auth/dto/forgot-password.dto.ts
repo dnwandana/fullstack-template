@@ -1,9 +1,6 @@
-import { Transform } from "class-transformer"
-import { IsEmail, MaxLength } from "class-validator"
+import { z } from "zod"
+import { email } from "@shared/validation/fields"
 
-export class ForgotPasswordDto {
-  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() : value))
-  @IsEmail({}, { message: "email must be a valid email" })
-  @MaxLength(255)
-  email!: string
-}
+export const forgotPasswordSchema = z.strictObject({ email }).meta({ id: "ForgotPasswordDto" })
+
+export type ForgotPasswordDto = z.infer<typeof forgotPasswordSchema>

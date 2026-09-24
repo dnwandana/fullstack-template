@@ -1,6 +1,6 @@
-import { Matches } from "class-validator"
+import { z } from "zod"
+import { hexToken } from "@shared/validation/fields"
 
-export class PreviewQueryDto {
-  @Matches(/^[0-9a-f]{64}$/, { message: "token must be a 64-character hex string" })
-  token!: string
-}
+export const previewQuerySchema = z.strictObject({ token: hexToken })
+
+export type PreviewQueryDto = z.infer<typeof previewQuerySchema>
