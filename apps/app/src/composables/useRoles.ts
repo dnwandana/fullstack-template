@@ -1,6 +1,6 @@
 /**
  * Roles composable - helpers for role CRUD operations and modal management
- * Manages create/edit modal state, validation rules, and delegates actions to the roles store
+ * Manages create/edit modal state and delegates actions to the roles store
  */
 
 import { ref, computed } from "vue"
@@ -17,9 +17,6 @@ export function useRoles() {
 
   // Derived state: true when editing an existing role, false when creating
   const isEditing = computed(() => !!editingRole.value)
-
-  // Validation rules for the role form
-  const nameRules = [{ required: true, message: "Please enter a role name" }]
 
   /**
    * Open the modal for creating a new role
@@ -73,8 +70,6 @@ export function useRoles() {
     isModalVisible,
     editingRole,
     isEditing,
-    // Validation rules
-    nameRules,
     // Delegated store actions
     fetchRoles: rolesStore.fetchRoles,
     fetchRoleById: rolesStore.fetchRoleById,

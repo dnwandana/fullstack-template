@@ -1,135 +1,92 @@
 <script setup lang="ts">
-/**
- * ProjectFormModal — Modal form for creating or editing a project.
- *
- * Props:
- *   - visible: controls modal visibility
- *   - project: existing project object (null for create mode)
- *   - loading: disables the OK button while a request is in flight
- *
- * Emits:
- *   - submit({ name, description }) — validated form data
- *   - cancel — user dismissed the modal
- */
-
-import { reactive, watch, computed } from "vue"
-import { Form, Modal, Input } from "ant-design-vue"
-import type { Rule } from "ant-design-vue/es/form"
+/** Dialog form for a project. Emits `submit` with the payload, `cancel` on any close. */
+import { computed, watch } from "vue"
+import { useForm } from "vee-validate"
+import { toTypedSchema } from "@vee-validate/zod"
 import type { Project, Wire } from "@fullstack/contracts"
 import type { ProjectInput } from "@/api/projects"
+import { projectFormSchema } from "@/schemas/project"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Spinner } from "@/components/ui/spinner"
 
-interface Props {
-  visible?: boolean
-  project?: Wire<Project> | null
-  loading?: boolean
-}
+const props = withDefaults(
+  defineProps<{ open?: boolean; project?: Wire<Project> | null; loading?: boolean }>(),
+  { open: false, project: null, loading: false },
+)
+const emit = defineEmits<{ submit: [payload: ProjectInput]; cancel: [] }>()
 
-const props = withDefaults(defineProps<Props>(), {
-  visible: false,
-  project: null,
-  loading: false,
+const form = useForm({
+  validationSchema: toTypedSchema(projectFormSchema),
+  initialValues: { name: "", description: "" },
 })
 
-const emit = defineEmits<{
-  submit: [payload: ProjectInput]
-  cancel: []
-}>()
-
-// Reactive form state bound to template inputs
-const formState = reactive({
-  name: "",
-  description: "",
-})
-
-// Validation rules — name is required with a max length
-const rules = reactive<Record<string, Rule[]>>({
-  name: [
-    { required: true, message: "Please enter a project name" },
-    { max: 100, message: "Name cannot exceed 100 characters" },
-  ],
-})
-
-// Form instance providing validate / resetFields helpers
-const { validate, resetFields } = Form.useForm(formState, rules)
-
-/**
- * Watch the project prop to populate the form when editing,
- * or reset it when switching to create mode.
- */
+// Reset on every open so a cancelled draft never leaks into the next open.
 watch(
-  () => props.project,
-  (newProject) => {
-    if (newProject) {
-      formState.name = newProject.name || ""
-      formState.description = newProject.description || ""
-    } else {
-      resetForm()
-    }
+  [() => props.open, () => props.project],
+  ([open, project]) => {
+    if (!open) return
+    form.resetForm({ values: { name: project?.name ?? "", description: project?.description ?? "" } })
   },
   { immediate: true },
 )
 
-/** Reset form fields back to their initial values. */
-function resetForm() {
-  resetFields()
-}
-
-/**
- * Validate and emit the form data on OK click.
- * If validation fails, ant-design-vue renders the errors automatically.
- */
-async function handleOk() {
-  try {
-    await validate()
-    emit("submit", {
-      name: formState.name,
-      description: formState.description || undefined,
-    })
-  } catch {
-    // Validation failed — field-level errors are shown by ant-design-vue
-  }
-}
-
-/** Cancel the modal and reset form state. */
-function handleCancel() {
-  resetForm()
-  emit("cancel")
-}
-
-/**
- * Computed modal title — shows "Edit Project" when a project prop
- * is provided, otherwise "Create Project".
- */
-const modalTitle = computed(() => {
-  if (props.project) {
-    return "Edit Project"
-  }
-  return "Create Project"
+const onSubmit = form.handleSubmit((values) => {
+  emit("submit", { name: values.name, description: values.description || undefined })
 })
+
+function onOpenChange(value: boolean) {
+  if (!value) emit("cancel")
+}
+
+const modalTitle = computed(() => (props.project ? "Edit Project" : "Create Project"))
 </script>
 
 <template>
-  <Modal
-    :open="visible"
-    :title="modalTitle"
-    :confirm-loading="loading"
-    @ok="handleOk"
-    @cancel="handleCancel"
-  >
-    <Form :model="formState" :rules="rules" layout="vertical" autocomplete="off">
-      <!-- Project name (required) -->
-      <Form.Item label="Name" name="name">
-        <Input v-model:value="formState.name" placeholder="Enter project name" :maxlength="100" />
-      </Form.Item>
-
-      <!-- Description (optional) -->
-      <Form.Item label="Description" name="description">
-        <Input.TextArea
-          v-model:value="formState.description"
-          placeholder="Enter description (optional)"
-          :rows="4"
-        />
-      </Form.Item>
-    </Form>
-  </Modal>
+  <Dialog :open="open" @update:open="onOpenChange">
+    <DialogContent class="sm:max-w-lg" :aria-describedby="undefined">
+      <DialogHeader>
+        <DialogTitle>{{ modalTitle }}</DialogTitle>
+      </DialogHeader>
+      <form id="project-form" class="space-y-4" autocomplete="off" @submit="onSubmit">
+        <FormField v-slot="{ componentField }" name="name">
+          <FormItem>
+            <FormLabel>Name</FormLabel>
+            <FormControl>
+              <Input placeholder="Enter project name" maxlength="100" v-bind="componentField" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+        <FormField v-slot="{ componentField }" name="description">
+          <FormItem>
+            <FormLabel>Description</FormLabel>
+            <FormControl>
+              <Textarea
+                placeholder="Enter description (optional)"
+                :rows="4"
+                v-bind="componentField"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+      </form>
+      <DialogFooter>
+        <Button type="button" variant="outline" @click="emit('cancel')">Cancel</Button>
+        <Button type="submit" form="project-form" :disabled="loading">
+          <Spinner v-if="loading" /> OK
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>

@@ -1,7 +1,7 @@
 /**
  * Organizations composable - helpers for organization operations.
- * Bridges the orgs store and UI components by providing modal state,
- * validation rules, and convenience wrappers around store actions.
+ * Bridges the orgs store and UI components by providing modal state
+ * and convenience wrappers around store actions.
  */
 
 import { ref, computed } from "vue"
@@ -24,16 +24,6 @@ export function useOrgs() {
 
   /** The organization being edited, or null for create mode */
   const editingOrg = ref<Wire<Org> | null>(null)
-
-  // ---------------------------------------------------------------------------
-  // Validation rules
-  // ---------------------------------------------------------------------------
-
-  /** Ant Design form validation rules for the organization name field */
-  const nameRules = [
-    { required: true, message: "Please enter an organization name" },
-    { max: 100, message: "Name cannot exceed 100 characters" },
-  ]
 
   // ---------------------------------------------------------------------------
   // Computed
@@ -107,8 +97,6 @@ export function useOrgs() {
     isModalVisible,
     editingOrg,
     isEditing,
-    // Validation rules
-    nameRules,
     // Actions — delegated directly from the store
     fetchOrgs: orgsStore.fetchOrgs,
     fetchOrgById: orgsStore.fetchOrgById,

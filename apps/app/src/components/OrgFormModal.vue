@@ -1,139 +1,92 @@
 <script setup lang="ts">
-/**
- * OrgFormModal — Modal form for creating or editing an organization.
- *
- * Props:
- *   - visible: controls modal visibility
- *   - org: existing organization object (null for create mode)
- *   - loading: disables the OK button while a request is in flight
- *
- * Emits:
- *   - submit({ name, description }) — validated form data
- *   - cancel — user dismissed the modal
- */
-
-import { reactive, watch, computed } from "vue"
-import { Form, Modal, Input } from "ant-design-vue"
-import type { Rule } from "ant-design-vue/es/form"
+/** Dialog form for an organization. Emits `submit` with the payload, `cancel` on any close. */
+import { computed, watch } from "vue"
+import { useForm } from "vee-validate"
+import { toTypedSchema } from "@vee-validate/zod"
 import type { Org, Wire } from "@fullstack/contracts"
 import type { OrgInput } from "@/api/orgs"
+import { orgFormSchema } from "@/schemas/org"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Spinner } from "@/components/ui/spinner"
 
-interface Props {
-  visible?: boolean
-  org?: Wire<Org> | null
-  loading?: boolean
-}
+const props = withDefaults(
+  defineProps<{ open?: boolean; org?: Wire<Org> | null; loading?: boolean }>(),
+  { open: false, org: null, loading: false },
+)
+const emit = defineEmits<{ submit: [payload: OrgInput]; cancel: [] }>()
 
-const props = withDefaults(defineProps<Props>(), {
-  visible: false,
-  org: null,
-  loading: false,
+const form = useForm({
+  validationSchema: toTypedSchema(orgFormSchema),
+  initialValues: { name: "", description: "" },
 })
 
-const emit = defineEmits<{
-  submit: [payload: OrgInput]
-  cancel: []
-}>()
-
-// Reactive form state bound to template inputs
-const formState = reactive({
-  name: "",
-  description: "",
-})
-
-// Validation rules — name is required with a max length
-const rules = reactive<Record<string, Rule[]>>({
-  name: [
-    { required: true, message: "Please enter an organization name" },
-    { max: 100, message: "Name cannot exceed 100 characters" },
-  ],
-})
-
-// Form instance providing validate / resetFields helpers
-const { validate, resetFields } = Form.useForm(formState, rules)
-
-/**
- * Watch the org prop to populate the form when editing,
- * or reset it when switching to create mode.
- */
+// Reset on every open so a cancelled draft never leaks into the next open.
 watch(
-  () => props.org,
-  (newOrg) => {
-    if (newOrg) {
-      formState.name = newOrg.name || ""
-      formState.description = newOrg.description || ""
-    } else {
-      resetForm()
-    }
+  [() => props.open, () => props.org],
+  ([open, org]) => {
+    if (!open) return
+    form.resetForm({ values: { name: org?.name ?? "", description: org?.description ?? "" } })
   },
   { immediate: true },
 )
 
-/** Reset form fields back to their initial values. */
-function resetForm() {
-  resetFields()
-}
-
-/**
- * Validate and emit the form data on OK click.
- * If validation fails, ant-design-vue renders the errors automatically.
- */
-async function handleOk() {
-  try {
-    await validate()
-    emit("submit", {
-      name: formState.name,
-      description: formState.description || undefined,
-    })
-  } catch {
-    // Validation failed — field-level errors are shown by ant-design-vue
-  }
-}
-
-/** Cancel the modal and reset form state. */
-function handleCancel() {
-  resetForm()
-  emit("cancel")
-}
-
-/**
- * Computed modal title — shows "Edit Organization" when an org prop
- * is provided, otherwise "Create Organization".
- */
-const modalTitle = computed(() => {
-  if (props.org) {
-    return "Edit Organization"
-  }
-  return "Create Organization"
+const onSubmit = form.handleSubmit((values) => {
+  emit("submit", { name: values.name, description: values.description || undefined })
 })
+
+function onOpenChange(value: boolean) {
+  if (!value) emit("cancel")
+}
+
+const modalTitle = computed(() => (props.org ? "Edit Organization" : "Create Organization"))
 </script>
 
 <template>
-  <Modal
-    :open="visible"
-    :title="modalTitle"
-    :confirm-loading="loading"
-    @ok="handleOk"
-    @cancel="handleCancel"
-  >
-    <Form :model="formState" :rules="rules" layout="vertical" autocomplete="off">
-      <!-- Organization name (required) -->
-      <Form.Item label="Name" name="name">
-        <Input
-          v-model:value="formState.name"
-          placeholder="Enter organization name"
-          :maxlength="100"
-        />
-      </Form.Item>
-
-      <!-- Description (optional) -->
-      <Form.Item label="Description" name="description">
-        <Input.TextArea
-          v-model:value="formState.description"
-          placeholder="Enter description (optional)"
-          :rows="4"
-        />
-      </Form.Item>
-    </Form>
-  </Modal>
+  <Dialog :open="open" @update:open="onOpenChange">
+    <DialogContent class="sm:max-w-lg" :aria-describedby="undefined">
+      <DialogHeader>
+        <DialogTitle>{{ modalTitle }}</DialogTitle>
+      </DialogHeader>
+      <form id="org-form" class="space-y-4" autocomplete="off" @submit="onSubmit">
+        <FormField v-slot="{ componentField }" name="name">
+          <FormItem>
+            <FormLabel>Name</FormLabel>
+            <FormControl>
+              <Input placeholder="Enter organization name" maxlength="100" v-bind="componentField" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+        <FormField v-slot="{ componentField }" name="description">
+          <FormItem>
+            <FormLabel>Description</FormLabel>
+            <FormControl>
+              <Textarea
+                placeholder="Enter description (optional)"
+                :rows="4"
+                v-bind="componentField"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+      </form>
+      <DialogFooter>
+        <Button type="button" variant="outline" @click="emit('cancel')">Cancel</Button>
+        <Button type="submit" form="org-form" :disabled="loading">
+          <Spinner v-if="loading" /> OK
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>

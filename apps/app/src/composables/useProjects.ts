@@ -1,7 +1,7 @@
 /**
  * Projects composable - helpers for project operations within an organization.
- * Bridges the projects store and UI components by providing modal state,
- * validation rules, and convenience wrappers around store actions.
+ * Bridges the projects store and UI components by providing modal state
+ * and convenience wrappers around store actions.
  */
 
 import { ref, computed } from "vue"
@@ -26,16 +26,6 @@ export function useProjects() {
 
   /** The project being edited, or null for create mode */
   const editingProject = ref<Wire<Project> | null>(null)
-
-  // ---------------------------------------------------------------------------
-  // Validation rules
-  // ---------------------------------------------------------------------------
-
-  /** Ant Design form validation rules for the project name field */
-  const nameRules = [
-    { required: true, message: "Please enter a project name" },
-    { max: 100, message: "Name cannot exceed 100 characters" },
-  ]
 
   // ---------------------------------------------------------------------------
   // Computed
@@ -110,8 +100,6 @@ export function useProjects() {
     isModalVisible,
     editingProject,
     isEditing,
-    // Validation rules
-    nameRules,
     // Actions — delegated directly from the store
     fetchProjects: projectsStore.fetchProjects,
     fetchProjectById: projectsStore.fetchProjectById,

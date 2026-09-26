@@ -1,72 +1,79 @@
 <script setup lang="ts">
 import { useRouter } from "vue-router"
-import { Card, Form, Input, Button, Typography, Alert, Space } from "ant-design-vue"
-import { MailOutlined, LockOutlined } from "@ant-design/icons-vue"
+import { useForm } from "vee-validate"
+import { toTypedSchema } from "@vee-validate/zod"
+import { Lock, Mail } from "@lucide/vue"
 import { useAuth } from "@/composables/useAuth"
+import { loginSchema } from "@/schemas/auth"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 
 const router = useRouter()
-const { formState, error, loading, emailRules, passwordRules, handleSignin } = useAuth()
+const { formState, error, loading, handleSignin } = useAuth()
 
-// Handle form submit
-async function onFinish(): Promise<void> {
+const form = useForm({
+  validationSchema: toTypedSchema(loginSchema),
+  initialValues: { email: "", password: "" },
+})
+
+// Copy the validated values into `formState`, so `useAuth` and the store stay unchanged.
+const onSubmit = form.handleSubmit(async (values) => {
+  formState.email = values.email
+  formState.password = values.password
   await handleSignin()
-}
-
-// Navigate to signup
-function goToSignup(): void {
-  router.push("/signup")
-}
+})
 </script>
 
 <template>
-  <div class="login-container">
-    <Card style="width: 400px">
-      <template #title>
-        <Typography.Title :level="3" style="text-align: center; margin: 0">
-          Sign In
-        </Typography.Title>
-      </template>
-
-      <Alert v-if="error" :message="error" type="error" show-icon style="margin-bottom: 16px" />
-
-      <Form :model="formState" layout="vertical" @finish="onFinish">
-        <Form.Item name="email" :rules="emailRules">
-          <Input v-model:value="formState.email" placeholder="Email" size="large">
-            <template #prefix>
-              <MailOutlined />
-            </template>
-          </Input>
-        </Form.Item>
-
-        <Form.Item name="password" :rules="passwordRules">
-          <Input.Password v-model:value="formState.password" placeholder="Password" size="large">
-            <template #prefix>
-              <LockOutlined />
-            </template>
-          </Input.Password>
-        </Form.Item>
-
-        <Form.Item>
-          <Button type="primary" html-type="submit" size="large" block :loading="loading">
+  <div class="flex min-h-screen items-center justify-center bg-muted p-4">
+    <Card class="w-full max-w-[400px]">
+      <CardHeader><CardTitle class="text-center text-2xl">Sign In</CardTitle></CardHeader>
+      <CardContent>
+        <Alert v-if="error" variant="destructive" class="mb-4">
+          <AlertDescription>{{ error }}</AlertDescription>
+        </Alert>
+        <form class="space-y-4" novalidate @submit="onSubmit">
+          <FormField v-slot="{ componentField }" name="email">
+            <FormItem>
+              <FormControl>
+                <div class="relative">
+                  <Mail class="absolute top-3 left-2.5 size-4 text-muted-foreground" />
+                  <Input v-bind="componentField" type="email" placeholder="Email" class="pl-8" />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <FormField v-slot="{ componentField }" name="password">
+            <FormItem>
+              <FormControl>
+                <div class="relative">
+                  <Lock class="absolute top-3 left-2.5 size-4 text-muted-foreground" />
+                  <Input
+                    v-bind="componentField"
+                    type="password"
+                    placeholder="Password"
+                    class="pl-8"
+                  />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <Button type="submit" class="w-full" :disabled="loading">
+            <Spinner v-if="loading" />
             Sign In
           </Button>
-        </Form.Item>
-      </Form>
-
-      <Space style="width: 100%; justify-content: center">
-        <Typography.Text>Don't have an account?</Typography.Text>
-        <Typography.Link @click="goToSignup">Sign up</Typography.Link>
-      </Space>
+        </form>
+        <p class="mt-4 text-center text-sm text-muted-foreground">
+          Don't have an account?
+          <Button variant="link" class="h-auto p-0" @click="router.push('/signup')">Sign up</Button>
+        </p>
+      </CardContent>
     </Card>
   </div>
 </template>
-
-<style scoped>
-.login-container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f0f2f5;
-}
-</style>

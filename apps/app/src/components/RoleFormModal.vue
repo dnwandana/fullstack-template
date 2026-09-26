@@ -1,204 +1,121 @@
 <script setup lang="ts">
-/**
- * RoleFormModal — Modal form for creating or editing a role with permissions.
- *
- * Permissions are grouped by their `resource` field and displayed as
- * checkbox sections so the user can toggle individual permissions.
- *
- * Props:
- *   - visible: controls modal visibility
- *   - role: existing role object (null for create mode)
- *   - permissions: all available permissions from the API
- *   - loading: disables the OK button while a request is in flight
- *
- * Emits:
- *   - submit({ name, description, permissions }) — validated form data
- *   - cancel — user dismissed the modal
- */
-
-import { reactive, watch, computed } from "vue"
-import { Form, Modal, Input, Checkbox, Typography } from "ant-design-vue"
-import type { Rule } from "ant-design-vue/es/form"
+/** Dialog form for a role. Emits `submit` with the payload, `cancel` on any close. */
+import { computed, watch } from "vue"
+import { useForm } from "vee-validate"
+import { toTypedSchema } from "@vee-validate/zod"
 import type { Permission, Role, Wire } from "@fullstack/contracts"
 import type { RoleFormInput } from "@/api/roles"
+import { roleFormSchema } from "@/schemas/role"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Spinner } from "@/components/ui/spinner"
 
-interface Props {
-  visible?: boolean
-  role?: Wire<Role> | null
-  permissions?: Wire<Permission>[]
-  loading?: boolean
-}
+const props = withDefaults(
+  defineProps<{
+    open?: boolean
+    role?: Wire<Role> | null
+    permissions?: Wire<Permission>[]
+    loading?: boolean
+  }>(),
+  { open: false, role: null, permissions: () => [], loading: false },
+)
+const emit = defineEmits<{ submit: [payload: RoleFormInput]; cancel: [] }>()
 
-const props = withDefaults(defineProps<Props>(), {
-  visible: false,
-  role: null,
-  permissions: () => [],
-  loading: false,
+const noPermissions: string[] = []
+
+const form = useForm({
+  validationSchema: toTypedSchema(roleFormSchema),
+  initialValues: { name: "", description: "", permissions: noPermissions },
 })
 
-const emit = defineEmits<{
-  submit: [payload: RoleFormInput]
-  cancel: []
-}>()
-
-// Reactive form state — selectedPermissions holds an array of permission IDs
-const formState = reactive<{
-  name: string
-  description: string
-  selectedPermissions: string[]
-}>({
-  name: "",
-  description: "",
-  selectedPermissions: [],
-})
-
-// Validation rules — name is required, at least one permission must be selected
-const rules = reactive<Record<string, Rule[]>>({
-  name: [{ required: true, message: "Please enter a role name" }],
-  selectedPermissions: [
-    {
-      /**
-       * Custom validator that ensures at least one permission is checked.
-       * Ant Design's built-in required validator does not handle arrays well.
-       */
-      validator: async (_rule, value) => {
-        if (!value || value.length === 0) {
-          throw new Error("Please select at least one permission")
-        }
-      },
-    },
-  ],
-})
-
-// Form instance providing validate / resetFields helpers
-const { validate, resetFields } = Form.useForm(formState, rules)
-
-/**
- * Watch the role prop to populate the form when editing,
- * or reset it when switching to create mode.
- */
+// Reset on every open so a cancelled draft never leaks into the next open.
 watch(
-  () => props.role,
-  (newRole) => {
-    if (newRole) {
-      formState.name = newRole.name || ""
-      formState.description = newRole.description || ""
-      // Map the role's permission objects to an array of IDs for the checkbox group
-      if (newRole.permissions && Array.isArray(newRole.permissions)) {
-        formState.selectedPermissions = newRole.permissions.map((p) => p.id)
-      } else {
-        formState.selectedPermissions = []
-      }
-    } else {
-      resetForm()
-    }
+  [() => props.open, () => props.role],
+  ([open, role]) => {
+    if (!open) return
+    const { name = "", description = "", permissions = [] } = role ?? {}
+    form.resetForm({
+      values: { name, description: description ?? "", permissions: permissions.map((p) => p.id) },
+    })
   },
   { immediate: true },
 )
 
-/**
- * Group permissions by their `resource` field so the template can render
- * them as labelled sections (e.g. "organization", "project", "todo").
- *
- * Keyed by resource name.
- */
+const onSubmit = form.handleSubmit((values) => {
+  emit("submit", {
+    name: values.name,
+    description: values.description || undefined,
+    permissions: values.permissions,
+  })
+})
+
+function onOpenChange(value: boolean) {
+  if (!value) emit("cancel")
+}
+
+/** Permissions keyed by `resource`, in first-seen order. */
 const groupedPermissions = computed(() => {
   const groups: Record<string, Wire<Permission>[]> = {}
-  for (const perm of props.permissions) {
-    if (!groups[perm.resource]) {
-      groups[perm.resource] = []
-    }
-    groups[perm.resource].push(perm)
-  }
+  for (const perm of props.permissions) (groups[perm.resource] ??= []).push(perm)
   return groups
 })
 
-/** Reset form fields back to their initial values. */
-function resetForm() {
-  resetFields()
-}
-
-/**
- * Validate and emit the form data on OK click.
- * If validation fails, ant-design-vue renders the errors automatically.
- */
-async function handleOk() {
-  try {
-    await validate()
-    emit("submit", {
-      name: formState.name,
-      description: formState.description || undefined,
-      permissions: formState.selectedPermissions,
-    })
-  } catch {
-    // Validation failed — field-level errors are shown by ant-design-vue
-  }
-}
-
-/** Cancel the modal and reset form state. */
-function handleCancel() {
-  resetForm()
-  emit("cancel")
-}
-
-/**
- * Computed modal title — shows "Edit Role" when a role prop
- * is provided, otherwise "Create Role".
- */
-const modalTitle = computed(() => {
-  if (props.role) {
-    return "Edit Role"
-  }
-  return "Create Role"
-})
+const modalTitle = computed(() => (props.role ? "Edit Role" : "Create Role"))
 </script>
 
 <template>
-  <Modal
-    :open="visible"
-    :title="modalTitle"
-    :confirm-loading="loading"
-    @ok="handleOk"
-    @cancel="handleCancel"
-  >
-    <Form :model="formState" :rules="rules" layout="vertical" autocomplete="off">
-      <!-- Role name (required) -->
-      <Form.Item label="Name" name="name">
-        <Input v-model:value="formState.name" placeholder="Enter role name" />
-      </Form.Item>
-
-      <!-- Role description (optional) -->
-      <Form.Item label="Description" name="description">
-        <Input.TextArea
-          v-model:value="formState.description"
-          placeholder="Enter description (optional)"
-          :rows="3"
-        />
-      </Form.Item>
-
-      <!-- Permissions grouped by resource -->
-      <Form.Item label="Permissions" name="selectedPermissions">
-        <Checkbox.Group v-model:value="formState.selectedPermissions" style="width: 100%">
-          <div
-            v-for="(perms, resource) in groupedPermissions"
-            :key="resource"
-            style="margin-bottom: 12px"
-          >
-            <!-- Resource section header (e.g. "organization", "project") -->
-            <Typography.Text
-              strong
-              style="text-transform: capitalize; display: block; margin-bottom: 4px"
-            >
-              {{ resource }}
-            </Typography.Text>
-
-            <!-- Individual permission checkboxes -->
-            <div v-for="perm in perms" :key="perm.id" style="margin-left: 8px">
-              <Checkbox :value="perm.id">{{ perm.description }}</Checkbox>
+  <Dialog :open="open" @update:open="onOpenChange">
+    <DialogContent class="sm:max-w-lg" :aria-describedby="undefined">
+      <DialogHeader><DialogTitle>{{ modalTitle }}</DialogTitle></DialogHeader>
+      <form id="role-form" class="space-y-4" autocomplete="off" @submit="onSubmit">
+        <FormField v-slot="{ componentField }" name="name">
+          <FormItem>
+            <FormLabel>Name</FormLabel>
+            <FormControl><Input placeholder="Enter role name" v-bind="componentField" /></FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+        <FormField v-slot="{ componentField }" name="description">
+          <FormItem>
+            <FormLabel>Description</FormLabel>
+            <FormControl><Textarea placeholder="Enter description (optional)" :rows="3" v-bind="componentField" /></FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+        <FormField name="permissions">
+          <FormItem>
+            <FormLabel>Permissions</FormLabel>
+            <div v-for="(perms, resource) in groupedPermissions" :key="resource" class="mb-3">
+              <p data-testid="perm-group" class="mb-1 text-sm font-semibold capitalize">{{ resource }}</p>
+              <FormField
+                v-for="perm in perms"
+                :key="perm.id"
+                v-slot="{ value, handleChange }"
+                type="checkbox"
+                :value="perm.id"
+                :unchecked-value="false"
+                name="permissions"
+              >
+                <FormItem class="ml-2 flex items-center gap-2">
+                  <FormControl>
+                    <Checkbox :model-value="value.includes(perm.id)" @update:model-value="handleChange" />
+                  </FormControl>
+                  <FormLabel class="font-normal">{{ perm.description }}</FormLabel>
+                </FormItem>
+              </FormField>
             </div>
-          </div>
-        </Checkbox.Group>
-      </Form.Item>
-    </Form>
-  </Modal>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+      </form>
+      <DialogFooter>
+        <Button type="button" variant="outline" @click="emit('cancel')">Cancel</Button>
+        <Button type="submit" form="role-form" :disabled="loading"><Spinner v-if="loading" /> OK</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>

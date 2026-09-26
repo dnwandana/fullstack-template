@@ -1,124 +1,119 @@
 <script setup lang="ts">
-import { onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { Card, Form, Input, Button, Typography, Alert, Space } from "ant-design-vue"
-import { UserOutlined, MailOutlined, LockOutlined } from "@ant-design/icons-vue"
+import { useForm } from "vee-validate"
+import { toTypedSchema } from "@vee-validate/zod"
+import { Lock, Mail, User } from "@lucide/vue"
 import { useAuth } from "@/composables/useAuth"
+import { signupSchema } from "@/schemas/auth"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 
-const router = useRouter()
 const route = useRoute()
-const {
-  formState,
-  error,
-  loading,
-  nameRules,
-  emailRules,
-  passwordRules,
-  confirmation_passwordRules,
-  handleSignup,
-} = useAuth()
+const router = useRouter()
+const { formState, error, loading, handleSignup } = useAuth()
 
-// When arriving from an invite link the address is fixed — the invitation is
-// bound to it, and editing it here would silently produce an account that can
-// never redeem the invitation. A repeated ?email= yields an array, so only a
-// plain string is trusted.
+// An invite link arrives with `?email=`. The invitation is bound to that address, so the field
+// is read-only. A repeated `?email=` gives an array, so only a plain string is trusted.
 const lockedEmail = typeof route.query.email === "string" ? route.query.email : ""
 
-onMounted(() => {
-  if (lockedEmail) {
-    formState.email = lockedEmail
-  }
+const form = useForm({
+  validationSchema: toTypedSchema(signupSchema),
+  initialValues: { name: "", email: lockedEmail, password: "", confirmation_password: "" },
 })
 
-// Handle form submit
-async function onFinish(): Promise<void> {
+// Copy the validated values into `formState`, so `useAuth` and the store stay unchanged.
+const onSubmit = form.handleSubmit(async (values) => {
+  formState.name = values.name
+  formState.email = values.email
+  formState.password = values.password
+  formState.confirmation_password = values.confirmation_password
   await handleSignup()
-}
-
-// Navigate to login
-function goToLogin(): void {
-  router.push("/login")
-}
+})
 </script>
 
 <template>
-  <div class="signup-container">
-    <Card style="width: 400px">
-      <template #title>
-        <Typography.Title :level="3" style="text-align: center; margin: 0">
-          Create Account
-        </Typography.Title>
-      </template>
-
-      <Alert v-if="error" :message="error" type="error" show-icon style="margin-bottom: 16px" />
-
-      <Form :model="formState" layout="vertical" @finish="onFinish">
-        <Form.Item name="name" :rules="nameRules">
-          <Input v-model:value="formState.name" placeholder="Full name" size="large">
-            <template #prefix>
-              <UserOutlined />
-            </template>
-          </Input>
-        </Form.Item>
-
-        <Form.Item name="email" :rules="emailRules">
-          <Input
-            v-model:value="formState.email"
-            placeholder="Email"
-            size="large"
-            :disabled="!!lockedEmail"
-          >
-            <template #prefix>
-              <MailOutlined />
-            </template>
-          </Input>
-        </Form.Item>
-
-        <Form.Item name="password" :rules="passwordRules">
-          <Input.Password
-            v-model:value="formState.password"
-            placeholder="Password (min 8 characters)"
-            size="large"
-          >
-            <template #prefix>
-              <LockOutlined />
-            </template>
-          </Input.Password>
-        </Form.Item>
-
-        <Form.Item name="confirmation_password" :rules="confirmation_passwordRules">
-          <Input.Password
-            v-model:value="formState.confirmation_password"
-            placeholder="Confirm Password"
-            size="large"
-          >
-            <template #prefix>
-              <LockOutlined />
-            </template>
-          </Input.Password>
-        </Form.Item>
-
-        <Form.Item>
-          <Button type="primary" html-type="submit" size="large" block :loading="loading">
+  <div class="flex min-h-screen items-center justify-center bg-muted p-4">
+    <Card class="w-full max-w-[400px]">
+      <CardHeader><CardTitle class="text-center text-2xl">Create Account</CardTitle></CardHeader>
+      <CardContent>
+        <Alert v-if="error" variant="destructive" class="mb-4">
+          <AlertDescription>{{ error }}</AlertDescription>
+        </Alert>
+        <form class="space-y-4" novalidate @submit="onSubmit">
+          <FormField v-slot="{ componentField }" name="name">
+            <FormItem>
+              <FormControl>
+                <div class="relative">
+                  <User class="absolute top-3 left-2.5 size-4 text-muted-foreground" />
+                  <Input v-bind="componentField" placeholder="Full name" class="pl-8" />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <FormField v-slot="{ componentField }" name="email">
+            <FormItem>
+              <FormControl>
+                <div class="relative">
+                  <Mail class="absolute top-3 left-2.5 size-4 text-muted-foreground" />
+                  <Input
+                    v-bind="componentField"
+                    type="email"
+                    placeholder="Email"
+                    class="pl-8"
+                    :disabled="Boolean(lockedEmail)"
+                  />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <FormField v-slot="{ componentField }" name="password">
+            <FormItem>
+              <FormControl>
+                <div class="relative">
+                  <Lock class="absolute top-3 left-2.5 size-4 text-muted-foreground" />
+                  <Input
+                    v-bind="componentField"
+                    type="password"
+                    placeholder="Password (min 8 characters)"
+                    class="pl-8"
+                  />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <FormField v-slot="{ componentField }" name="confirmation_password">
+            <FormItem>
+              <FormControl>
+                <div class="relative">
+                  <Lock class="absolute top-3 left-2.5 size-4 text-muted-foreground" />
+                  <Input
+                    v-bind="componentField"
+                    type="password"
+                    placeholder="Confirm Password"
+                    class="pl-8"
+                  />
+                </div>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <Button type="submit" class="w-full" :disabled="loading">
+            <Spinner v-if="loading" />
             Sign Up
           </Button>
-        </Form.Item>
-      </Form>
-
-      <Space style="width: 100%; justify-content: center">
-        <Typography.Text>Already have an account?</Typography.Text>
-        <Typography.Link @click="goToLogin">Sign in</Typography.Link>
-      </Space>
+        </form>
+        <p class="mt-4 text-center text-sm text-muted-foreground">
+          Already have an account?
+          <Button variant="link" class="h-auto p-0" @click="router.push('/login')">Sign in</Button>
+        </p>
+      </CardContent>
     </Card>
   </div>
 </template>
-
-<style scoped>
-.signup-container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f0f2f5;
-}
-</style>

@@ -1,7 +1,7 @@
 /**
  * Todos composable - helpers for todo operations.
- * Bridges the todos store and UI components by providing modal state,
- * validation rules, and convenience wrappers around store actions.
+ * Bridges the todos store and UI components by providing modal state
+ * and convenience wrappers around store actions.
  * Supports multi-tenant context via orgId and projectId.
  */
 
@@ -26,16 +26,6 @@ export function useTodos() {
 
   /** The todo being edited, or null for create mode */
   const editingTodo = ref<Wire<Todo> | null>(null)
-
-  // ---------------------------------------------------------------------------
-  // Validation rules
-  // ---------------------------------------------------------------------------
-
-  /** Ant Design form validation rules for the todo title field */
-  const titleRules = [
-    { required: true, message: "Please enter a title" },
-    { max: 255, message: "Title cannot exceed 255 characters" },
-  ]
 
   // ---------------------------------------------------------------------------
   // Computed
@@ -140,11 +130,9 @@ export function useTodos() {
   /**
    * Handle row selection change from the table component.
    * Replaces the current selection with the provided row keys.
-   * AntD types row keys as `string | number`; every key here is a todo UUID, so `String` is
-   * identity — the map exists to satisfy the store's `string[]`, not to convert anything.
    */
-  function handleSelectionChange(selectedRowKeys: (string | number)[]): void {
-    todosStore.selectedIds = selectedRowKeys.map(String)
+  function handleSelectionChange(selectedRowKeys: string[]): void {
+    todosStore.selectedIds = selectedRowKeys
   }
 
   /**
@@ -176,8 +164,6 @@ export function useTodos() {
     isModalVisible,
     editingTodo,
     isEditing,
-    // Validation rules
-    titleRules,
     // Actions — multi-tenant context
     setContext,
     clearAll,

@@ -1,113 +1,111 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from "vue"
-import { Form, Modal, Input, Checkbox } from "ant-design-vue"
-import type { Rule } from "ant-design-vue/es/form"
+/** Dialog form for a todo. Emits `submit` with the payload, `cancel` on any close. */
+import { computed, watch } from "vue"
+import { useForm } from "vee-validate"
+import { toTypedSchema } from "@vee-validate/zod"
 import type { Todo, Wire } from "@fullstack/contracts"
 import type { TodoInput } from "@/api/todos"
+import { todoFormSchema } from "@/schemas/todo"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
+import { Textarea } from "@/components/ui/textarea"
 
-interface Props {
-  visible?: boolean
-  todo?: Wire<Todo> | null
-  loading?: boolean
-}
+const props = withDefaults(
+  defineProps<{ open?: boolean; todo?: Wire<Todo> | null; loading?: boolean }>(),
+  { open: false, todo: null, loading: false },
+)
+const emit = defineEmits<{ submit: [payload: TodoInput]; cancel: [] }>()
 
-const props = withDefaults(defineProps<Props>(), {
-  visible: false,
-  todo: null,
-  loading: false,
+const form = useForm({
+  validationSchema: toTypedSchema(todoFormSchema),
+  initialValues: { title: "", description: "", is_completed: false },
 })
 
-const emit = defineEmits<{
-  submit: [payload: TodoInput]
-  cancel: []
-}>()
-
-// Form state
-const formState = reactive({
-  title: "",
-  description: "",
-  is_completed: false,
-})
-
-// Validation rules
-const rules = reactive<Record<string, Rule[]>>({
-  title: [
-    { required: true, message: "Please enter a title" },
-    { max: 255, message: "Title cannot exceed 255 characters" },
-  ],
-})
-
-// Form instance with validation
-const { validate, resetFields } = Form.useForm(formState, rules)
-
-// Watch for todo prop changes to populate form
+// Reset on every open so a cancelled draft never leaks into the next open.
 watch(
-  () => props.todo,
-  (newTodo) => {
-    if (newTodo) {
-      formState.title = newTodo.title || ""
-      formState.description = newTodo.description || ""
-      formState.is_completed = newTodo.is_completed || false
-    } else {
-      resetForm()
-    }
+  [() => props.open, () => props.todo],
+  ([open, todo]) => {
+    if (!open) return
+    form.resetForm({
+      values: {
+        title: todo?.title ?? "",
+        description: todo?.description ?? "",
+        is_completed: todo?.is_completed ?? false,
+      },
+    })
   },
   { immediate: true },
 )
 
-// Reset form to initial state
-function resetForm() {
-  resetFields()
+const onSubmit = form.handleSubmit((values) => {
+  emit("submit", {
+    title: values.title,
+    description: values.description || undefined,
+    is_completed: values.is_completed,
+  })
+})
+
+function onOpenChange(value: boolean) {
+  if (!value) emit("cancel")
 }
 
-// Handle form submission
-async function handleOk() {
-  try {
-    await validate()
-    emit("submit", {
-      title: formState.title,
-      description: formState.description || undefined,
-      is_completed: formState.is_completed,
-    })
-  } catch {
-    // Validation failed, errors are displayed by ant-design-vue
-  }
-}
-
-// Handle cancel
-function handleCancel() {
-  resetForm()
-  emit("cancel")
-}
-
-// Computed title for modal
 const modalTitle = computed(() => (props.todo ? "Edit Todo" : "Create Todo"))
 </script>
 
 <template>
-  <Modal
-    :open="visible"
-    :title="modalTitle"
-    :confirm-loading="loading"
-    @ok="handleOk"
-    @cancel="handleCancel"
-  >
-    <Form :model="formState" :rules="rules" layout="vertical" autocomplete="off">
-      <Form.Item label="Title" name="title">
-        <Input v-model:value="formState.title" placeholder="Enter todo title" :maxlength="255" />
-      </Form.Item>
-
-      <Form.Item label="Description" name="description">
-        <Input.TextArea
-          v-model:value="formState.description"
-          placeholder="Enter description (optional)"
-          :rows="4"
-        />
-      </Form.Item>
-
-      <Form.Item name="is_completed">
-        <Checkbox v-model:checked="formState.is_completed"> Mark as completed </Checkbox>
-      </Form.Item>
-    </Form>
-  </Modal>
+  <Dialog :open="open" @update:open="onOpenChange">
+    <DialogContent class="sm:max-w-lg" :aria-describedby="undefined">
+      <DialogHeader>
+        <DialogTitle>{{ modalTitle }}</DialogTitle>
+      </DialogHeader>
+      <form id="todo-form" class="space-y-4" autocomplete="off" @submit="onSubmit">
+        <FormField v-slot="{ componentField }" name="title">
+          <FormItem>
+            <FormLabel>Title</FormLabel>
+            <FormControl>
+              <Input placeholder="Enter todo title" maxlength="255" v-bind="componentField" />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+        <FormField v-slot="{ componentField }" name="description">
+          <FormItem>
+            <FormLabel>Description</FormLabel>
+            <FormControl>
+              <Textarea
+                placeholder="Enter description (optional)"
+                :rows="4"
+                v-bind="componentField"
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        </FormField>
+        <FormField v-slot="{ value, handleChange }" name="is_completed">
+          <FormItem class="flex items-center gap-2">
+            <FormControl>
+              <Checkbox :model-value="value" @update:model-value="(v) => handleChange(v === true)" />
+            </FormControl>
+            <FormLabel class="font-normal">Mark as completed</FormLabel>
+          </FormItem>
+        </FormField>
+      </form>
+      <DialogFooter>
+        <Button type="button" variant="outline" @click="emit('cancel')">Cancel</Button>
+        <Button type="submit" form="todo-form" :disabled="loading">
+          <Spinner v-if="loading" /> OK
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>

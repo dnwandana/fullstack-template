@@ -18,20 +18,6 @@ vi.mock("vue-router", () => ({
 }))
 
 describe("SignupView", () => {
-  // jsdom does not implement matchMedia; Ant Design Vue's grid subscribes to it on mount.
-  beforeAll(() => {
-    window.matchMedia = (query) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-    })
-  })
-
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
@@ -72,5 +58,21 @@ describe("SignupView", () => {
     const email = wrapper.find<HTMLInputElement>('input[placeholder="Email"]')
     expect(email.element.value).toBe("")
     expect(email.element.disabled).toBe(false)
+  })
+
+  // Review Focus 1: the locked invite email reaches the request body.
+  it("submits the locked email from the query string", async () => {
+    currentRoute.query = { email: "new@acme.com" }
+    vi.mocked(request.post).mockResolvedValue(ok(makeUser({ id: "u-1" })))
+    const wrapper = mount(SignupView, { global: { plugins: [createPinia()] } })
+    await wrapper.find('input[placeholder="Full name"]').setValue("Grace")
+    await wrapper.find('input[placeholder="Password (min 8 characters)"]').setValue("password123")
+    await wrapper.find('input[placeholder="Confirm Password"]').setValue("password123")
+    await wrapper.find("form").trigger("submit")
+    // VeeValidate validates through an async Zod parse. One flush is not enough.
+    await vi.waitFor(() => expect(request.post).toHaveBeenCalled())
+    await flushPromises()
+    const [, body] = vi.mocked(request.post).mock.calls[0] ?? []
+    expect(body).toMatchObject({ email: "new@acme.com" })
   })
 })

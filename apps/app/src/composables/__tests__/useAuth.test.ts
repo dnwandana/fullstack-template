@@ -24,9 +24,7 @@ vi.mock("vue-router", () => ({
   useRoute: () => currentRoute,
 }))
 
-vi.mock("ant-design-vue", () => ({
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 describe("useAuth argument chain", () => {
   beforeEach(() => {

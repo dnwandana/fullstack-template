@@ -2,7 +2,6 @@
  * Auth composable - form handling and validation for authentication
  */
 
-import type { Rule } from "ant-design-vue/es/form"
 import { computed, ref, reactive } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { useAuthStore } from "@/stores/auth"
@@ -42,34 +41,6 @@ export function useAuth() {
 
   // Error state
   const error = ref("")
-
-  // Validation rules for Ant Design forms
-  const nameRules: Rule[] = [
-    { required: true, whitespace: true, message: "Please enter your name" },
-    { max: 100, message: "Name must be at most 100 characters" },
-  ]
-
-  const emailRules: Rule[] = [
-    { required: true, message: "Please enter your email" },
-    { type: "email", message: "Please enter a valid email address" },
-    { max: 255, message: "Email must be at most 255 characters" },
-  ]
-
-  const passwordRules: Rule[] = [
-    { required: true, message: "Please enter your password" },
-    { min: 8, message: "Password must be at least 8 characters" },
-  ]
-
-  const confirmation_passwordRules: Rule[] = [
-    { required: true, message: "Please confirm your password" },
-    {
-      validator: async (_rule, value) => {
-        if (value && value !== formState.password) {
-          throw new Error("Passwords do not match")
-        }
-      },
-    },
-  ]
 
   /**
    * Handle sign in form submission
@@ -136,11 +107,6 @@ export function useAuth() {
     loading: computed(() => authStore.loading),
     isAuthenticated: computed(() => authStore.isAuthenticated),
     currentUser: computed(() => authStore.currentUser),
-    // Validation rules
-    nameRules,
-    emailRules,
-    passwordRules,
-    confirmation_passwordRules,
     // Actions
     handleSignin,
     handleSignup,
