@@ -27,6 +27,10 @@ allowBuilds:
   msgpackr-extract: false
   prisma: true
   unrs-resolver: true
+  # Transitive dependency of @floating-ui/vue, which reka-ui uses. Its postinstall only
+  # switches the build for Vue 2.
+  # The default build already targets Vue 3, so the script stays denied.
+  vue-demi: false
 minimumReleaseAgeExclude:
   - pnpm@11.11.0
   - '@nestjs/cli@12.0.5'

@@ -2,6 +2,7 @@
 node_modules/
 .pnpm-store/
 .turbo/
+*.tsbuildinfo
 
 # Local tooling caches
 .corepack/
@@ -15,7 +16,6 @@ node_modules/
 .superpowers/
 docs/
 skills-lock.json
-claude-design/
 
 # Environment files
 .env
