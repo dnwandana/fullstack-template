@@ -24,10 +24,7 @@ const { currentRoute } = await vi.hoisted(async () => {
 })
 vi.mock("@/router", () => ({ default: { currentRoute } }))
 
-vi.mock("ant-design-vue", async (importOriginal) => ({
-  ...(await importOriginal()),
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import OrgMembersView from "../OrgMembersView.vue"
 
@@ -37,14 +34,6 @@ const MEMBERS = [makeOrgMember({ user_id: "u1", role_id: "r1" })]
 
 describe("OrgMembersView", () => {
   beforeEach(() => {
-    // Ant Design Vue's responsive grid reads matchMedia, which jsdom lacks.
-    window.matchMedia = vi.fn().mockReturnValue({
-      matches: false,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })
     vi.mocked(request.get)
       .mockReset()
       .mockImplementation((url: string) => {
@@ -67,5 +56,11 @@ describe("OrgMembersView", () => {
   it("renders each member returned by the API", async () => {
     const wrapper = mount(OrgMembersView, { global: { plugins: [createPinia()] } })
     await vi.waitFor(() => expect(wrapper.text()).toContain("ada@example.com"))
+  })
+
+  it("renders the page header", async () => {
+    const wrapper = mount(OrgMembersView, { global: { plugins: [createPinia()] } })
+    await vi.waitFor(() => expect(wrapper.text()).toContain("ada@example.com"))
+    expect(wrapper.find("h1").text()).toBe("Members")
   })
 })

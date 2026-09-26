@@ -24,10 +24,7 @@ const { currentRoute } = await vi.hoisted(async () => {
 })
 vi.mock("@/router", () => ({ default: { currentRoute } }))
 
-vi.mock("ant-design-vue", async (importOriginal) => ({
-  ...(await importOriginal()),
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import ProjectInvitationsView from "../ProjectInvitationsView.vue"
 
@@ -44,13 +41,6 @@ const INVITATIONS = [
 
 describe("ProjectInvitationsView", () => {
   beforeEach(() => {
-    window.matchMedia = vi.fn().mockReturnValue({
-      matches: false,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })
     vi.mocked(request.get)
       .mockReset()
       .mockImplementation((url: string) => {

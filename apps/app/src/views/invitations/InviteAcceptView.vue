@@ -11,7 +11,17 @@
 
 import { ref, computed, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { Card, Button, Result, Spin, Typography, Space } from "ant-design-vue"
+import { CircleCheck, CircleX, Clock, Link2Off } from "@lucide/vue"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
+import { Spinner } from "@/components/ui/spinner"
 import type { InvitationPreview, Wire } from "@fullstack/contracts"
 import { useAuthStore } from "@/stores/auth"
 import { useInvitations } from "@/composables/useInvitations"
@@ -129,90 +139,85 @@ async function switchAccount(): Promise<void> {
 </script>
 
 <template>
-  <div class="invite-container">
-    <Card style="width: 460px">
-      <Spin v-if="state === 'loading'" />
+  <div class="flex min-h-screen items-center justify-center bg-muted p-4">
+    <Card class="w-full max-w-[460px]">
+      <CardContent class="pt-6">
+        <div v-if="state === 'loading'" class="flex justify-center py-10">
+          <Spinner class="size-6" />
+        </div>
 
-      <Result
-        v-else-if="state === 'no-token'"
-        status="info"
-        title="Open this invitation from your email"
-        sub-title="Invitation links carry a one-time code that isn't stored in your account, so
-          this page can't open it on its own. Use the link you were sent, or ask whoever invited
-          you to issue a new one."
-      />
+        <Empty v-else-if="state === 'no-token'">
+          <EmptyHeader>
+            <EmptyMedia variant="icon"><Link2Off /></EmptyMedia>
+            <EmptyTitle>Open this invitation from your email</EmptyTitle>
+            <EmptyDescription>
+              Invitation links carry a one-time code that isn't stored in your account, so this
+              page can't open it on its own. Use the link you were sent, or ask whoever invited
+              you to issue a new one.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
 
-      <Result
-        v-else-if="state === 'invalid'"
-        status="error"
-        title="This invitation is no longer valid"
-        sub-title="The link may be incorrect, or the invitation was revoked."
-      />
+        <Empty v-else-if="state === 'invalid'">
+          <EmptyHeader>
+            <EmptyMedia variant="icon"><CircleX /></EmptyMedia>
+            <EmptyTitle>This invitation is no longer valid</EmptyTitle>
+            <EmptyDescription>
+              The link may be incorrect, or the invitation was revoked.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
 
-      <Result
-        v-else-if="state === 'expired'"
-        status="warning"
-        title="This invitation has expired"
-        sub-title="Ask whoever invited you to send a new one."
-      />
+        <Empty v-else-if="state === 'expired'">
+          <EmptyHeader>
+            <EmptyMedia variant="icon"><Clock /></EmptyMedia>
+            <EmptyTitle>This invitation has expired</EmptyTitle>
+            <EmptyDescription>Ask whoever invited you to send a new one.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
 
-      <Result
-        v-else-if="state === 'handled'"
-        status="info"
-        :title="`This invitation was already ${preview?.status}`"
-      />
+        <Empty v-else-if="state === 'handled'">
+          <EmptyHeader>
+            <EmptyMedia variant="icon"><CircleCheck /></EmptyMedia>
+            <EmptyTitle>This invitation was already {{ preview?.status }}</EmptyTitle>
+          </EmptyHeader>
+        </Empty>
 
-      <template v-else>
-        <Typography.Title :level="4" style="text-align: center">
-          {{ preview?.inviter_name }} invited you to {{ scopeLabel }}
-        </Typography.Title>
-        <Typography.Paragraph style="text-align: center">
-          as <strong>{{ preview?.role_name }}</strong>
-        </Typography.Paragraph>
-        <Typography.Paragraph type="secondary" style="text-align: center">
-          {{ preview?.invitee_email }}
-        </Typography.Paragraph>
+        <div v-else class="space-y-6">
+          <div class="space-y-1 text-center">
+            <h1 class="text-xl font-semibold tracking-tight">
+              {{ preview?.inviter_name }} invited you to {{ scopeLabel }}
+            </h1>
+            <p class="text-sm text-muted-foreground">
+              as <strong>{{ preview?.role_name }}</strong>
+            </p>
+            <p class="text-sm text-muted-foreground">{{ preview?.invitee_email }}</p>
+          </div>
 
-        <Space v-if="state === 'guest'" direction="vertical" style="width: 100%">
-          <Button
-            v-if="preview?.requires_signup"
-            type="primary"
-            block
-            size="large"
-            @click="goToSignup"
-          >
-            Create account &amp; join
+          <div v-if="state === 'guest'" class="flex flex-col gap-2">
+            <Button v-if="preview?.requires_signup" @click="goToSignup">
+              Create account &amp; join
+            </Button>
+            <Button v-else @click="goToLogin">Sign in &amp; join</Button>
+            <Button v-if="preview?.requires_signup" variant="link" @click="goToLogin">
+              I already have an account
+            </Button>
+          </div>
+
+          <div v-else-if="state === 'wrong-account'" class="space-y-3 text-center">
+            <p class="text-sm">
+              You are signed in as {{ authStore.currentUser?.email }}, but this invitation is for
+              {{ preview?.invitee_email }}.
+            </p>
+            <Button variant="outline" @click="switchAccount">Switch account</Button>
+          </div>
+
+          <Button v-else class="w-full" :disabled="accepting" @click="onAccept">
+            <Spinner v-if="accepting" />
+            Accept invitation
           </Button>
-          <Button v-else type="primary" block size="large" @click="goToLogin">
-            Sign in &amp; join
-          </Button>
-          <Button v-if="preview?.requires_signup" block @click="goToLogin">
-            I already have an account
-          </Button>
-        </Space>
-
-        <Space v-else-if="state === 'wrong-account'" direction="vertical" style="width: 100%">
-          <Typography.Text type="warning">
-            You are signed in as {{ authStore.currentUser?.email }}, but this invitation is for
-            {{ preview?.invitee_email }}.
-          </Typography.Text>
-          <Button block @click="switchAccount">Switch account</Button>
-        </Space>
-
-        <Button v-else type="primary" block size="large" :loading="accepting" @click="onAccept">
-          Accept invitation
-        </Button>
-      </template>
+        </div>
+      </CardContent>
     </Card>
   </div>
 </template>
-
-<style scoped>
-.invite-container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f0f2f5;
-}
-</style>

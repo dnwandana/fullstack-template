@@ -1,21 +1,24 @@
 <script setup lang="ts">
 import { onMounted, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import {
-  Descriptions,
-  Button,
-  Space,
-  Tag,
-  Typography,
-  Spin,
-  Popconfirm,
-  Result,
-} from "ant-design-vue"
-import { ArrowLeftOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons-vue"
+import { ArrowLeft, Pencil, SearchX, Trash2 } from "@lucide/vue"
 import { useTodos } from "@/composables/useTodos"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 import TodoFormModal from "@/components/TodoFormModal.vue"
+import ConfirmDialog from "@/components/ConfirmDialog.vue"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty"
+import { Spinner } from "@/components/ui/spinner"
+import { Table, TableBody, TableCell, TableHead, TableRow } from "@/components/ui/table"
 
 const route = useRoute()
 const router = useRouter()
@@ -53,8 +56,13 @@ onMounted(async () => {
   // discards it.
   loadPermissions(orgId, authStore.currentUser?.id)
 
-  // Fetch the individual todo
-  await fetchTodoById(todoId)
+  // Fetch the individual todo. The store clears `currentTodo` on failure, so the
+  // not-found state renders. The catch stops the rejection from going unhandled.
+  try {
+    await fetchTodoById(todoId)
+  } catch {
+    // Nothing to do here. The HTTP layer already shows the error toast.
+  }
 })
 
 // Clear current todo when navigating away (route param disappears)
@@ -92,95 +100,89 @@ function formatDate(dateString: string): string {
 </script>
 
 <template>
-  <div class="todo-detail">
+  <div class="space-y-6">
     <!-- Loading state -->
-    <div v-if="loading" class="loading-container">
-      <Spin size="large" />
+    <div v-if="loading" class="flex min-h-[200px] items-center justify-center">
+      <Spinner class="size-6" />
     </div>
 
     <!-- Not found state -->
-    <Result
-      v-else-if="!currentTodo"
-      status="404"
-      title="Todo not found"
-      sub-title="The todo you're looking for doesn't exist or has been deleted."
-    >
-      <template #extra>
-        <Button type="primary" @click="goBack"> Back to Todos </Button>
-      </template>
-    </Result>
+    <Empty v-else-if="!currentTodo">
+      <EmptyHeader>
+        <EmptyMedia variant="icon"><SearchX /></EmptyMedia>
+        <EmptyTitle>Todo not found</EmptyTitle>
+        <EmptyDescription>
+          The todo you're looking for doesn't exist or has been deleted.
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button @click="goBack">Back to Todos</Button>
+      </EmptyContent>
+    </Empty>
 
     <!-- Todo content -->
     <template v-else>
       <!-- Header with actions -->
-      <div class="header">
-        <Space>
-          <Button @click="goBack">
-            <template #icon>
-              <ArrowLeftOutlined />
-            </template>
-            Back
-          </Button>
-        </Space>
-
-        <Space>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <Button variant="outline" @click="goBack"><ArrowLeft /> Back</Button>
+        <div class="flex items-center gap-2">
           <!-- Edit button (permission-gated) -->
-          <Button v-if="can('todos:update')" type="primary" @click="handleEdit">
-            <template #icon>
-              <EditOutlined />
-            </template>
-            Edit
-          </Button>
+          <Button v-if="can('todos:update')" @click="handleEdit"><Pencil /> Edit</Button>
           <!-- Delete button (permission-gated) -->
-          <Popconfirm
+          <ConfirmDialog
             v-if="can('todos:delete')"
             title="Delete this todo?"
-            ok-text="Yes"
-            cancel-text="No"
+            confirm-label="Yes"
+            destructive
             @confirm="handleDelete"
           >
-            <Button danger>
-              <template #icon>
-                <DeleteOutlined />
-              </template>
-              Delete
-            </Button>
-          </Popconfirm>
-        </Space>
+            <Button variant="destructive"><Trash2 /> Delete</Button>
+          </ConfirmDialog>
+        </div>
       </div>
 
+      <h1 class="text-xl font-semibold tracking-tight">{{ currentTodo.title }}</h1>
+
       <!-- Todo details -->
-      <Typography.Title :level="4" style="margin-top: 24px">
-        {{ currentTodo.title }}
-      </Typography.Title>
-
-      <Descriptions bordered :column="1" style="margin-top: 16px">
-        <Descriptions.Item label="Status">
-          <Tag v-if="currentTodo.is_completed" color="success">Completed</Tag>
-          <Tag v-else color="default">Pending</Tag>
-        </Descriptions.Item>
-
-        <Descriptions.Item label="Description">
-          {{ currentTodo.description || "No description" }}
-        </Descriptions.Item>
-
-        <Descriptions.Item label="Created At">
-          {{ formatDate(currentTodo.created_at) }}
-        </Descriptions.Item>
-
-        <Descriptions.Item label="Updated At">
-          {{ formatDate(currentTodo.updated_at) }}
-        </Descriptions.Item>
-
-        <Descriptions.Item label="ID">
-          <Typography.Text code>{{ currentTodo.id }}</Typography.Text>
-        </Descriptions.Item>
-      </Descriptions>
+      <div class="rounded-md border">
+        <Table>
+          <TableBody>
+            <TableRow>
+              <TableHead class="w-[160px] bg-muted/50">Status</TableHead>
+              <TableCell>
+                <Badge :variant="currentTodo.is_completed ? 'success' : 'secondary'">
+                  {{ currentTodo.is_completed ? "Completed" : "Pending" }}
+                </Badge>
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableHead class="bg-muted/50">Description</TableHead>
+              <TableCell>{{ currentTodo.description || "No description" }}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableHead class="bg-muted/50">Created At</TableHead>
+              <TableCell>{{ formatDate(currentTodo.created_at) }}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableHead class="bg-muted/50">Updated At</TableHead>
+              <TableCell>{{ formatDate(currentTodo.updated_at) }}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableHead class="bg-muted/50">ID</TableHead>
+              <TableCell>
+                <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">{{
+                  currentTodo.id
+                }}</code>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
     </template>
 
     <!-- Edit Modal -->
     <TodoFormModal
-      :visible="isModalVisible"
+      :open="isModalVisible"
       :todo="editingTodo"
       :loading="loading"
       @submit="handleSubmit"
@@ -188,22 +190,3 @@ function formatDate(dateString: string): string {
     />
   </div>
 </template>
-
-<style scoped>
-.todo-detail {
-  width: 100%;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.loading-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 200px;
-}
-</style>

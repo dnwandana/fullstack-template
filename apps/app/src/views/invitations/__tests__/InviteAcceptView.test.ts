@@ -10,10 +10,7 @@ vi.mock("@/utils/http", () => ({
   request: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn(), send: vi.fn() },
 }))
 
-vi.mock("ant-design-vue", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("ant-design-vue")>()
-  return { ...actual, message: { success: vi.fn(), error: vi.fn() } }
-})
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 /** The slice of the route this view reads. Every key is optional because the
  *  no-token case arrives with nothing but an id. */
@@ -65,20 +62,6 @@ const preview = (overrides: Parameters<typeof makeInvitationPreview>[0] = {}) =>
   })
 
 describe("InviteAcceptView", () => {
-  // jsdom does not implement matchMedia; Ant Design Vue's grid subscribes to it on mount.
-  beforeAll(() => {
-    window.matchMedia = (query) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-    })
-  })
-
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
@@ -119,6 +102,16 @@ describe("InviteAcceptView", () => {
     expect(wrapper.text()).not.toContain("no longer valid")
     // No credential to send, so no point asking the API.
     expect(request.get).not.toHaveBeenCalled()
+  })
+
+  it("renders a lucide icon for the no-token state", async () => {
+    currentRoute.query = {}
+    currentRoute.fullPath = "/invite/inv-1"
+
+    const wrapper = mount(InviteAcceptView, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+
+    expect(wrapper.find("svg.lucide-link-2-off").exists()).toBe(true)
   })
 
   it("shows an expired state for an expired invitation", async () => {

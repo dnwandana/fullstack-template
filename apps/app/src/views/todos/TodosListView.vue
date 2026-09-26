@@ -1,25 +1,23 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from "vue"
+import { computed, onMounted, ref } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import {
-  Table,
-  Button,
-  Space,
-  Tag,
-  Typography,
-  Popconfirm,
-  Select,
-  Empty,
-  Skeleton,
-  Input,
-} from "ant-design-vue"
-import type { ColumnsType } from "ant-design-vue/es/table"
-import { PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons-vue"
-import type { Todo, Wire } from "@fullstack/contracts"
+import { Plus, Trash2, Pencil, Eye, Search } from "@lucide/vue"
 import { useTodos } from "@/composables/useTodos"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 import TodoFormModal from "@/components/TodoFormModal.vue"
+import PageHeader from "@/components/PageHeader.vue"
+import ConfirmDialog from "@/components/ConfirmDialog.vue"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Spinner } from "@/components/ui/spinner"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 const route = useRoute()
 const router = useRouter()
@@ -57,64 +55,37 @@ const {
 const { can, loadPermissions } = usePermissions()
 const authStore = useAuthStore()
 
-// Table columns
-const columns: ColumnsType<Wire<Todo>> = [
-  {
-    title: "Title",
-    dataIndex: "title",
-    key: "title",
-    ellipsis: true,
-  },
-  {
-    title: "Description",
-    dataIndex: "description",
-    key: "description",
-    ellipsis: true,
-    // Show dash when description is empty
-    customRender: ({ text }) => {
-      if (text) return text
-      return "-"
-    },
-  },
-  {
-    title: "Status",
-    dataIndex: "is_completed",
-    key: "is_completed",
-    width: 120,
-    // Render a colored tag based on completion status
-    customRender: ({ record }) => {
-      if (record.is_completed) {
-        return h(Tag, { color: "success" }, () => "Completed")
-      }
-      return h(Tag, { color: "default" }, () => "Pending")
-    },
-  },
-  {
-    title: "Updated",
-    dataIndex: "updated_at",
-    key: "updated_at",
-    width: 180,
-    customRender: ({ text }) => new Date(text).toLocaleString(),
-  },
-  {
-    title: "Actions",
-    key: "actions",
-    width: 150,
-    fixed: "right",
-  },
-]
+const allSelected = computed(
+  () => todos.value.length > 0 && todos.value.every((t) => selectedIds.value.includes(t.id)),
+)
 
-// Row selection config
-// This was a plain object holding the `selectedIds` computed itself, which
-// AntD's `TableRowSelection` declares as `Key[]`. A plain object is not ref-unwrapped by the
-// template, so AntD received the ref and only worked by accident — `useMergedState` calls
-// `ref(initValue)`, which passes an existing ref straight through. Wrapping the object in a
-// `computed` hands AntD the plain `string[]` it documents while keeping the same reactivity.
-// Pinned by `TodosListView.test.ts`.
-const rowSelection = computed(() => ({
-  selectedRowKeys: selectedIds.value,
-  onChange: handleSelectionChange,
-}))
+function toggleAll(checked: boolean): void {
+  handleSelectionChange(checked ? todos.value.map((t) => t.id) : [])
+}
+
+function toggleOne(id: string, checked: boolean): void {
+  const kept = selectedIds.value.filter((selected) => selected !== id)
+  handleSelectionChange(checked ? [...kept, id] : kept)
+}
+
+const PAGE_SIZES = [10, 20, 50]
+
+const rangeText = computed(() => {
+  const { current_page, items_per_page, total_items } = pagination.value
+  const first = total_items === 0 ? 0 : (current_page - 1) * items_per_page + 1
+  const last = Math.min(current_page * items_per_page, total_items)
+  return `${first}-${last} of ${total_items}`
+})
+
+function onPageSizeChange(value: unknown): void {
+  handlePageChange(1, Number(value))
+}
+
+function onPageChange(page: number): void {
+  if (page !== pagination.value.current_page) handlePageChange(page, pagination.value.items_per_page)
+}
+
+defineExpose({ toggleAll, toggleOne, allSelected, onPageSizeChange })
 
 // Sort options
 const sortByOptions = [
@@ -133,10 +104,6 @@ function viewTodo(id: string): void {
 }
 
 // Handle edit
-// TODO(ts-migration): the template used to pass the `#bodyCell` slot's `record` straight to
-// `openEditModal`. AntD hard-types that slot prop as `Record<string, any>` — it is not generic over
-// the table's row type — so the row arrives untyped at the slot boundary. Looking the row up in
-// `todos`, which is the table's own `data-source`, recovers the same object without an assertion.
 function editTodo(id: string): void {
   const todo = todos.value.find((candidate) => candidate.id === id)
   if (todo) {
@@ -193,154 +160,109 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="todos-list">
-    <!-- Header -->
-    <div class="header">
-      <Typography.Title :level="4" style="margin: 0"> Todos </Typography.Title>
+  <div class="space-y-6">
+    <PageHeader title="Todos">
+      <InputGroup class="w-[250px]">
+        <InputGroupAddon><Search class="size-4" /></InputGroupAddon>
+        <InputGroupInput v-model="searchValue" placeholder="Search todos..." @keydown.enter="onSearch(searchValue)" />
+      </InputGroup>
+      <Select :model-value="sortBy" @update:model-value="(v) => onSortByChange(String(v))">
+        <SelectTrigger class="w-[140px]"><SelectValue placeholder="Sort by" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem v-for="o in sortByOptions" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
+        </SelectContent>
+      </Select>
+      <Select :model-value="sortOrder" @update:model-value="(v) => onSortOrderChange(String(v))">
+        <SelectTrigger class="w-[130px]"><SelectValue placeholder="Order" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem v-for="o in sortOrderOptions" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>
+        </SelectContent>
+      </Select>
+      <ConfirmDialog
+        v-if="hasSelected && can('todos:delete')"
+        :title="`Delete ${selectedCount} selected todo(s)?`"
+        confirm-label="Yes"
+        destructive
+        :loading="loading"
+        @confirm="handleBulkDelete"
+      >
+        <Button variant="destructive"><Trash2 /> Delete Selected ({{ selectedCount }})</Button>
+      </ConfirmDialog>
+      <Button v-if="can('todos:create')" @click="openCreateModal"><Plus /> Create Todo</Button>
+    </PageHeader>
 
-      <Space>
-        <!-- Search -->
-        <Input.Search
-          v-model:value="searchValue"
-          placeholder="Search todos..."
-          allow-clear
-          style="width: 250px"
-          @search="onSearch"
-        />
-
-        <!-- Sort controls -->
-        <Select
-          :value="sortBy"
-          :options="sortByOptions"
-          style="width: 140px"
-          placeholder="Sort by"
-          @change="(value) => onSortByChange(String(value))"
-        />
-        <Select
-          :value="sortOrder"
-          :options="sortOrderOptions"
-          style="width: 130px"
-          placeholder="Order"
-          @change="(value) => onSortOrderChange(String(value))"
-        />
-
-        <!-- Bulk delete (only visible when items are selected and user has delete permission) -->
-        <Popconfirm
-          v-if="hasSelected && can('todos:delete')"
-          :title="`Delete ${selectedCount} selected todo(s)?`"
-          ok-text="Yes"
-          cancel-text="No"
-          @confirm="handleBulkDelete"
-        >
-          <Button danger :loading="loading">
-            <template #icon>
-              <DeleteOutlined />
-            </template>
-            Delete Selected ({{ selectedCount }})
-          </Button>
-        </Popconfirm>
-
-        <!-- Create button (permission-gated) -->
-        <Button v-if="can('todos:create')" type="primary" @click="openCreateModal">
-          <template #icon>
-            <PlusOutlined />
-          </template>
-          Create Todo
-        </Button>
-      </Space>
+    <div v-if="loading && todos.length === 0" class="space-y-2">
+      <Skeleton v-for="n in 5" :key="n" class="h-10" />
     </div>
 
-    <!-- Loading skeleton -->
-    <Skeleton v-if="loading && todos.length === 0" active :paragraph="{ rows: 5 }" />
-
-    <!-- Empty state -->
-    <Empty
-      v-else-if="!loading && todos.length === 0"
-      :description="searchQuery ? 'No todos match your search' : 'No todos yet'"
-    >
-      <Button v-if="!searchQuery && can('todos:create')" type="primary" @click="openCreateModal">
-        Create your first todo
-      </Button>
-      <Button v-else-if="searchQuery" type="default" @click="clearSearch"> Clear search </Button>
+    <Empty v-else-if="!loading && todos.length === 0">
+      <EmptyHeader>
+        <EmptyTitle>{{ searchQuery ? "No todos match your search" : "No todos yet" }}</EmptyTitle>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button v-if="!searchQuery && can('todos:create')" @click="openCreateModal">Create your first todo</Button>
+        <Button v-else-if="searchQuery" variant="outline" @click="clearSearch">Clear search</Button>
+      </EmptyContent>
     </Empty>
 
-    <!-- Table -->
-    <Table
-      v-else
-      :columns="columns"
-      :data-source="todos"
-      :row-key="(record) => record.id"
-      :row-selection="rowSelection"
-      :loading="loading"
-      :pagination="{
-        current: pagination.current_page,
-        pageSize: pagination.items_per_page,
-        total: pagination.total_items,
-        showSizeChanger: true,
-        showTotal: (total) => `Total ${total} items`,
-        onChange: handlePageChange,
-      }"
-    >
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'actions'">
-          <Space>
-            <Button type="text" size="small" @click="viewTodo(record.id)">
-              <template #icon>
-                <EyeOutlined />
-              </template>
-            </Button>
-            <!-- Edit button (permission-gated) -->
-            <Button
-              v-if="can('todos:update')"
-              type="text"
-              size="small"
-              @click="editTodo(record.id)"
-            >
-              <template #icon>
-                <EditOutlined />
-              </template>
-            </Button>
-            <!-- Delete button (permission-gated) -->
-            <Popconfirm
-              v-if="can('todos:delete')"
-              title="Delete this todo?"
-              ok-text="Yes"
-              cancel-text="No"
-              @confirm="handleDelete(record.id)"
-            >
-              <Button type="text" size="small" danger>
-                <template #icon>
-                  <DeleteOutlined />
-                </template>
-              </Button>
-            </Popconfirm>
-          </Space>
-        </template>
-      </template>
-    </Table>
+    <template v-else>
+      <div class="relative rounded-md border">
+        <Spinner v-if="loading" class="absolute top-2 right-2" />
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead class="w-10"><Checkbox :model-value="allSelected" aria-label="Select all" @update:model-value="(v) => toggleAll(v === true)" /></TableHead>
+              <TableHead>Title</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead class="w-[120px]">Status</TableHead>
+              <TableHead class="w-[180px]">Updated</TableHead>
+              <TableHead class="w-[150px]">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="todo in todos" :key="todo.id" :data-state="selectedIds.includes(todo.id) ? 'selected' : undefined">
+              <TableCell><Checkbox :model-value="selectedIds.includes(todo.id)" :aria-label="`Select ${todo.title}`" @update:model-value="(v) => toggleOne(todo.id, v === true)" /></TableCell>
+              <TableCell class="max-w-[280px] truncate">{{ todo.title }}</TableCell>
+              <TableCell class="max-w-[320px] truncate">{{ todo.description || "-" }}</TableCell>
+              <TableCell><Badge :variant="todo.is_completed ? 'success' : 'secondary'">{{ todo.is_completed ? "Completed" : "Pending" }}</Badge></TableCell>
+              <TableCell>{{ new Date(todo.updated_at).toLocaleString() }}</TableCell>
+              <TableCell>
+                <div class="flex items-center gap-1">
+                  <Button variant="ghost" size="icon-sm" aria-label="View" @click="viewTodo(todo.id)"><Eye /></Button>
+                  <Button v-if="can('todos:update')" variant="ghost" size="icon-sm" aria-label="Edit" @click="editTodo(todo.id)"><Pencil /></Button>
+                  <ConfirmDialog v-if="can('todos:delete')" title="Delete this todo?" confirm-label="Yes" destructive @confirm="handleDelete(todo.id)">
+                    <Button variant="ghost" size="icon-sm" class="text-destructive" aria-label="Delete"><Trash2 /></Button>
+                  </ConfirmDialog>
+                </div>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
 
-    <!-- Todo Form Modal -->
-    <TodoFormModal
-      :visible="isModalVisible"
-      :todo="editingTodo"
-      :loading="loading"
-      @submit="handleSubmit"
-      @cancel="closeModal"
-    />
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <span class="text-sm text-muted-foreground">{{ rangeText }}</span>
+        <div class="flex items-center gap-2">
+          <Select :model-value="String(pagination.items_per_page)" @update:model-value="onPageSizeChange">
+            <SelectTrigger class="h-8 w-[90px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="size in PAGE_SIZES" :key="size" :value="String(size)">{{ size }} / page</SelectItem>
+            </SelectContent>
+          </Select>
+          <Pagination :page="pagination.current_page" :total="pagination.total_items" :items-per-page="pagination.items_per_page" :sibling-count="1" show-edges @update:page="onPageChange">
+            <PaginationContent v-slot="{ items }">
+              <PaginationPrevious />
+              <template v-for="(item, index) in items" :key="index">
+                <PaginationItem v-if="item.type === 'page'" :value="item.value" :is-active="item.value === pagination.current_page">{{ item.value }}</PaginationItem>
+                <PaginationEllipsis v-else :index="index" />
+              </template>
+              <PaginationNext />
+            </PaginationContent>
+          </Pagination>
+        </div>
+      </div>
+    </template>
+
+    <TodoFormModal :open="isModalVisible" :todo="editingTodo" :loading="loading" @submit="handleSubmit" @cancel="closeModal" />
   </div>
 </template>
-
-<style scoped>
-.todos-list {
-  width: 100%;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-</style>

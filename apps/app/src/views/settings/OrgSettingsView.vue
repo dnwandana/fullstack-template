@@ -6,15 +6,24 @@
  * `OrgMembersView`, `OrgRolesView`, and `OrgInvitationsView`.
  */
 
-import { reactive, ref, watch, onMounted } from "vue"
+import { ref, watch, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { Form, Input, Button, Space, Popconfirm, Typography } from "ant-design-vue"
+import { useForm } from "vee-validate"
+import { toTypedSchema } from "@vee-validate/zod"
 
 import { useOrgs } from "@/composables/useOrgs"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 // Import orgs store directly for the updateOrg action (not exposed via composable)
 import { useOrgsStore } from "@/stores/orgs"
+import { settingsFormSchema } from "@/schemas/org"
+import ConfirmDialog from "@/components/ConfirmDialog.vue"
+import PageHeader from "@/components/PageHeader.vue"
+import { Button } from "@/components/ui/button"
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
+import { Textarea } from "@/components/ui/textarea"
 
 const route = useRoute()
 const router = useRouter()
@@ -27,49 +36,35 @@ const orgId = String(route.params.orgId)
 const { currentOrg, fetchOrgById, deleteOrg } = useOrgs()
 const { can, loadPermissions } = usePermissions()
 
-// ---------------------------------------------------------------------------
-// General tab — form state for editing org name and description
-// ---------------------------------------------------------------------------
-const formState = reactive({
-  name: "",
-  description: "",
-})
-
 // Local loading flag for the save button (separate from store loading)
 const saving = ref(false)
+const form = useForm({
+  validationSchema: toTypedSchema(settingsFormSchema),
+  initialValues: { name: "", description: "" },
+})
 
-/**
- * Watch currentOrg to populate the form when the org data arrives.
- * This ensures the form is pre-filled after the initial fetch completes.
- */
+// Fill the form each time the org data arrives.
 watch(
   currentOrg,
   (org) => {
-    if (org) {
-      formState.name = org.name || ""
-      formState.description = org.description || ""
-    }
+    if (org) form.resetForm({ values: { name: org.name, description: org.description ?? "" } })
   },
   { immediate: true },
 )
 
-/**
- * Save the updated org name and description.
- * Uses the orgs store directly since the composable handleSubmit
- * is designed for modal-based create/edit flows.
- */
-async function handleSave(): Promise<void> {
+// Saves through the store, because the composable handles modal flows only.
+const handleSave = form.handleSubmit(async (values) => {
   saving.value = true
   try {
-    await orgsStore.updateOrg(orgId, formState)
+    await orgsStore.updateOrg(orgId, values)
   } finally {
     saving.value = false
   }
-}
+})
 
 /**
  * Delete the organization and navigate back to the orgs list.
- * Called after user confirms via Popconfirm.
+ * Called after user confirms via ConfirmDialog.
  */
 async function handleDeleteOrg(): Promise<void> {
   await deleteOrg(orgId)
@@ -90,46 +85,37 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="org-settings">
-    <!-- Page title -->
-    <Typography.Title :level="4" style="margin-bottom: 24px"> General </Typography.Title>
-
-    <Form :model="formState" layout="vertical" style="max-width: 600px">
-      <Form.Item
-        label="Name"
-        name="name"
-        :rules="[{ required: true, message: 'Name is required' }]"
-      >
-        <Input v-model:value="formState.name" />
-      </Form.Item>
-
-      <Form.Item label="Description" name="description">
-        <Input.TextArea v-model:value="formState.description" :rows="3" />
-      </Form.Item>
-
-      <Form.Item>
-        <Space>
-          <!-- Save button — only shown if user can update the org -->
-          <Button v-if="can('org:update')" type="primary" :loading="saving" @click="handleSave">
-            Save
-          </Button>
-
-          <!-- Delete button — only shown if user can delete the org -->
-          <Popconfirm
-            v-if="can('org:delete')"
-            title="Delete this organization? This cannot be undone."
-            @confirm="handleDeleteOrg"
-          >
-            <Button danger>Delete Organization</Button>
-          </Popconfirm>
-        </Space>
-      </Form.Item>
-    </Form>
+  <div class="w-full">
+    <PageHeader title="General" />
+    <form id="org-settings-form" class="max-w-[600px] space-y-4" novalidate @submit="handleSave">
+      <FormField v-slot="{ componentField }" name="name">
+        <FormItem>
+          <FormLabel>Name</FormLabel>
+          <FormControl><Input v-bind="componentField" /></FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
+      <FormField v-slot="{ componentField }" name="description">
+        <FormItem>
+          <FormLabel>Description</FormLabel>
+          <FormControl><Textarea v-bind="componentField" rows="3" /></FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
+      <div class="flex items-center gap-2">
+        <Button v-if="can('org:update')" type="submit" :disabled="saving">
+          <Spinner v-if="saving" /> Save
+        </Button>
+        <ConfirmDialog
+          v-if="can('org:delete')"
+          title="Delete this organization? This cannot be undone."
+          confirm-label="Delete"
+          destructive
+          @confirm="handleDeleteOrg"
+        >
+          <Button type="button" variant="destructive">Delete Organization</Button>
+        </ConfirmDialog>
+      </div>
+    </form>
   </div>
 </template>
-
-<style scoped>
-.org-settings {
-  width: 100%;
-}
-</style>

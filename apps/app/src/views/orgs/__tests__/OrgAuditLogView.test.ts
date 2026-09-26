@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import type { Pinia } from "pinia"
+import { parseDate } from "@internationalized/date"
 import { ok, okPaginated, makeAuditLog, makeOrgMember, makeProject } from "@/test/fixtures"
 import { request } from "@/utils/http"
 import type { HttpResult } from "@/utils/http"
@@ -51,16 +52,6 @@ function mountView(pinia: Pinia) {
 }
 
 describe("OrgAuditLogView", () => {
-  beforeEach(() => {
-    window.matchMedia = vi.fn().mockReturnValue({
-      matches: false,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })
-  })
-
   it("fetches and renders audit logs on mount", async () => {
     stubGet(okPaginated([makeAuditLog()]))
     const wrapper = mountView(createPinia())
@@ -108,7 +99,7 @@ describe("OrgAuditLogView", () => {
     await flushPromises()
     vi.mocked(request.get).mockClear()
 
-    // The search input renders a button of its own, so select by label.
+    // Select the button by its label.
     const clearButton = wrapper.findAll("button").find((b) => b.text().includes("Clear filters"))
     expect(clearButton).toBeDefined()
     await clearButton?.trigger("click")
@@ -121,5 +112,39 @@ describe("OrgAuditLogView", () => {
       expect.objectContaining({ page: 1 }),
     )
     expect(wrapper.text()).toContain("No audit entries yet")
+  })
+
+  it("writes the date range to the store as ISO dates and refetches", async () => {
+    stubGet(okPaginated([]))
+    const pinia = createPinia()
+    const wrapper = mountView(pinia)
+    await flushPromises()
+    const store = useAuditLogsStore(pinia)
+    vi.mocked(request.get).mockClear()
+    await wrapper.vm.onDateRangeChange({
+      start: parseDate("2026-01-01"),
+      end: parseDate("2026-01-31"),
+    })
+    await flushPromises()
+    expect(store.dateFrom).toBe("2026-01-01")
+    expect(store.dateTo).toBe("2026-01-31")
+    expect(request.get).toHaveBeenCalledWith(
+      "/orgs/org-1/audit-logs",
+      expect.objectContaining({ page: 1 }),
+    )
+  })
+
+  it("does not refetch while the range has a start date and no end date", async () => {
+    stubGet(okPaginated([]))
+    const pinia = createPinia()
+    const wrapper = mountView(pinia)
+    await flushPromises()
+    const store = useAuditLogsStore(pinia)
+    vi.mocked(request.get).mockClear()
+    await wrapper.vm.onDateRangeChange({ start: parseDate("2026-01-01"), end: undefined })
+    await flushPromises()
+    expect(store.dateFrom).toBe("2026-01-01")
+    expect(store.dateTo).toBeUndefined()
+    expect(request.get).not.toHaveBeenCalled()
   })
 })

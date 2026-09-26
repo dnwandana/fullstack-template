@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, beforeAll, vi } from "vitest"
-import { mount } from "@vue/test-utils"
+import { describe, it, expect, beforeEach, vi } from "vitest"
+import { flushPromises, mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 import { ok, makeTodo } from "@/test/fixtures"
 
@@ -7,9 +7,10 @@ vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
   request: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn(), send: vi.fn() },
 }))
+const { push } = vi.hoisted(() => ({ push: vi.fn() }))
 vi.mock("vue-router", () => ({
   useRoute: () => ({ params: { orgId: "o1", projectId: "p1", id: "t1" }, query: {} }),
-  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
+  useRouter: () => ({ push, back: vi.fn() }),
 }))
 
 // `stores/tenant` imports the router singleton at module load, so the real
@@ -22,40 +23,33 @@ const { currentRoute } = await vi.hoisted(async () => {
 })
 vi.mock("@/router", () => ({ default: { currentRoute } }))
 
-vi.mock("ant-design-vue", async (importOriginal) => ({
-  ...(await importOriginal()),
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import { request } from "@/utils/http"
 import TodoDetailView from "../TodoDetailView.vue"
 
 describe("TodoDetailView", () => {
-  // jsdom does not implement matchMedia; Ant Design Vue's grid subscribes to it on mount.
-  beforeAll(() => {
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-    }))
-  })
-
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.mocked(request.get).mockResolvedValue(ok(makeTodo({ id: "t1", title: "Write the spec" })))
   })
 
-  it("renders the detail grid one column per row", async () => {
+  it("renders one table row per field", async () => {
     const wrapper = mount(TodoDetailView, { global: { plugins: [createPinia()] } })
     await vi.waitFor(() => expect(wrapper.text()).toContain("Write the spec"))
+    expect(wrapper.findAll("tbody tr")).toHaveLength(5)
+    expect(wrapper.find("code").text()).toBe("t1")
+  })
 
-    // AntD renders one <tr> per row of the grid. Five items at one column each
-    // means five rows; the default of three would give two.
-    expect(wrapper.findAll(".ant-descriptions-row")).toHaveLength(5)
+  it("shows the not-found state when the fetch fails", async () => {
+    vi.mocked(request.get).mockRejectedValue(new Error("404"))
+    const wrapper = mount(TodoDetailView, { global: { plugins: [createPinia()] } })
+    // The view renders the not-found state before the fetch starts. Wait for the fetch to end.
+    await vi.waitFor(() => expect(request.get).toHaveBeenCalled())
+    await flushPromises()
+    expect(wrapper.text()).toContain("Todo not found")
+    const back = wrapper.findAll("button").find((b) => b.text() === "Back to Todos")
+    await back?.trigger("click")
+    expect(push).toHaveBeenCalledWith("/orgs/o1/projects/p1")
   })
 })

@@ -8,13 +8,13 @@
 
 import { computed, onMounted } from "vue"
 import { useRoute } from "vue-router"
-import { Typography } from "ant-design-vue"
 
 import { useMembers } from "@/composables/useMembers"
 import { useRoles } from "@/composables/useRoles"
 import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 import MembersTable from "@/components/MembersTable.vue"
+import PageHeader from "@/components/PageHeader.vue"
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -49,9 +49,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="project-members">
-    <Typography.Title :level="4" style="margin-bottom: 24px">Members</Typography.Title>
-
+  <div class="space-y-6">
+    <PageHeader title="Members" />
     <MembersTable
       :members="projectMembers"
       :roles="roles"
@@ -63,9 +62,3 @@ onMounted(() => {
     />
   </div>
 </template>
-
-<style scoped>
-.project-members {
-  width: 100%;
-}
-</style>

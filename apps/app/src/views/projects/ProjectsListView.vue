@@ -14,8 +14,12 @@
 
 import { onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { Row, Col, Card, Button, Typography, Empty, Skeleton } from "ant-design-vue"
-import { PlusOutlined } from "@ant-design/icons-vue"
+import { Plus } from "@lucide/vue"
+import { Button } from "@/components/ui/button"
+import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { Skeleton } from "@/components/ui/skeleton"
+import PageHeader from "@/components/PageHeader.vue"
 import { useOrgs } from "@/composables/useOrgs"
 import { useProjects } from "@/composables/useProjects"
 import { usePermissions } from "@/composables/usePermissions"
@@ -72,51 +76,45 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="projects-list">
-    <!-- Header row with org title and action buttons -->
-    <div class="header">
-      <Typography.Title :level="4" style="margin: 0">
-        <template v-if="currentOrg">{{ currentOrg.name }}</template>
-        <template v-else>Organization</template>
-      </Typography.Title>
-
-      <Button v-if="can('project:create')" type="primary" @click="openCreateModal">
-        <template #icon>
-          <PlusOutlined />
-        </template>
-        Create Project
+  <div class="space-y-6">
+    <PageHeader :title="currentOrg?.name ?? 'Organization'">
+      <Button v-if="can('project:create')" @click="openCreateModal()">
+        <Plus /> Create Project
       </Button>
+    </PageHeader>
+
+    <!-- Skeleton cards show while the first fetch runs and no projects are cached. -->
+    <div
+      v-if="loading && projects.length === 0"
+      class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+    >
+      <Skeleton v-for="n in 4" :key="n" class="h-36" />
     </div>
 
-    <!-- Loading skeleton shown while fetching and no projects are cached yet -->
-    <Skeleton v-if="loading && projects.length === 0" active :paragraph="{ rows: 3 }" />
-
-    <!-- Empty state when loading is complete but there are no projects -->
-    <Empty v-else-if="!loading && projects.length === 0" description="No projects yet">
-      <Button v-if="can('project:create')" type="primary" @click="openCreateModal">
-        Create your first project
-      </Button>
+    <Empty v-else-if="projects.length === 0">
+      <EmptyHeader>
+        <EmptyTitle>No projects yet</EmptyTitle>
+      </EmptyHeader>
+      <EmptyContent v-if="can('project:create')">
+        <Button @click="openCreateModal()">Create your first project</Button>
+      </EmptyContent>
     </Empty>
 
-    <!-- Responsive card grid showing all projects -->
-    <Row v-else :gutter="[16, 16]">
-      <Col v-for="project in projects" :key="project.id" :xs="24" :sm="12" :md="8" :lg="6">
-        <Card class="project-card" :title="project.name" hoverable>
-          <!-- Card body: description or fallback text -->
-          <p v-if="project.description">{{ project.description }}</p>
-          <p v-else class="no-description">No description</p>
+    <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      <Card v-for="project in projects" :key="project.id" class="flex flex-col">
+        <CardHeader>
+          <CardTitle class="truncate">{{ project.name }}</CardTitle>
+          <CardDescription v-if="project.description">{{ project.description }}</CardDescription>
+          <CardDescription v-else class="italic">No description</CardDescription>
+        </CardHeader>
+        <CardFooter class="mt-auto">
+          <Button variant="link" class="px-0" @click="viewTodos(project.id)">View Todos</Button>
+        </CardFooter>
+      </Card>
+    </div>
 
-          <!-- Card footer action -->
-          <template #actions>
-            <Button type="link" @click="viewTodos(project.id)">View Todos</Button>
-          </template>
-        </Card>
-      </Col>
-    </Row>
-
-    <!-- Create / Edit project modal -->
     <ProjectFormModal
-      :visible="isModalVisible"
+      :open="isModalVisible"
       :project="editingProject"
       :loading="loading"
       @submit="onSubmit"
@@ -124,27 +122,3 @@ onMounted(async () => {
     />
   </div>
 </template>
-
-<style scoped>
-.projects-list {
-  width: 100%;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
-
-.project-card {
-  height: 100%;
-}
-
-.no-description {
-  color: rgba(0, 0, 0, 0.45);
-  font-style: italic;
-}
-</style>

@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
-import { createPinia } from "pinia"
+import { createPinia, setActivePinia } from "pinia"
 import { ok, okPaginated, makeOrgMember, makePermission, makeRole } from "@/test/fixtures"
 import { request } from "@/utils/http"
+import { useAuthStore } from "@/stores/auth"
 
 vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
@@ -24,10 +25,7 @@ const { currentRoute } = await vi.hoisted(async () => {
 })
 vi.mock("@/router", () => ({ default: { currentRoute } }))
 
-vi.mock("ant-design-vue", async (importOriginal) => ({
-  ...(await importOriginal()),
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import OrgRolesView from "../OrgRolesView.vue"
 
@@ -45,14 +43,12 @@ const ROLES = [
 ]
 
 describe("OrgRolesView", () => {
+  let pinia: ReturnType<typeof createPinia>
+
   beforeEach(() => {
-    window.matchMedia = vi.fn().mockReturnValue({
-      matches: false,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })
+    pinia = createPinia()
+    setActivePinia(pinia)
+    useAuthStore().user = { id: "u1", name: "Ada", email: "ada@example.com" }
     vi.mocked(request.get)
       .mockReset()
       .mockImplementation((url: string) => {
@@ -61,23 +57,41 @@ describe("OrgRolesView", () => {
         if (url.endsWith("/members"))
           return Promise.resolve(okPaginated([makeOrgMember({ user_id: "u1", role_id: "r1" })]))
         if (url.includes("/roles/"))
-          return Promise.resolve(ok(makeRole({ id: "r1", is_system: true, permissions: [] })))
+          return Promise.resolve(ok(
+            makeRole({
+              id: "r1",
+              is_system: true,
+              permissions: [makePermission({ name: "org:manage_roles" })],
+            }),
+          ))
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })
   })
 
   it("fetches roles and the permission catalog on mount", async () => {
-    mount(OrgRolesView, { global: { plugins: [createPinia()] } })
+    mount(OrgRolesView, { global: { plugins: [pinia] } })
     await vi.waitFor(() => {
       expect(request.get).toHaveBeenCalledWith("/orgs/o1/roles")
       expect(request.get).toHaveBeenCalledWith("/permissions")
     })
   })
 
-  it("tags system roles and custom roles differently", async () => {
-    const wrapper = mount(OrgRolesView, { global: { plugins: [createPinia()] } })
+  it("badges system roles and custom roles differently", async () => {
+    const wrapper = mount(OrgRolesView, { global: { plugins: [pinia] } })
     await vi.waitFor(() => expect(wrapper.text()).toContain("auditor"))
-    expect(wrapper.text()).toContain("System")
-    expect(wrapper.text()).toContain("Custom")
+    const badges = wrapper.findAll("div.rounded-full")
+    expect(badges.map((b) => b.text())).toEqual(["System", "Custom"])
+    expect(badges[0]?.classes()).toContain("bg-info")
+    expect(badges[1]?.classes()).toContain("bg-secondary")
+  })
+
+  it("offers Edit and Delete only for custom roles when the user may manage roles", async () => {
+    const wrapper = mount(OrgRolesView, { global: { plugins: [pinia] } })
+    await vi.waitFor(() => expect(wrapper.text()).toContain("auditor"))
+    await vi.waitFor(() => {
+      const labels = wrapper.findAll("button").map((b) => b.text())
+      expect(labels.filter((l) => l === "Edit")).toHaveLength(1)
+      expect(labels.filter((l) => l === "Delete")).toHaveLength(1)
+    })
   })
 })

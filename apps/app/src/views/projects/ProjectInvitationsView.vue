@@ -9,8 +9,7 @@
 
 import { computed, onMounted } from "vue"
 import { useRoute } from "vue-router"
-import { Button, Typography } from "ant-design-vue"
-import { PlusOutlined } from "@ant-design/icons-vue"
+import { Plus } from "@lucide/vue"
 
 import { useInvitations } from "@/composables/useInvitations"
 import { useRoles } from "@/composables/useRoles"
@@ -18,6 +17,8 @@ import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 import InviteFormModal from "@/components/InviteFormModal.vue"
 import InvitationsTable from "@/components/InvitationsTable.vue"
+import PageHeader from "@/components/PageHeader.vue"
+import { Button } from "@/components/ui/button"
 import type { InviteInput } from "@/api/invitations"
 
 const route = useRoute()
@@ -61,26 +62,21 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="project-invitations">
-    <Typography.Title :level="4" style="margin-bottom: 24px">Invitations</Typography.Title>
-
-    <!-- Invite member button — gated by permission -->
-    <div style="margin-bottom: 16px">
-      <Button v-if="can('invitations:create')" type="primary" @click="openInviteModal()">
-        <template #icon><PlusOutlined /></template>
-        Invite Member
+  <div class="space-y-6">
+    <PageHeader title="Invitations">
+      <!-- Invite member button — gated by permission -->
+      <Button v-if="can('invitations:create')" @click="openInviteModal()">
+        <Plus /> Invite Member
       </Button>
-    </div>
-
+    </PageHeader>
     <InvitationsTable
       :invitations="orgInvitations"
       :loading="invitationsLoading"
       :can-revoke="can('invitations:manage')"
       @revoke="onRevoke"
     />
-
     <InviteFormModal
-      :visible="isInviteModalVisible"
+      :open="isInviteModalVisible"
       :roles="roles"
       :loading="invitationsLoading"
       @submit="onInviteSubmit"
@@ -88,9 +84,3 @@ onMounted(() => {
     />
   </div>
 </template>
-
-<style scoped>
-.project-invitations {
-  width: 100%;
-}
-</style>

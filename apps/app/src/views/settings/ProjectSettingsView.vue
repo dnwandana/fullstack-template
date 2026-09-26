@@ -13,9 +13,10 @@
  * `can()` helper from usePermissions.
  */
 
-import { reactive, ref, watch, onMounted } from "vue"
+import { ref, watch, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { Form, Input, Button, Space, Popconfirm, Typography } from "ant-design-vue"
+import { useForm } from "vee-validate"
+import { toTypedSchema } from "@vee-validate/zod"
 
 import { useOrgs } from "@/composables/useOrgs"
 import { useProjects } from "@/composables/useProjects"
@@ -23,6 +24,14 @@ import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 // Import projects store directly for the updateProject action (not exposed via composable)
 import { useProjectsStore } from "@/stores/projects"
+import { settingsFormSchema } from "@/schemas/org"
+import ConfirmDialog from "@/components/ConfirmDialog.vue"
+import PageHeader from "@/components/PageHeader.vue"
+import { Button } from "@/components/ui/button"
+import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
+import { Textarea } from "@/components/ui/textarea"
 
 const route = useRoute()
 const router = useRouter()
@@ -44,49 +53,36 @@ const { can, loadPermissions } = usePermissions()
 const { fetchOrgById } = orgsComposable
 const { currentProject, fetchProjectById, deleteProject } = projectsComposable
 
-// ---------------------------------------------------------------------------
-// General — form state for editing project name and description
-// ---------------------------------------------------------------------------
-const formState = reactive({
-  name: "",
-  description: "",
-})
-
 // Local loading flag for the save button (separate from store loading)
 const saving = ref(false)
+const form = useForm({
+  validationSchema: toTypedSchema(settingsFormSchema),
+  initialValues: { name: "", description: "" },
+})
 
-/**
- * Watch currentProject to populate the form when the project data arrives.
- * This ensures the form is pre-filled after the initial fetch completes.
- */
+// Fill the form each time the project data arrives.
 watch(
   currentProject,
   (project) => {
-    if (project) {
-      formState.name = project.name || ""
-      formState.description = project.description || ""
-    }
+    if (!project) return
+    form.resetForm({ values: { name: project.name, description: project.description ?? "" } })
   },
   { immediate: true },
 )
 
-/**
- * Save the updated project name and description.
- * Uses the projects store directly since the composable handleSubmit
- * is designed for modal-based create/edit flows.
- */
-async function handleSave(): Promise<void> {
+// Saves through the store, because the composable handles modal flows only.
+const handleSave = form.handleSubmit(async (values) => {
   saving.value = true
   try {
-    await projectsStore.updateProject(orgId, projectId, formState)
+    await projectsStore.updateProject(orgId, projectId, values)
   } finally {
     saving.value = false
   }
-}
+})
 
 /**
  * Delete the project and navigate back to the org's projects list.
- * Called after user confirms via Popconfirm.
+ * Called after user confirms via ConfirmDialog.
  */
 async function handleDeleteProject(): Promise<void> {
   await deleteProject(orgId, projectId)
@@ -108,46 +104,42 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="project-settings">
-    <!-- Page title -->
-    <Typography.Title :level="4" style="margin-bottom: 24px"> General </Typography.Title>
-
-    <Form :model="formState" layout="vertical" style="max-width: 600px">
-      <Form.Item
-        label="Name"
-        name="name"
-        :rules="[{ required: true, message: 'Name is required' }]"
-      >
-        <Input v-model:value="formState.name" />
-      </Form.Item>
-
-      <Form.Item label="Description" name="description">
-        <Input.TextArea v-model:value="formState.description" :rows="3" />
-      </Form.Item>
-
-      <Form.Item>
-        <Space>
-          <!-- Save button — only shown if user can update the project -->
-          <Button v-if="can('project:update')" type="primary" :loading="saving" @click="handleSave">
-            Save
-          </Button>
-
-          <!-- Delete button — only shown if user can delete the project -->
-          <Popconfirm
-            v-if="can('project:delete')"
-            title="Delete this project? This cannot be undone."
-            @confirm="handleDeleteProject"
-          >
-            <Button danger>Delete Project</Button>
-          </Popconfirm>
-        </Space>
-      </Form.Item>
-    </Form>
+  <div class="w-full">
+    <PageHeader title="General" />
+    <form
+      id="project-settings-form"
+      class="max-w-[600px] space-y-4"
+      novalidate
+      @submit="handleSave"
+    >
+      <FormField v-slot="{ componentField }" name="name">
+        <FormItem>
+          <FormLabel>Name</FormLabel>
+          <FormControl><Input v-bind="componentField" /></FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
+      <FormField v-slot="{ componentField }" name="description">
+        <FormItem>
+          <FormLabel>Description</FormLabel>
+          <FormControl><Textarea v-bind="componentField" rows="3" /></FormControl>
+          <FormMessage />
+        </FormItem>
+      </FormField>
+      <div class="flex items-center gap-2">
+        <Button v-if="can('project:update')" type="submit" :disabled="saving">
+          <Spinner v-if="saving" /> Save
+        </Button>
+        <ConfirmDialog
+          v-if="can('project:delete')"
+          title="Delete this project? This cannot be undone."
+          confirm-label="Delete"
+          destructive
+          @confirm="handleDeleteProject"
+        >
+          <Button type="button" variant="destructive">Delete Project</Button>
+        </ConfirmDialog>
+      </div>
+    </form>
   </div>
 </template>
-
-<style scoped>
-.project-settings {
-  width: 100%;
-}
-</style>

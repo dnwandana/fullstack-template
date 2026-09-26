@@ -9,21 +9,27 @@
 
 import { computed, onMounted } from "vue"
 import { useRoute } from "vue-router"
-import {
-  Button,
-  Empty,
-  InputSearch,
-  RangePicker,
-  Select,
-  Space,
-  Typography,
-} from "ant-design-vue"
+import { CalendarIcon, Search } from "@lucide/vue"
+import { parseDate, type DateValue } from "@internationalized/date"
 
 import AuditLogTable from "@/components/AuditLogTable.vue"
 import { useAuditLogs } from "@/composables/useAuditLogs"
 import { useAuditLogsStore } from "@/stores/auditLogs"
 import { useMembersStore } from "@/stores/members"
 import { useProjectsStore } from "@/stores/projects"
+import PageHeader from "@/components/PageHeader.vue"
+import { Button } from "@/components/ui/button"
+import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { RangeCalendar } from "@/components/ui/range-calendar"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 const route = useRoute()
 const orgId = String(route.params.orgId)
@@ -85,24 +91,51 @@ const hasActiveFilters = computed(() =>
   ),
 )
 
-/**
- * RangePicker value, derived from the store so Clear filters resets the
- * control. `value-format` keeps the binding in ISO date strings — the API
- * validates `date_from`/`date_to` with `@IsISO8601`.
- */
-const dateRange = computed<[string, string] | undefined>(() =>
-  store.dateFrom && store.dateTo ? [store.dateFrom, store.dateTo] : undefined,
-)
+type DateRange = { start: DateValue | undefined; end: DateValue | undefined }
+
+/** Calendar value, derived from the store so Clear filters resets the control. */
+const dateRange = computed<DateRange>(() => ({
+  start: store.dateFrom ? parseDate(store.dateFrom) : undefined,
+  end: store.dateTo ? parseDate(store.dateTo) : undefined,
+}))
+
+/** Select items cannot hold an empty value. This sentinel stands for "no filter". */
+const ALL = "all"
 
 async function onFilterChange(): Promise<void> {
   await handleFilterChange(orgId)
 }
 
-/** The second argument holds the ISO strings; a clear yields ["", ""]. */
-async function onDateRangeChange(_value: unknown, dateStrings: [string, string]): Promise<void> {
-  store.dateFrom = dateStrings[0] || undefined
-  store.dateTo = dateStrings[1] || undefined
+/** `toString()` on a `CalendarDate` yields `YYYY-MM-DD`, which the API validates as ISO 8601. */
+async function onDateRangeChange(range: DateRange): Promise<void> {
+  store.dateFrom = range.start?.toString()
+  store.dateTo = range.end?.toString()
+  // Wait for the end date. A start date alone is not a complete filter.
+  if (range.start && !range.end) return
   await handleFilterChange(orgId)
+}
+
+function selectValue(value: string | undefined): string {
+  return value ?? ALL
+}
+
+function fromSelect(value: unknown): string | undefined {
+  return value === ALL || value === null ? undefined : String(value)
+}
+
+async function onProjectChange(value: unknown): Promise<void> {
+  store.projectId = fromSelect(value)
+  await onFilterChange()
+}
+
+async function onActorChange(value: unknown): Promise<void> {
+  store.actorId = fromSelect(value)
+  await onFilterChange()
+}
+
+async function onActionChange(value: unknown): Promise<void> {
+  store.action = fromSelect(value)
+  await onFilterChange()
 }
 
 async function onSearch(value: string): Promise<void> {
@@ -120,6 +153,8 @@ async function clearFilters(): Promise<void> {
   await handleFilterChange(orgId)
 }
 
+defineExpose({ onDateRangeChange })
+
 onMounted(() => {
   store.fetchAuditLogs(orgId)
   // Projects and members feed the filter selects; projects also feed the
@@ -130,44 +165,65 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="org-audit-log">
-    <Typography.Title :level="4" style="margin-bottom: 24px">Audit Logs</Typography.Title>
+  <div class="space-y-6">
+    <PageHeader title="Audit Logs" />
 
     <!-- Filter bar: every control writes the store, then refetches page 1 -->
-    <Space wrap style="margin-bottom: 16px">
-      <Select
-        v-model:value="store.projectId"
-        :options="projectOptions"
-        placeholder="Project"
-        allow-clear
-        style="width: 180px"
-        @change="onFilterChange"
-      />
-      <Select
-        v-model:value="store.actorId"
-        :options="memberOptions"
-        placeholder="Member"
-        allow-clear
-        style="width: 180px"
-        @change="onFilterChange"
-      />
-      <Select
-        v-model:value="store.action"
-        :options="ACTION_OPTIONS"
-        placeholder="Action"
-        allow-clear
-        style="width: 200px"
-        @change="onFilterChange"
-      />
-      <RangePicker :value="dateRange" value-format="YYYY-MM-DD" @change="onDateRangeChange" />
-      <InputSearch
-        v-model:value="store.searchQuery"
-        placeholder="Search entries..."
-        allow-clear
-        style="width: 220px"
-        @search="onSearch"
-      />
-    </Space>
+    <div class="flex flex-wrap gap-2">
+      <Select :model-value="selectValue(store.projectId)" @update:model-value="onProjectChange">
+        <SelectTrigger class="w-[180px]"><SelectValue placeholder="Project" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem :value="ALL">All projects</SelectItem>
+          <SelectItem v-for="option in projectOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      <Select :model-value="selectValue(store.actorId)" @update:model-value="onActorChange">
+        <SelectTrigger class="w-[180px]"><SelectValue placeholder="Member" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem :value="ALL">All members</SelectItem>
+          <SelectItem v-for="option in memberOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </SelectItem>
+        </SelectContent>
+      </Select>
+      <Select :model-value="selectValue(store.action)" @update:model-value="onActionChange">
+        <SelectTrigger class="w-[200px]"><SelectValue placeholder="Action" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem :value="ALL">All actions</SelectItem>
+          <SelectItem v-for="option in ACTION_OPTIONS" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Popover>
+        <PopoverTrigger as-child>
+          <Button variant="outline" class="w-[240px] justify-start font-normal">
+            <CalendarIcon class="size-4" />
+            <span v-if="dateRange.start">{{ store.dateFrom }} – {{ store.dateTo ?? "…" }}</span>
+            <span v-else class="text-muted-foreground">Date range</span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent class="w-auto p-0" align="start">
+          <RangeCalendar
+            :model-value="dateRange"
+            :number-of-months="2"
+            @update:model-value="onDateRangeChange"
+          />
+        </PopoverContent>
+      </Popover>
+
+      <InputGroup class="w-[220px]">
+        <InputGroupAddon><Search class="size-4" /></InputGroupAddon>
+        <InputGroupInput
+          v-model="store.searchQuery"
+          placeholder="Search entries..."
+          @keydown.enter="onSearch(store.searchQuery)"
+        />
+      </InputGroup>
+    </div>
 
     <AuditLogTable
       v-if="logs.length > 0 || loading"
@@ -179,17 +235,15 @@ onMounted(() => {
     />
 
     <!-- Two-branch empty state: Clear filters appears only when a filter is set -->
-    <Empty
-      v-else
-      :description="hasActiveFilters ? 'No entries match your filters' : 'No audit entries yet'"
-    >
-      <Button v-if="hasActiveFilters" @click="clearFilters">Clear filters</Button>
+    <Empty v-else>
+      <EmptyHeader>
+        <EmptyTitle>{{
+          hasActiveFilters ? "No entries match your filters" : "No audit entries yet"
+        }}</EmptyTitle>
+      </EmptyHeader>
+      <EmptyContent v-if="hasActiveFilters">
+        <Button variant="outline" @click="clearFilters">Clear filters</Button>
+      </EmptyContent>
     </Empty>
   </div>
 </template>
-
-<style scoped>
-.org-audit-log {
-  width: 100%;
-}
-</style>

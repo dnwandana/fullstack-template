@@ -7,10 +7,10 @@
  * unchanged; data loads on mount rather than on tab click.
  */
 
-import { computed, onMounted } from "vue"
+import { computed, onMounted, ref } from "vue"
 import { useRoute } from "vue-router"
-import { Button, Typography, Modal, message } from "ant-design-vue"
-import { PlusOutlined } from "@ant-design/icons-vue"
+import { Copy, Plus } from "@lucide/vue"
+import { toast } from "vue-sonner"
 
 import type { InviteInput } from "@/api/invitations"
 import { useInvitations } from "@/composables/useInvitations"
@@ -19,6 +19,16 @@ import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 import InviteFormModal from "@/components/InviteFormModal.vue"
 import InvitationsTable from "@/components/InvitationsTable.vue"
+import PageHeader from "@/components/PageHeader.vue"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -42,6 +52,9 @@ const { roles, fetchRoles } = rolesComposable
 
 const invitationsLoading = computed(() => invitationsComposable.loading.value)
 
+/** The new invitation link, shown in a dialog when the clipboard write fails. */
+const fallbackUrl = ref<string | null>(null)
+
 /** Invite payload from InviteFormModal */
 function onInviteSubmit(data: InviteInput): void {
   handleInvite(orgId, data, "org")
@@ -64,15 +77,22 @@ async function onResend(invitationId: string): Promise<void> {
 
   try {
     await navigator.clipboard.writeText(result.accept_url)
-    message.success("Invitation link copied to clipboard")
+    toast.success("Invitation link copied to clipboard")
   } catch {
     // navigator.clipboard requires a secure context — it works over https and
     // on http://localhost, but not on a plain-HTTP LAN address. Show the link
     // instead of losing it: this token is never retrievable again.
-    Modal.info({
-      title: "New invitation link",
-      content: result.accept_url,
-    })
+    fallbackUrl.value = result.accept_url
+  }
+}
+
+/** Copies the link from the fallback dialog. The dialog stays open if the copy fails. */
+async function copyFallback(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(fallbackUrl.value ?? "")
+    toast.success("Invitation link copied to clipboard")
+  } catch {
+    toast.error("Copy failed. Select the link and copy it by hand.")
   }
 }
 
@@ -85,17 +105,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="org-invitations">
-    <Typography.Title :level="4" style="margin-bottom: 24px">Invitations</Typography.Title>
-
-    <!-- Invite member button — gated by permission -->
-    <div style="margin-bottom: 16px">
-      <Button v-if="can('invitations:create')" type="primary" @click="openInviteModal()">
-        <template #icon><PlusOutlined /></template>
-        Invite Member
+  <div class="space-y-6">
+    <PageHeader title="Invitations">
+      <!-- Invite member button — gated by permission -->
+      <Button v-if="can('invitations:create')" @click="openInviteModal()">
+        <Plus /> Invite Member
       </Button>
-    </div>
-
+    </PageHeader>
     <InvitationsTable
       :invitations="orgInvitations"
       :loading="invitationsLoading"
@@ -104,19 +120,36 @@ onMounted(() => {
       @revoke="onRevoke"
       @resend="onResend"
     />
-
     <InviteFormModal
-      :visible="isInviteModalVisible"
+      :open="isInviteModalVisible"
       :roles="roles"
       :loading="invitationsLoading"
       @submit="onInviteSubmit"
       @cancel="closeInviteModal()"
     />
+
+    <Dialog
+      :open="fallbackUrl !== null"
+      @update:open="
+        (open) => {
+          if (!open) fallbackUrl = null
+        }
+      "
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New invitation link</DialogTitle>
+          <DialogDescription>
+            Copy this link and send it to the invitee. It is shown once.
+          </DialogDescription>
+        </DialogHeader>
+        <div class="flex items-center gap-2">
+          <Input :model-value="fallbackUrl ?? ''" readonly class="font-mono text-xs" />
+          <Button variant="outline" size="icon" aria-label="Copy link" @click="copyFallback">
+            <Copy />
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
-
-<style scoped>
-.org-invitations {
-  width: 100%;
-}
-</style>
