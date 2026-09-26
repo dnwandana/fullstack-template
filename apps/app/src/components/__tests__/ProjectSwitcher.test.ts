@@ -28,10 +28,7 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ push }),
 }))
 vi.mock("@/router", () => ({ default: { currentRoute: route } }))
-vi.mock("ant-design-vue", async (importOriginal) => ({
-  ...(await importOriginal()),
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import ProjectSwitcher from "../ProjectSwitcher.vue"
 import { useProjectsStore } from "@/stores/projects"

@@ -1,25 +1,46 @@
 <script setup lang="ts">
 /**
- * AuditLogTable — Displays audit log rows in an Ant Design table.
+ * AuditLogTable — Displays audit log rows in a shadcn Table.
  *
  * Features:
- *   - Color-coded action tags with humanized labels
+ *   - Color-coded action Badges with humanized labels
  *   - Expandable rows that show the `changes` diff, one line per field
  *   - Project name lookup through the projectNames prop
  *
  * Props:
  *   - logs: array of audit log rows
- *   - loading: table loading state
+ *   - loading: shows a Spinner while true
  *   - pagination: pagination metadata from the API envelope
  *   - projectNames: map of project id to project name
  *
  * Emits:
- *   - page-change(page) — when the user selects a different page
+ *   - page-change(page) — when the user selects a page other than the current page
  */
 
-import { Table, Tag } from "ant-design-vue"
-import type { ColumnsType } from "ant-design-vue/es/table"
+import { ref } from "vue"
+import { ChevronRight } from "@lucide/vue"
 import type { AuditLog, PaginationMeta, Wire } from "@fullstack/contracts"
+import { Badge, type BadgeVariants } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationFirst,
+  PaginationItem,
+  PaginationLast,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
+import { Spinner } from "@/components/ui/spinner"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 const props = defineProps<{
   logs: Wire<AuditLog>[]
@@ -57,99 +78,140 @@ const ACTION_LABELS: Record<string, string> = {
   "invitation.declined": "Declined invitation",
 }
 
-/**
- * Look a row up in the table's own data-source by id. The `#bodyCell` slot
- * types `record` as `Record<string, any>`, so handlers take `record.id` — a
- * string — and recover the typed object here without an assertion.
- */
-function findLog(id: string): Wire<AuditLog> | undefined {
-  return props.logs.find((log) => log.id === id)
-}
-
-/** Returns the humanized label for a row's action, or the raw string. */
-function actionLabel(id: string): string {
-  const action = findLog(id)?.action ?? ""
+/** Returns the humanized label for an action, or the raw string. */
+function actionLabel(action: string): string {
   return ACTION_LABELS[action] ?? action
 }
 
 /**
- * Map an action to a Tag color. The spec colors match by suffix, so custom
+ * Map an action to a Badge variant. The spec colors match by suffix, so custom
  * entity types inherit the scheme.
  */
-function actionColor(id: string): string {
-  const action = findLog(id)?.action ?? ""
-  if (action.endsWith(".created")) return "green"
-  if (action.endsWith(".updated") || action === "member.role_changed") return "blue"
-  if (action.endsWith(".deleted") || action === "invitation.revoked") return "red"
-  return "default"
+function actionVariant(action: string): BadgeVariants["variant"] {
+  if (action.endsWith(".created")) return "success"
+  if (action.endsWith(".updated") || action === "member.role_changed") return "info"
+  if (action.endsWith(".deleted") || action === "invitation.revoked") return "destructive"
+  return "secondary"
 }
 
 /** Returns the project name for a row, or a dash for org-level actions. */
-function projectLabel(id: string): string {
-  const projectId = findLog(id)?.project_id
+function projectLabel(projectId: string | null): string {
   if (!projectId) return "—"
   return props.projectNames[projectId] ?? "—"
 }
 
 /** Formats a row's timestamp as a locale date string. */
-function formatWhen(id: string): string {
-  const createdAt = findLog(id)?.created_at
+function formatWhen(createdAt: string | null | undefined): string {
   if (!createdAt) return "—"
   return new Date(createdAt).toLocaleDateString()
 }
 
 /** Returns one display line per changed field for the expanded row. */
-function changeLines(id: string): string[] {
-  const changes = findLog(id)?.changes
+function changeLines(changes: Wire<AuditLog>["changes"]): string[] {
   if (!changes) return []
   return Object.entries(changes).map(
     ([field, diff]) => `${field}: ${JSON.stringify(diff.from)} → ${JSON.stringify(diff.to)}`,
   )
 }
 
-const columns: ColumnsType<Wire<AuditLog>> = [
-  { title: "When", dataIndex: "created_at", key: "created_at" },
-  { title: "Actor", dataIndex: "actor_name", key: "actor_name" },
-  { title: "Action", key: "action" },
-  { title: "Entity", dataIndex: "entity_name", key: "entity_name" },
-  { title: "Project", key: "project" },
-]
+// Ids of the rows whose change diff is open. A new Set on each toggle triggers reactivity.
+const expanded = ref<Set<string>>(new Set())
+
+function toggle(id: string): void {
+  const next = new Set(expanded.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  expanded.value = next
+}
+
+/** Emits only for a page other than the current page. */
+function onPageChange(page: number): void {
+  if (page !== props.pagination.current_page) emit("page-change", page)
+}
 </script>
 
 <template>
-  <Table
-    :columns="columns"
-    :data-source="props.logs"
-    :loading="props.loading"
-    row-key="id"
-    :row-expandable="(record) => record.changes !== null"
-    :pagination="{
-      current: props.pagination.current_page,
-      pageSize: props.pagination.items_per_page,
-      total: props.pagination.total_items,
-      onChange: (page: number) => emit('page-change', page),
-    }"
-  >
-    <template #bodyCell="{ column, record }">
-      <template v-if="column.key === 'created_at'">
-        {{ formatWhen(record.id) }}
-      </template>
-      <template v-else-if="column.key === 'action'">
-        <Tag :color="actionColor(record.id)">{{ actionLabel(record.id) }}</Tag>
-      </template>
-      <template v-else-if="column.key === 'project'">
-        {{ projectLabel(record.id) }}
-      </template>
-    </template>
-    <template #expandedRowRender="{ record }">
-      <p v-for="line in changeLines(record.id)" :key="line" class="change-line">{{ line }}</p>
-    </template>
-  </Table>
-</template>
+  <div class="space-y-4">
+    <div class="relative rounded-md border">
+      <Spinner v-if="loading" class="absolute top-2 right-2" />
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-8" />
+            <TableHead>When</TableHead>
+            <TableHead>Actor</TableHead>
+            <TableHead>Action</TableHead>
+            <TableHead>Entity</TableHead>
+            <TableHead>Project</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <template v-for="log in logs" :key="log.id">
+            <TableRow>
+              <TableCell>
+                <Button
+                  v-if="log.changes !== null"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Show changes"
+                  :aria-expanded="expanded.has(log.id)"
+                  @click="toggle(log.id)"
+                >
+                  <ChevronRight
+                    class="size-4 transition-transform"
+                    :class="{ 'rotate-90': expanded.has(log.id) }"
+                  />
+                </Button>
+              </TableCell>
+              <TableCell>{{ formatWhen(log.created_at) }}</TableCell>
+              <TableCell>{{ log.actor_name }}</TableCell>
+              <TableCell>
+                <Badge :variant="actionVariant(log.action)">{{ actionLabel(log.action) }}</Badge>
+              </TableCell>
+              <TableCell>{{ log.entity_name }}</TableCell>
+              <TableCell>{{ projectLabel(log.project_id) }}</TableCell>
+            </TableRow>
+            <TableRow v-if="log.changes !== null && expanded.has(log.id)">
+              <TableCell :colspan="6" class="bg-muted/50">
+                <div
+                  v-for="line in changeLines(log.changes)"
+                  :key="line"
+                  class="change-line font-mono text-xs"
+                >
+                  {{ line }}
+                </div>
+              </TableCell>
+            </TableRow>
+          </template>
+        </TableBody>
+      </Table>
+    </div>
 
-<style scoped>
-.change-line {
-  margin: 0;
-  font-family: var(--font-mono, monospace);
-}
-</style>
+    <Pagination
+      v-if="pagination.total_pages > 1"
+      :page="pagination.current_page"
+      :total="pagination.total_items"
+      :items-per-page="pagination.items_per_page"
+      :sibling-count="1"
+      show-edges
+      @update:page="onPageChange"
+    >
+      <PaginationContent v-slot="{ items }">
+        <PaginationFirst />
+        <PaginationPrevious />
+        <template v-for="(item, index) in items" :key="index">
+          <PaginationItem
+            v-if="item.type === 'page'"
+            :value="item.value"
+            :is-active="item.value === pagination.current_page"
+          >
+            {{ item.value }}
+          </PaginationItem>
+          <PaginationEllipsis v-else :index="index" />
+        </template>
+        <PaginationNext />
+        <PaginationLast />
+      </PaginationContent>
+    </Pagination>
+  </div>
+</template>

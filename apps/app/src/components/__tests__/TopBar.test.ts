@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
+import { h } from "vue"
 import type { ComponentPublicInstance } from "vue"
 import type { RouteLocationRaw } from "vue-router"
 import { ok } from "@/test/fixtures"
@@ -36,12 +37,10 @@ vi.mock("@/utils/http", () => ({
   },
 }))
 
-vi.mock("ant-design-vue", async (importOriginal) => ({
-  ...(await importOriginal()),
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import TopBar from "../TopBar.vue"
+import { SidebarProvider } from "@/components/ui/sidebar"
 import { request } from "@/utils/http"
 
 // findComponent with a CSS selector resolves to WrapperLike, which has no
@@ -52,7 +51,7 @@ type BrandLink = new () => ComponentPublicInstance<{ to: RouteLocationRaw }>
 function mountAt(params: Record<string, string>) {
   setActivePinia(createPinia())
   route.value = { params, name: "TodosList" }
-  return mount(TopBar)
+  return mount(SidebarProvider, { slots: { default: () => h(TopBar) } })
 }
 
 describe("TopBar", () => {
@@ -80,10 +79,10 @@ describe("TopBar", () => {
     expect(mountAt({ orgId: "o1" }).find(".top-bar__sep").exists()).toBe(false)
   })
 
-  it("emits toggle-drawer when the hamburger is clicked", async () => {
+  it("renders the sidebar trigger", () => {
     const wrapper = mountAt({ orgId: "o1", projectId: "p1" })
-    await wrapper.find(".top-bar__hamburger").trigger("click")
-    expect(wrapper.emitted("toggle-drawer")).toHaveLength(1)
+    expect(wrapper.findComponent({ name: "SidebarTrigger" }).exists()).toBe(true)
+    expect(wrapper.find(".top-bar__hamburger").exists()).toBe(false)
   })
 
   it("links a home/brand icon back to the orgs list", () => {

@@ -9,27 +9,39 @@
  * `route.matched` — the router already knows, so nothing is re-derived.
  */
 
-import { computed } from "vue"
+import { computed, watch } from "vue"
 import type { Component } from "vue"
-import { useRoute } from "vue-router"
-import { Menu } from "ant-design-vue"
+import { useRoute, RouterLink } from "vue-router"
 import {
-  CheckSquareOutlined,
-  HistoryOutlined,
-  ProjectOutlined,
-  TeamOutlined,
-  SafetyCertificateOutlined,
-  MailOutlined,
-  SettingOutlined,
-} from "@ant-design/icons-vue"
+  CheckSquare,
+  FolderKanban,
+  History,
+  Mail,
+  Settings,
+  ShieldCheck,
+  Users,
+} from "@lucide/vue"
+import {
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar"
 import { useTenantStore } from "@/stores/tenant"
 import { usePermissions } from "@/composables/usePermissions"
-
-withDefaults(defineProps<{ collapsed?: boolean }>(), { collapsed: false })
 
 const route = useRoute()
 const tenant = useTenantStore()
 const { can } = usePermissions()
+const { setOpenMobile } = useSidebar()
+
+// The shell never unmounts, so the mobile sheet would stay open after a navigation.
+watch(
+  () => route.fullPath,
+  () => setOpenMobile(false),
+)
 
 interface NavItem {
   /** Route name — also what `selectedKeys` matches on. */
@@ -45,41 +57,41 @@ interface NavItem {
 // `key` is the route name, which is also what selectedKeys matches on.
 // `permission` mirrors the route's meta.permission — see 00-overview.
 const ORG_ITEMS: NavItem[] = [
-  { key: "ProjectsList", label: "Projects", icon: ProjectOutlined, permission: "project:read" },
-  { key: "OrgMembers", label: "Members", icon: TeamOutlined, permission: "org:read" },
-  { key: "OrgRoles", label: "Roles", icon: SafetyCertificateOutlined, permission: "org:read" },
+  { key: "ProjectsList", label: "Projects", icon: FolderKanban, permission: "project:read" },
+  { key: "OrgMembers", label: "Members", icon: Users, permission: "org:read" },
+  { key: "OrgRoles", label: "Roles", icon: ShieldCheck, permission: "org:read" },
   {
     key: "OrgInvitations",
     label: "Invitations",
-    icon: MailOutlined,
+    icon: Mail,
     permission: "invitations:manage",
   },
-  { key: "OrgSettings", label: "Settings", icon: SettingOutlined, permission: "org:update" },
-  { key: "OrgAuditLog", label: "Audit Logs", icon: HistoryOutlined, permission: "audit:read" },
+  { key: "OrgSettings", label: "Settings", icon: Settings, permission: "org:update" },
+  { key: "OrgAuditLog", label: "Audit Logs", icon: History, permission: "audit:read" },
 ]
 
 const PROJECT_ITEMS: NavItem[] = [
   {
     key: "TodosList",
     label: "Todos",
-    icon: CheckSquareOutlined,
+    icon: CheckSquare,
     permission: "todos:read",
     // TodoDetail has no nav item of its own — the routes are flat, so without
     // this it falls out of `route.matched` entirely and Todos goes dark while
     // viewing a single todo.
     matches: ["TodosList", "TodoDetail"],
   },
-  { key: "ProjectMembers", label: "Members", icon: TeamOutlined, permission: "project:read" },
+  { key: "ProjectMembers", label: "Members", icon: Users, permission: "project:read" },
   {
     key: "ProjectInvitations",
     label: "Invitations",
-    icon: MailOutlined,
+    icon: Mail,
     permission: "invitations:manage",
   },
   {
     key: "ProjectSettings",
     label: "Settings",
-    icon: SettingOutlined,
+    icon: Settings,
     permission: "project:update",
   },
 ]
@@ -107,36 +119,29 @@ const params = computed(() => ({
   ...(tenant.currentProjectId ? { projectId: tenant.currentProjectId } : {}),
 }))
 
+const groupLabel = computed(() => (tenant.currentProjectId ? "Project" : "Organization"))
+
 defineExpose({ items, selectedKeys })
 </script>
 
 <template>
-  <nav v-if="items.length" class="side-nav">
-    <Menu mode="inline" :inline-collapsed="collapsed" :selected-keys="selectedKeys">
-      <Menu.Item v-for="item in items" :key="item.key">
-        <template #icon><component :is="item.icon" /></template>
-        <RouterLink :to="{ name: item.key, params }">{{ item.label }}</RouterLink>
-      </Menu.Item>
-    </Menu>
+  <nav v-if="items.length" aria-label="Main">
+    <SidebarGroup>
+      <SidebarGroupLabel>{{ groupLabel }}</SidebarGroupLabel>
+      <SidebarMenu>
+        <SidebarMenuItem v-for="item in items" :key="item.key">
+          <SidebarMenuButton
+            as-child
+            :is-active="selectedKeys.includes(item.key)"
+            :tooltip="item.label"
+          >
+            <RouterLink :to="{ name: item.key, params }">
+              <component :is="item.icon" />
+              <span>{{ item.label }}</span>
+            </RouterLink>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarGroup>
   </nav>
 </template>
-
-<style scoped>
-.side-nav {
-  padding: 8px;
-}
-
-/* Ant's inline Menu draws its active bar on the RIGHT via a pseudo-element,
-   and colorActiveBarBorderSize/colorActiveBarWidth address only that bar.
-   theme/antd.ts sets colorActiveBarBorderSize: 0 to suppress it; the artboard's
-   3px LEFT bar is drawn here. Fill, text colour and radius still come from the
-   Menu tokens. */
-.side-nav :deep(.ant-menu-item-selected) {
-  border-left: 3px solid var(--teal-500);
-}
-
-/* Keep unselected items aligned with selected ones despite the 3px border. */
-.side-nav :deep(.ant-menu-item) {
-  border-left: 3px solid transparent;
-}
-</style>

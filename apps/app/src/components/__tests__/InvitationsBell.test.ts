@@ -14,10 +14,7 @@ vi.mock("vue-router", () => ({
   RouterLink: { name: "RouterLink", props: ["to"], template: "<a><slot /></a>" },
 }))
 
-vi.mock("ant-design-vue", async (importOriginal) => ({
-  ...(await importOriginal()),
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import InvitationsBell from "../InvitationsBell.vue"
 

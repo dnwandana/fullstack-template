@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { ConfigProvider } from "ant-design-vue"
 import AppShell from "@/components/AppShell.vue"
-import antdTheme from "@/theme/antd"
+import { Toaster } from "@/components/ui/sonner"
 
 const route = useRoute()
 const router = useRouter()
@@ -28,10 +27,9 @@ const isChromeless = computed(
 </script>
 
 <template>
-  <ConfigProvider :theme="antdTheme">
-    <template v-if="routerReady">
-      <RouterView v-if="isChromeless" />
-      <AppShell v-else />
-    </template>
-  </ConfigProvider>
+  <Toaster position="top-right" rich-colors />
+  <template v-if="routerReady">
+    <RouterView v-if="isChromeless" />
+    <AppShell v-else />
+  </template>
 </template>

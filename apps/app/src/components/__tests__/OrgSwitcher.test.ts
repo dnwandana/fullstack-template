@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, beforeAll, vi } from "vitest"
+import { describe, it, expect, beforeEach, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 
@@ -18,12 +18,8 @@ vi.mock("vue-router", () => ({
   useRouter: () => ({ push }),
 }))
 vi.mock("@/router", () => ({ default: { currentRoute: route } }))
-vi.mock("ant-design-vue", async (importOriginal) => ({
-  ...(await importOriginal()),
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-import { Menu } from "ant-design-vue"
 import OrgSwitcher from "../OrgSwitcher.vue"
 import { useTenantStore } from "@/stores/tenant"
 import { useOrgsStore } from "@/stores/orgs"
@@ -42,20 +38,6 @@ function setup() {
 }
 
 describe("OrgSwitcher", () => {
-  // jsdom does not implement matchMedia; Ant Design Vue's grid subscribes to it on mount.
-  beforeAll(() => {
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-    }))
-  })
-
   beforeEach(() => {
     setActivePinia(createPinia())
     // One spy is shared across every `useRouter()` call, so without this the
@@ -97,14 +79,14 @@ describe("OrgSwitcher", () => {
     })
   })
 
-  // `selectOrg` is not in `defineExpose`, so both cases drive it through the
-  // Menu's `@click` handler — the component's own contract.
+  // Both cases call the exposed `selectOrg`. The dropdown items render in a
+  // portal, so the test does not click them.
   it("navigates to the chosen org's projects", async () => {
     setup()
     const wrapper = mount(OrgSwitcher)
     await wrapper.vm.onOpenChange(true)
 
-    await wrapper.findComponent(Menu).vm.$emit("click", { key: "o2" })
+    wrapper.vm.selectOrg("o2")
 
     expect(push).toHaveBeenCalledWith({ name: "ProjectsList", params: { orgId: "o2" } })
   })
@@ -114,7 +96,7 @@ describe("OrgSwitcher", () => {
     const wrapper = mount(OrgSwitcher)
     await wrapper.vm.onOpenChange(true)
 
-    await wrapper.findComponent(Menu).vm.$emit("click", { key: "o1" })
+    wrapper.vm.selectOrg("o1")
 
     expect(push).not.toHaveBeenCalled()
   })

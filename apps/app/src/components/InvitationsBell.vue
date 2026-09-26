@@ -10,8 +10,9 @@
 
 import { onMounted } from "vue"
 import { RouterLink } from "vue-router"
-import { Badge } from "ant-design-vue"
-import { BellOutlined } from "@ant-design/icons-vue"
+import { Bell } from "@lucide/vue"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { useInvitations } from "@/composables/useInvitations"
 
 const { pendingCount, fetchMyInvitations } = useInvitations()
@@ -22,30 +23,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <RouterLink :to="{ name: 'MyInvitations' }" class="invitations-bell" aria-label="Invitations">
-    <Badge :count="pendingCount" :offset="[-2, 4]">
-      <BellOutlined class="invitations-bell__icon" />
+  <RouterLink :to="{ name: 'MyInvitations' }" aria-label="Invitations" class="relative inline-flex">
+    <Button variant="ghost" size="icon" as="span">
+      <Bell class="size-5" />
+    </Button>
+    <Badge
+      v-if="pendingCount > 0"
+      variant="destructive"
+      class="absolute -top-1 -right-1 h-5 min-w-5 justify-center px-1 text-[10px]"
+    >
+      {{ pendingCount }}
     </Badge>
   </RouterLink>
 </template>
-
-<style scoped>
-.invitations-bell {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 6px;
-  color: var(--text-secondary);
-}
-
-.invitations-bell:hover {
-  background: var(--gray-100);
-  color: var(--text-primary);
-}
-
-.invitations-bell__icon {
-  font-size: 16px;
-}
-</style>

@@ -9,9 +9,17 @@
  */
 
 import { computed } from "vue"
-import { useRoute } from "vue-router"
+import { useRoute, RouterLink } from "vue-router"
 import type { RouteLocationRaw } from "vue-router"
 import { useTenantStore } from "@/stores/tenant"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
 
 const route = useRoute()
 const tenant = useTenantStore()
@@ -67,35 +75,17 @@ defineExpose({ crumbs })
 </script>
 
 <template>
-  <nav v-if="crumbs.length" class="app-breadcrumb" aria-label="Breadcrumb">
-    <template v-for="(crumb, i) in crumbs" :key="i">
-      <span v-if="i > 0" class="app-breadcrumb__sep" aria-hidden="true">/</span>
-      <RouterLink v-if="crumb.to" :to="crumb.to" class="app-breadcrumb__link">
-        {{ crumb.label }}
-      </RouterLink>
-      <span v-else class="app-breadcrumb__current" aria-current="page">{{ crumb.label }}</span>
-    </template>
-  </nav>
+  <Breadcrumb v-if="crumbs.length" aria-label="Breadcrumb">
+    <BreadcrumbList>
+      <template v-for="(crumb, index) in crumbs" :key="index">
+        <BreadcrumbSeparator v-if="index > 0" />
+        <BreadcrumbItem>
+          <BreadcrumbLink v-if="crumb.to" as-child>
+            <RouterLink :to="crumb.to">{{ crumb.label }}</RouterLink>
+          </BreadcrumbLink>
+          <BreadcrumbPage v-else>{{ crumb.label }}</BreadcrumbPage>
+        </BreadcrumbItem>
+      </template>
+    </BreadcrumbList>
+  </Breadcrumb>
 </template>
-
-<style scoped>
-.app-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-sm);
-}
-
-.app-breadcrumb__sep {
-  color: var(--text-faint);
-}
-
-.app-breadcrumb__link {
-  color: var(--text-secondary);
-}
-
-.app-breadcrumb__current {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-</style>

@@ -57,7 +57,7 @@ describe("AppBreadcrumb", () => {
   it("renders nothing on the orgs list", () => {
     const wrapper = mountAt("OrgsList", {})
     expect(wrapper.vm.crumbs).toEqual([])
-    expect(wrapper.find(".app-breadcrumb").exists()).toBe(false)
+    expect(wrapper.find("nav").exists()).toBe(false)
   })
 
   it("shows just the org on the projects list", () => {

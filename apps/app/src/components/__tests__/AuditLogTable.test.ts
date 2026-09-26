@@ -1,24 +1,17 @@
-import { describe, it, expect, beforeAll, vi } from "vitest"
-import { mount } from "@vue/test-utils"
+import { describe, it, expect } from "vitest"
+import { mount, type VueWrapper } from "@vue/test-utils"
 import type { AuditLog, PaginationMeta, Wire } from "@fullstack/contracts"
 import { makeAuditLog, makePaginationMeta } from "@/test/fixtures"
 import AuditLogTable from "../AuditLogTable.vue"
 
-describe("AuditLogTable", () => {
-  // jsdom does not implement matchMedia; Ant Design Vue's table subscribes to it on mount.
-  beforeAll(() => {
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: () => {},
-      removeListener: () => {},
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      dispatchEvent: () => false,
-    }))
-  })
+/** Finds a pager button by its page number. Throws when the button is missing. */
+function pageButton(wrapper: VueWrapper, page: number) {
+  const found = wrapper.findAll("button").find((b) => b.text() === String(page))
+  if (!found) throw new Error(`Missing page ${page} button`)
+  return found
+}
 
+describe("AuditLogTable", () => {
   function mountTable(logs: Wire<AuditLog>[] = [makeAuditLog()], pagination?: PaginationMeta) {
     return mount(AuditLogTable, {
       props: {
@@ -61,7 +54,7 @@ describe("AuditLogTable", () => {
         },
       }),
     ])
-    await wrapper.find(".ant-table-row-expand-icon").trigger("click")
+    await wrapper.find('button[aria-label="Show changes"]').trigger("click")
     const lines = wrapper.findAll(".change-line")
     expect(lines).toHaveLength(2)
     expect(wrapper.text()).toContain("title")
@@ -71,7 +64,7 @@ describe("AuditLogTable", () => {
 
   it("hides the expand control for rows without changes", () => {
     const wrapper = mountTable([makeAuditLog({ changes: null })])
-    expect(wrapper.find(".ant-table-row-expand-icon-collapsed").exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="Show changes"]').exists()).toBe(false)
   })
 
   it("emits page-change when the user clicks a pager item", async () => {
@@ -84,7 +77,24 @@ describe("AuditLogTable", () => {
         next_page: 2,
       }),
     )
-    await wrapper.find(".ant-pagination-item-2").trigger("click")
+    await pageButton(wrapper, 2).trigger("click")
     expect(wrapper.emitted("page-change")).toEqual([[2]])
+  })
+
+  it("never emits page-change for the current page", async () => {
+    const wrapper = mountTable(
+      [makeAuditLog()],
+      makePaginationMeta({
+        current_page: 2,
+        total_items: 25,
+        total_pages: 3,
+        has_next_page: true,
+        has_previous_page: true,
+        next_page: 3,
+        previous_page: 1,
+      }),
+    )
+    await pageButton(wrapper, 2).trigger("click")
+    expect(wrapper.emitted("page-change")).toBeUndefined()
   })
 })

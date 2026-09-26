@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
+import { h } from "vue"
 import { mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 
@@ -18,14 +19,21 @@ vi.mock("vue-router", () => ({
 vi.mock("@/router", () => ({ default: { currentRoute: route } }))
 
 import SideNav from "../SideNav.vue"
+import { SidebarProvider } from "@/components/ui/sidebar"
 import { useTenantStore } from "@/stores/tenant"
+
+function mountNav() {
+  return mount(SidebarProvider, {
+    slots: { default: () => h(SideNav) },
+  })
+}
 
 function mountWith(permissions: string[], params: Record<string, string> = { orgId: "o1" }) {
   setActivePinia(createPinia())
   route.value = { params, matched: [{ name: "OrgMembers" }] }
   const tenant = useTenantStore()
   tenant.permissions = { o1: permissions }
-  return mount(SideNav, { global: { plugins: [] } })
+  return mountNav()
 }
 
 describe("SideNav", () => {
@@ -77,7 +85,7 @@ describe("SideNav", () => {
 
   it("marks the matched route as selected", () => {
     const wrapper = mountWith(["org:read"])
-    expect(wrapper.vm.selectedKeys).toEqual(["OrgMembers"])
+    expect(wrapper.findComponent(SideNav).vm.selectedKeys).toEqual(["OrgMembers"])
   })
 
   it("keeps Todos highlighted on the flat TodoDetail route", () => {
@@ -90,8 +98,8 @@ describe("SideNav", () => {
     const tenant = useTenantStore()
     tenant.permissions = { o1: ["todos:read", "project:read"] }
 
-    const wrapper = mount(SideNav)
-    expect(wrapper.vm.selectedKeys).toEqual(["TodosList"])
-    expect(wrapper.find(".ant-menu-item-selected").text()).toBe("Todos")
+    const wrapper = mountNav()
+    expect(wrapper.findComponent(SideNav).vm.selectedKeys).toEqual(["TodosList"])
+    expect(wrapper.find('[data-active="true"]').text()).toBe("Todos")
   })
 })

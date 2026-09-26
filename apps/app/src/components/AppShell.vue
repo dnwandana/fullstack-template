@@ -1,26 +1,23 @@
 <script setup lang="ts">
 /**
- * AppShell — sider + top bar + breadcrumb + routed content.
+ * AppShell — sidebar + top bar + breadcrumb + routed content.
  *
  * Replaces AppLayout and AppSidebar. Renders RouterView itself rather than
  * taking a slot, so App.vue no longer nests one inside it.
  */
 
-import { ref, computed, watch, onMounted, onUnmounted } from "vue"
-import type { Ref } from "vue"
-import { useRoute, RouterView } from "vue-router"
-import { Layout, Drawer } from "ant-design-vue"
-import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons-vue"
+import { ref, computed, watch, onMounted } from "vue"
+import { RouterView } from "vue-router"
+import { useMediaQuery } from "@vueuse/core"
 import { useTenantStore } from "@/stores/tenant"
+import { Sidebar, SidebarContent, SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import SideNav from "./SideNav.vue"
 import TopBar from "./TopBar.vue"
 import AppBreadcrumb from "./AppBreadcrumb.vue"
 
 const STORAGE_KEY = "shell.collapsed"
-const MOBILE = "(max-width: 767px)"
 const NARROW = "(min-width: 768px) and (max-width: 991px)"
 
-const route = useRoute()
 const tenant = useTenantStore()
 
 // The org switcher and breadcrumb both derive `currentOrg` from
@@ -51,130 +48,61 @@ watch(
   { immediate: true },
 )
 
-const isMobile = ref(false)
-const isNarrow = ref(false)
-const drawerOpen = ref(false)
+const isNarrow = useMediaQuery(NARROW)
+
+function readPreference(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === "true"
+  } catch {
+    return false
+  }
+}
 
 // The user's preference, kept apart from the effective value below: a narrow
 // viewport forces the rail, and must not overwrite what the user chose.
-const preferCollapsed = ref(localStorage.getItem(STORAGE_KEY) === "true")
-
+const preferCollapsed = ref(readPreference())
 const collapsed = computed(() => isNarrow.value || preferCollapsed.value)
 
-function toggleCollapsed() {
-  preferCollapsed.value = !preferCollapsed.value
-  localStorage.setItem(STORAGE_KEY, String(preferCollapsed.value))
+/** Narrow viewports force the rail. Their toggles do not touch the stored preference. */
+function setCollapsed(value: boolean): void {
+  if (isNarrow.value) return
+  preferCollapsed.value = value
+  try {
+    localStorage.setItem(STORAGE_KEY, String(value))
+  } catch {
+    // Storage can be unavailable in private mode. The session still works.
+  }
 }
 
-const teardown: (() => void)[] = []
-
-// Read synchronously (during setup, before the first render) rather than
-// from onMounted: the effective viewport is needed for the very first paint
-// — e.g. so the sider never flashes before the drawer takes over below
-// 768px — and only the "change" subscription needs cleanup on unmount.
-function track(query: string, target: Ref<boolean>): void {
-  const mql = window.matchMedia(query)
-  target.value = mql.matches
-  const onChange = (event: MediaQueryListEvent) => (target.value = event.matches)
-  mql.addEventListener("change", onChange)
-  teardown.push(() => mql.removeEventListener("change", onChange))
+function toggleCollapsed(): void {
+  setCollapsed(!collapsed.value)
 }
 
-track(MOBILE, isMobile)
-track(NARROW, isNarrow)
+// One source of truth for the sidebar: SidebarTrigger and toggleCollapsed both write here.
+const sidebarOpen = computed({
+  get: () => !collapsed.value,
+  set: (open: boolean) => setCollapsed(!open),
+})
 
-onUnmounted(() => teardown.forEach((off) => off()))
-
-// The shell never unmounts, so the drawer would stay open across a navigation.
-watch(
-  () => route.fullPath,
-  () => (drawerOpen.value = false),
-)
-
-defineExpose({ collapsed, toggleCollapsed, drawerOpen })
+defineExpose({ collapsed, toggleCollapsed })
 </script>
 
 <template>
-  <Layout class="app-shell">
-    <Layout.Sider
-      v-if="!isMobile"
-      class="app-shell__sider"
-      :width="210"
-      :collapsed-width="56"
-      :collapsed="collapsed"
-      :trigger="null"
-      collapsible
-      theme="light"
-    >
-      <SideNav :collapsed="collapsed" />
-
-      <button
-        v-if="!isNarrow"
-        type="button"
-        class="app-shell__toggle"
-        :aria-label="collapsed ? 'Expand navigation' : 'Collapse navigation'"
-        @click="toggleCollapsed"
-      >
-        <MenuUnfoldOutlined v-if="collapsed" />
-        <MenuFoldOutlined v-else />
-      </button>
-    </Layout.Sider>
-
-    <Drawer
-      v-else
-      v-model:open="drawerOpen"
-      class="app-shell__drawer"
-      placement="left"
-      :width="220"
-      :body-style="{ padding: 0 }"
-      :mask-style="{ background: 'rgba(14, 17, 20, 0.45)' }"
-      :closable="false"
-    >
-      <SideNav />
-    </Drawer>
-
-    <Layout>
-      <TopBar @toggle-drawer="drawerOpen = true" />
-      <div class="app-shell__crumbs"><AppBreadcrumb /></div>
-      <Layout.Content class="app-shell__content">
+  <SidebarProvider v-model:open="sidebarOpen">
+    <Sidebar collapsible="icon">
+      <SidebarContent>
+        <SideNav />
+      </SidebarContent>
+    </Sidebar>
+    <!-- SidebarInset already renders the main landmark. -->
+    <SidebarInset>
+      <TopBar />
+      <div class="px-6 pt-3">
+        <AppBreadcrumb />
+      </div>
+      <div class="flex-1 px-6 pt-4 pb-8">
         <RouterView />
-      </Layout.Content>
-    </Layout>
-  </Layout>
+      </div>
+    </SidebarInset>
+  </SidebarProvider>
 </template>
-
-<style scoped>
-.app-shell {
-  min-height: 100vh;
-}
-
-.app-shell__sider {
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--gray-150);
-}
-
-.app-shell__toggle {
-  margin: auto 12px 12px;
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: none;
-  border-radius: 6px;
-  cursor: pointer;
-  color: var(--text-secondary);
-}
-
-.app-shell__toggle:hover {
-  background: var(--gray-100);
-}
-
-.app-shell__crumbs {
-  padding: 12px 24px 0;
-}
-
-.app-shell__content {
-  padding: 16px 24px 32px;
-  background: var(--gray-25);
-}
-</style>

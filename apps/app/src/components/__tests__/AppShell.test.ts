@@ -30,21 +30,19 @@ vi.mock("@/utils/http", () => ({
   },
 }))
 
-vi.mock("ant-design-vue", async (importOriginal) => ({
-  ...(await importOriginal()),
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import AppShell from "../AppShell.vue"
 import { request } from "@/utils/http"
 import { useTenantStore } from "@/stores/tenant"
 import { useAuthStore } from "@/stores/auth"
 
-const MOBILE = "(max-width: 767px)"
+// The vendored SidebarProvider owns this query. Keep it equal to its useMediaQuery call.
+const MOBILE = "(max-width: 768px)"
 const NARROW = "(min-width: 768px) and (max-width: 991px)"
 
 /**
- * jsdom has no matchMedia; antd's grid subscribes to it on mount.
+ * Stubs matchMedia so a test can pick the viewport that `useMediaQuery` sees.
  *
  * @param matching - media query strings that should report matches
  */
@@ -106,11 +104,12 @@ describe("AppShell", () => {
     expect(localStorage.getItem("shell.collapsed")).toBeNull()
   })
 
-  it("swaps the sider for a drawer below 768px", () => {
+  it("swaps the sidebar for a sheet below 768px", () => {
     stubMatchMedia([MOBILE])
     const wrapper = mount(AppShell)
-    expect(wrapper.find(".app-shell__sider").exists()).toBe(false)
-    expect(wrapper.findComponent({ name: "ADrawer" }).exists()).toBe(true)
+    expect(wrapper.find('[data-slot="sidebar-container"]').exists()).toBe(false)
+    expect(wrapper.find("[data-variant]").exists()).toBe(false)
+    expect(wrapper.findComponent({ name: "Sheet" }).exists()).toBe(true)
   })
 
   it("loads the org list on mount so a deep link resolves the org switcher/breadcrumb", async () => {

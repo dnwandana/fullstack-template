@@ -1,16 +1,27 @@
 <script setup lang="ts">
 /**
- * OrgSwitcher — top-bar organization dropdown (artboard 05).
+ * OrgSwitcher — top-bar organization dropdown.
  *
  * Member counts and role tags are not in GET /api/orgs; they come from
  * GET /orgs/:orgId/members, one request per org. Those fire on FIRST OPEN, not
- * on mount, and the dropdown renders skeleton sub-lines while they land.
+ * on mount, and the dropdown renders a skeleton for each org while they land.
  */
 
 import { ref, computed } from "vue"
 import { useRouter } from "vue-router"
-import { Dropdown, Menu, Avatar, Tag, Skeleton, Space } from "ant-design-vue"
-import { DownOutlined } from "@ant-design/icons-vue"
+import { ChevronDown } from "@lucide/vue"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useTenantStore } from "@/stores/tenant"
 import type { OrgMeta } from "@/stores/tenant"
 import { useOrgsStore } from "@/stores/orgs"
@@ -49,64 +60,39 @@ function selectOrg(orgId: string): void {
   }
 }
 
-defineExpose({ metaFor, onOpenChange })
+defineExpose({ metaFor, onOpenChange, selectOrg })
 </script>
 
 <template>
-  <Dropdown v-if="currentOrg" :open="open" trigger="click" @open-change="onOpenChange">
-    <button type="button" class="org-switcher ds-tenant">
-      <Avatar size="small" shape="square">{{ currentOrg.name.charAt(0) }}</Avatar>
-      <span class="org-switcher__name">{{ currentOrg.name }}</span>
-      <DownOutlined />
-    </button>
-
-    <template #overlay>
-      <Menu @click="({ key }) => selectOrg(String(key))">
-        <Menu.Item v-for="org in orgs" :key="org.id">
-          <div class="org-option">
-            <span class="org-option__name">{{ org.name }}</span>
-
-            <!-- Metadata arrives after the menu paints; hold the space. -->
-            <Skeleton
-              v-if="!metaFor(org.id)"
-              active
-              :title="false"
-              :paragraph="{ rows: 1, width: 120 }"
-            />
-            <Space v-else size="small" class="ds-mono">
-              <span>{{ metaFor(org.id)?.memberCount }} members</span>
-              <Tag v-if="metaFor(org.id)?.roleName">{{ metaFor(org.id)?.roleName }}</Tag>
-            </Space>
-          </div>
-        </Menu.Item>
-      </Menu>
-    </template>
-  </Dropdown>
+  <DropdownMenu v-if="currentOrg" :open="open" @update:open="onOpenChange">
+    <DropdownMenuTrigger as-child>
+      <Button variant="ghost" class="org-switcher gap-2 px-2">
+        <Avatar class="size-6">
+          <AvatarFallback class="text-xs">{{ currentOrg.name.charAt(0) }}</AvatarFallback>
+        </Avatar>
+        <span class="max-w-[160px] truncate font-medium">{{ currentOrg.name }}</span>
+        <ChevronDown class="size-4 text-muted-foreground" />
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="start" class="w-64">
+      <DropdownMenuLabel>Organizations</DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        v-for="org in orgs"
+        :key="org.id"
+        class="flex items-start justify-between gap-3"
+        @select="selectOrg(org.id)"
+      >
+        <span class="truncate">{{ org.name }}</span>
+        <!-- Metadata arrives after the menu paints; hold the space. -->
+        <span v-if="metaFor(org.id)" class="flex items-center gap-2 text-xs text-muted-foreground">
+          {{ metaFor(org.id)?.memberCount }} members
+          <Badge v-if="metaFor(org.id)?.roleName" variant="secondary">
+            {{ metaFor(org.id)?.roleName }}
+          </Badge>
+        </span>
+        <Skeleton v-else class="h-4 w-20" />
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
 </template>
-
-<style scoped>
-/* .ds-tenant supplies the --teal-50 fill and --teal-300 border. Teal is also
-   colorPrimary, so tenant chrome needs that extra tint to stay distinguishable
-   from ordinary primary elements. */
-.org-switcher {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  font: inherit;
-  color: var(--text-primary);
-}
-
-.org-switcher__name {
-  font-weight: 600;
-}
-
-.org-option {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 200px;
-}
-</style>

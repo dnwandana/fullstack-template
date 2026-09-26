@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * TopBar — 56px white header (artboard 05).
+ * TopBar — 56px header.
  *
  * Composition only, with one piece of logic: the "/" between the switchers has
  * to disappear with ProjectSwitcher, which hides itself when no project is
@@ -9,16 +9,15 @@
 
 import { computed } from "vue"
 import { RouterLink } from "vue-router"
-import { MenuOutlined, AppstoreOutlined } from "@ant-design/icons-vue"
+import { LayoutGrid } from "@lucide/vue"
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import { SidebarTrigger } from "@/components/ui/sidebar"
 import { useTenantStore } from "@/stores/tenant"
 import OrgSwitcher from "./OrgSwitcher.vue"
 import ProjectSwitcher from "./ProjectSwitcher.vue"
 import InvitationsBell from "./InvitationsBell.vue"
 import UserMenu from "./UserMenu.vue"
-
-defineEmits<{
-  "toggle-drawer": []
-}>()
 
 const tenant = useTenantStore()
 
@@ -28,95 +27,23 @@ const hasProject = computed(() => Boolean(tenant.currentProjectId))
 </script>
 
 <template>
-  <header class="top-bar">
-    <div class="top-bar__left">
-      <button
-        type="button"
-        class="top-bar__hamburger"
-        aria-label="Open navigation"
-        @click="$emit('toggle-drawer')"
-      >
-        <MenuOutlined />
-      </button>
+  <header class="flex h-14 items-center gap-2 border-b px-4">
+    <SidebarTrigger />
+    <Separator orientation="vertical" class="mx-1 h-6" />
 
-      <!-- The only way back to /orgs from inside an org: SideNav starts at
-           Projects and AppBreadcrumb roots at the org, so without this,
-           leaving an org means the browser back button or the URL bar. -->
-      <RouterLink :to="{ name: 'OrgsList' }" class="top-bar__brand" aria-label="Organizations">
-        <AppstoreOutlined />
-      </RouterLink>
+    <!-- The only way back to /orgs from inside an org: SideNav starts at
+         Projects and AppBreadcrumb roots at the org, so without this,
+         leaving an org means the browser back button or the URL bar. -->
+    <RouterLink :to="{ name: 'OrgsList' }" class="top-bar__brand" aria-label="Organizations">
+      <Button variant="ghost" size="icon" as="span"><LayoutGrid class="size-5" /></Button>
+    </RouterLink>
+    <OrgSwitcher />
+    <span v-if="hasProject" class="top-bar__sep text-muted-foreground" aria-hidden="true">/</span>
+    <ProjectSwitcher />
 
-      <OrgSwitcher />
-      <span v-if="hasProject" class="top-bar__sep" aria-hidden="true">/</span>
-      <ProjectSwitcher />
-    </div>
-
-    <div class="top-bar__right">
+    <div class="ml-auto flex items-center gap-1">
       <InvitationsBell />
       <UserMenu />
     </div>
   </header>
 </template>
-
-<style scoped>
-.top-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 56px;
-  padding: 0 16px;
-  background: var(--gray-0);
-  border-bottom: 1px solid var(--gray-150);
-}
-
-.top-bar__left,
-.top-bar__right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.top-bar__sep {
-  color: var(--gray-400);
-}
-
-.top-bar__hamburger {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border: none;
-  background: none;
-  border-radius: 6px;
-  cursor: pointer;
-  color: var(--text-secondary);
-}
-
-.top-bar__hamburger:hover {
-  background: var(--gray-100);
-}
-
-.top-bar__brand {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 6px;
-  font-size: 18px;
-  color: var(--text-secondary);
-}
-
-.top-bar__brand:hover {
-  background: var(--gray-100);
-  color: var(--text-primary);
-}
-
-/* Below 768px the sider is gone and navigation lives in a Drawer. */
-@media (max-width: 767px) {
-  .top-bar__hamburger {
-    display: inline-flex;
-  }
-}
-</style>

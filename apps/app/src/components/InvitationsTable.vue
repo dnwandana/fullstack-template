@@ -1,15 +1,15 @@
 <script setup lang="ts">
 /**
- * InvitationsTable — Displays a list of invitations in an Ant Design table.
+ * InvitationsTable — Displays a list of invitations in a shadcn Table.
  *
  * Features:
- *   - Color-coded status tags (pending, expired, accepted, declined)
+ *   - Color-coded status Badges (pending, expired, accepted, declined)
  *   - Optional revoke button with confirmation (only for pending invitations)
  *   - Optional "New link" button that reissues the invitation (pending only)
  *
  * Props:
  *   - invitations: array of invitation objects
- *   - loading: table loading state
+ *   - loading: shows a Spinner while true
  *   - canRevoke: whether to show the revoke action
  *   - canResend: whether to show the reissue ("New link") action
  *
@@ -20,11 +20,19 @@
  *   - resend(invitationId) — when the user asks for a fresh invitation link
  */
 
-import { h, computed } from "vue"
-import type { VNode } from "vue"
-import { Table, Tag, Button, Space, Popconfirm } from "ant-design-vue"
-import type { ColumnsType } from "ant-design-vue/es/table"
 import type { InvitationListItem, Wire } from "@fullstack/contracts"
+import ConfirmDialog from "@/components/ConfirmDialog.vue"
+import { Badge, type BadgeVariants } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 
 interface Props {
   invitations?: Wire<InvitationListItem>[]
@@ -33,7 +41,7 @@ interface Props {
   canResend?: boolean
 }
 
-const props = withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<Props>(), {
   invitations: () => [],
   loading: false,
   canRevoke: false,
@@ -58,19 +66,19 @@ function displayStatus(record: Wire<InvitationListItem>): string {
 }
 
 /**
- * Map a display status to an Ant Design Tag color.
+ * Map a display status to a Badge variant.
  * There is deliberately no "revoked" branch — revoking hard-deletes the row,
  * so that status can never be observed.
  */
-function statusColor(status: string): string {
-  if (status === "accepted") return "green"
-  if (status === "declined") return "red"
-  if (status === "expired") return "default"
-  return "blue"
+function statusVariant(status: string): BadgeVariants["variant"] {
+  if (status === "accepted") return "success"
+  if (status === "declined") return "destructive"
+  if (status === "expired") return "secondary"
+  return "warning"
 }
 
 /**
- * Handle invitation revocation after Popconfirm confirmation.
+ * Handle invitation revocation after the ConfirmDialog confirms.
  */
 function handleRevoke(invitationId: string): void {
   emit("revoke", invitationId)
@@ -83,118 +91,64 @@ function handleResend(invitationId: string): void {
   emit("resend", invitationId)
 }
 
-/**
- * Table column definitions.
- * The Actions column is conditionally included based on the canRevoke and
- * canResend props.
- */
-const columns = computed<ColumnsType<Wire<InvitationListItem>>>(() => {
-  const cols: ColumnsType<Wire<InvitationListItem>> = [
-    {
-      title: "Invitee",
-      key: "invitee",
-      /**
-       * Show the invitee email if available, otherwise fall back to the
-       * invitee_id (UUID) for legacy rows without an email.
-       */
-      customRender: ({ record }) => {
-        if (record.invitee_email) {
-          return record.invitee_email
-        }
-        return record.invitee_id
-      },
-    },
-    {
-      title: "Status",
-      dataIndex: "status",
-      key: "status",
-      // Render a color-coded tag based on the derived display status, so an
-      // elapsed expiry reads as "expired" rather than "pending"
-      customRender: ({ record }) => {
-        const status = displayStatus(record)
-        return h(Tag, { color: statusColor(status) }, () => status)
-      },
-    },
-    {
-      title: "Expires",
-      dataIndex: "expires_at",
-      key: "expires_at",
-      // Format the ISO timestamp as a locale date string
-      customRender: ({ text }) => {
-        if (text) {
-          return new Date(text).toLocaleDateString()
-        }
-        return "—"
-      },
-    },
-    {
-      title: "Created",
-      dataIndex: "created_at",
-      key: "created_at",
-      // Format the ISO timestamp as a locale date string
-      customRender: ({ text }) => {
-        if (text) {
-          return new Date(text).toLocaleDateString()
-        }
-        return "—"
-      },
-    },
-  ]
-
-  // Only add the Actions column when the consumer enables at least one action
-  if (props.canRevoke || props.canResend) {
-    cols.push({
-      title: "Actions",
-      key: "actions",
-      /**
-       * Actions apply only to invitations that are still pending in the
-       * database. Note this checks the stored status, not displayStatus —
-       * an expired invitation is still stored as pending, and reissuing it
-       * is exactly the recovery path for one, so its actions must stay live.
-       * Accepted and declined invitations are terminal.
-       */
-      customRender: ({ record }) => {
-        if (record.status !== "pending") {
-          return null
-        }
-        const actions: VNode[] = []
-
-        if (props.canResend) {
-          actions.push(
-            h(Button, { size: "small", onClick: () => handleResend(record.id) }, () => "New link"),
-          )
-        }
-
-        if (props.canRevoke) {
-          actions.push(
-            h(
-              Popconfirm,
-              {
-                title: "Are you sure you want to revoke this invitation?",
-                okText: "Yes",
-                cancelText: "No",
-                onConfirm: () => handleRevoke(record.id),
-              },
-              () => h(Button, { danger: true, size: "small" }, () => "Revoke"),
-            ),
-          )
-        }
-
-        return h(Space, null, () => actions)
-      },
-    })
-  }
-
-  return cols
-})
+function formatDate(iso: string | null | undefined): string {
+  return iso ? new Date(iso).toLocaleDateString() : "—"
+}
 </script>
 
 <template>
-  <Table
-    :columns="columns"
-    :data-source="invitations"
-    :loading="loading"
-    :row-key="(record) => record.id"
-    :pagination="false"
-  />
+  <div class="relative rounded-md border">
+    <Spinner v-if="loading" class="absolute top-2 right-2" />
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Invitee</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead>Expires</TableHead>
+          <TableHead>Created</TableHead>
+          <TableHead v-if="canRevoke || canResend">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableRow v-for="invitation in invitations" :key="invitation.id">
+          <!-- Legacy rows have no email, so fall back to the invitee id. -->
+          <TableCell>{{ invitation.invitee_email || invitation.invitee_id }}</TableCell>
+          <TableCell>
+            <!-- The derived status shows an elapsed expiry as "expired", not "pending". -->
+            <Badge :variant="statusVariant(displayStatus(invitation))">
+              {{ displayStatus(invitation) }}
+            </Badge>
+          </TableCell>
+          <TableCell>{{ formatDate(invitation.expires_at) }}</TableCell>
+          <TableCell>{{ formatDate(invitation.created_at) }}</TableCell>
+          <TableCell v-if="canRevoke || canResend">
+            <!--
+              Actions check the stored status, not displayStatus. An expired invitation
+              is still stored as pending, and a new link is the recovery path for it.
+              Accepted and declined invitations are terminal.
+            -->
+            <div v-if="invitation.status === 'pending'" class="flex items-center gap-2">
+              <Button
+                v-if="canResend"
+                size="sm"
+                variant="outline"
+                @click="handleResend(invitation.id)"
+              >
+                New link
+              </Button>
+              <ConfirmDialog
+                v-if="canRevoke"
+                title="Are you sure you want to revoke this invitation?"
+                confirm-label="Yes"
+                destructive
+                @confirm="handleRevoke(invitation.id)"
+              >
+                <Button variant="destructive" size="sm">Revoke</Button>
+              </ConfirmDialog>
+            </div>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
+  </div>
 </template>

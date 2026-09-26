@@ -1,24 +1,30 @@
 <script setup lang="ts">
 /**
- * ProjectSwitcher — top-bar project dropdown (artboard 05).
+ * ProjectSwitcher — top-bar project dropdown.
  *
  * No avatar mark and no metadata sub-lines: the project is subordinate to the
  * org in the trail, and GET /orgs/:orgId/projects already returns everything
  * the list needs. Hidden entirely when no project is selected.
  */
 
-import { ref, computed, watch } from "vue"
+import { computed, watch } from "vue"
 import { useRouter } from "vue-router"
-import { Dropdown, Menu } from "ant-design-vue"
-import { DownOutlined } from "@ant-design/icons-vue"
+import { ChevronDown } from "@lucide/vue"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useTenantStore } from "@/stores/tenant"
 import { useProjectsStore } from "@/stores/projects"
 
 const router = useRouter()
 const tenant = useTenantStore()
 const projectsStore = useProjectsStore()
-
-const open = ref(false)
 
 const currentProject = computed(() => tenant.currentProject)
 const projects = computed(() => projectsStore.projects)
@@ -34,7 +40,6 @@ watch(
 )
 
 function selectProject(projectId: string): void {
-  open.value = false
   if (projectId === tenant.currentProjectId) return
   router.push({
     name: "TodosList",
@@ -46,44 +51,23 @@ defineExpose({ selectProject })
 </script>
 
 <template>
-  <Dropdown v-if="currentProject" v-model:open="open" trigger="click">
-    <button type="button" class="project-switcher">
-      <span class="project-switcher__name">{{ currentProject.name }}</span>
-      <DownOutlined />
-    </button>
-
-    <template #overlay>
-      <Menu
-        :selected-keys="tenant.currentProjectId ? [tenant.currentProjectId] : []"
-        @click="({ key }) => selectProject(String(key))"
+  <DropdownMenu v-if="currentProject">
+    <DropdownMenuTrigger as-child>
+      <Button variant="ghost" class="project-switcher gap-2 px-2">
+        <span class="max-w-[160px] truncate font-medium">{{ currentProject.name }}</span>
+        <ChevronDown class="size-4 text-muted-foreground" />
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="start" class="w-56">
+      <DropdownMenuLabel>Projects</DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        v-for="project in projects"
+        :key="project.id"
+        @select="selectProject(project.id)"
       >
-        <Menu.Item v-for="project in projects" :key="project.id">
-          {{ project.name }}
-        </Menu.Item>
-      </Menu>
-    </template>
-  </Dropdown>
+        <span class="truncate">{{ project.name }}</span>
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
 </template>
-
-<style scoped>
-.project-switcher {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  border: none;
-  background: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font: inherit;
-  color: var(--text-primary);
-}
-
-.project-switcher__name {
-  font-weight: 600;
-}
-
-.project-switcher:hover {
-  background: var(--gray-100);
-}
-</style>
