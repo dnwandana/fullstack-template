@@ -51,6 +51,26 @@ export default defineConfigWithVueTs([
 
   js.configs.recommended,
   ...pluginVue.configs['flat/essential'],
+  {
+    name: 'app/shadcn-ui',
+    files: ['src/components/ui/**/*.vue'],
+    rules: { 'vue/multi-word-component-names': 'off' },
+  },
+  {
+    name: 'app/no-antd',
+    files: ['src/**/*.{ts,vue}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'ant-design-vue', message: 'The app uses shadcn-vue. See src/components/ui.' },
+            { name: '@ant-design/icons-vue', message: 'The app uses @lucide/vue.' },
+          ],
+        },
+      ],
+    },
+  },
   vueTsConfigs.recommended,
 
   skipFormatting,
