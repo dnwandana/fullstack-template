@@ -7,7 +7,7 @@ A production-ready monorepo for building multi-tenant SaaS applications. Combine
 | Package              | Stack                                          | Purpose                                 |
 | -------------------- | ---------------------------------------------- | --------------------------------------- |
 | `apps/api`           | NestJS 12, PostgreSQL, Prisma, Redis           | REST API with auth, RBAC, multi-tenancy |
-| `apps/app`           | Vue 3, TypeScript, Pinia, Ant Design Vue, Vite | Single-page app consuming the API       |
+| `apps/app`           | Vue 3, TypeScript, Pinia, shadcn-vue, Vite     | Single-page app consuming the API       |
 | `packages/contracts` | TypeScript declarations only, no deps          | Response shapes shared by API and SPA   |
 
 ## Documentation map
@@ -406,8 +406,9 @@ fullstack-template/
 │           ├── components/         # Reusable UI components
 │           ├── router/             # Vue Router + auth guards
 │           ├── utils/              # Fetch client, localStorage helpers
-│           ├── theme/              # antd.ts — design tokens fed to ConfigProvider
-│           └── assets/             # app.css + design-system/ (tokens, web fonts)
+│           ├── schemas/            # Zod schemas, one file per form
+│           ├── components/ui/      # generated shadcn-vue components
+│           └── assets/             # tailwind.css: theme tokens and base layer
 │
 ├── packages/
 │   └── contracts/                  # @fullstack/contracts — dependency-free response-shape types

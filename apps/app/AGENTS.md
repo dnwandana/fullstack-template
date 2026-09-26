@@ -5,8 +5,8 @@ Facts and invariants for `apps/app`. Commands, setup and the project tree are in
 
 ## Scope
 
-Vue 3 + Vite + TypeScript SPA. Pinia setup stores, composables, Ant Design Vue, Vue Router, and a
-custom fetch client in `src/utils/http.ts`. The dev server port 8080 must match the API's
+Vue 3 + Vite + TypeScript SPA. Pinia setup stores, composables, shadcn-vue on reka-ui and Tailwind
+CSS v4, Vue Router, and a custom fetch client in `src/utils/http.ts`. The dev server port 8080 must match the API's
 `CORS_ALLOWED_ORIGINS`.
 
 ## Layers
@@ -49,15 +49,18 @@ below it. Views hold no HTTP calls. Stores hold no modal state. Composables expo
 
 ## Components and theme
 
-- **Never pass a `#bodyCell` `record` to a typed handler.** It is `Record<string, any>`. Pass
-  `record.id` and look the row up in `data-source`.
-- `MembersTable` shows the Actions column only when `canRemove`, and the role dropdown only when
+- `src/components/ui/` holds generated shadcn-vue components. Add one with
+  `corepack pnpm dlx shadcn-vue@latest add <name>`. The app lint rules do not apply to this folder.
+- Theme tokens live in `src/assets/tailwind.css`. It is the only stylesheet import. The `.dark`
+  block is unused because nothing toggles dark mode.
+- The status tokens `success`, `warning` and `info` are for `Badge` variants only.
+- Forms use VeeValidate with Zod schemas in `src/schemas/`.
+- Toasts come from `vue-sonner`. The `Toaster` is mounted once in `App.vue`.
+- `eslint.config.js` bans imports of `ant-design-vue` and `@ant-design/icons-vue` in `src/`. Use
+  `@lucide/vue` for icons.
+- Form modals take an `open` prop, not `visible`.
+- `MembersTable` shows the Actions column only when `canRemove`, and the role Select only when
   `canUpdateRole`.
-- `src/assets/design-system/` is a vendored copy. Prettier ignores it. Do not edit it here.
-- `src/theme/antd.ts` mirrors the design-system tokens, and `theme/__tests__/antd.test.ts` pins
-  them. `fontFamilyCode` stays behind `@ts-expect-error` on purpose.
-- The CSS import order in `main.ts` is load-bearing: antd reset, then design system, then
-  `app.css`.
 - `api/roles.ts` maps the form key `permissions` to the wire key `permission_ids` in
   `toRequestBody`.
 
@@ -71,20 +74,29 @@ below it. Views hold no HTTP calls. Stores hold no modal state. Composables expo
   `eslint.config.js` is the one deliberate `.js`.
 - Consume `Wire<Entity>` from `@fullstack/contracts`, never the bare entity type. `Date` fields
   arrive as strings.
-- `src/` has no `any`, no `as` and no `!`. Two justified `@ts-expect-error` directives survive
-  (`theme/antd.ts`, `InviteFormModal.vue`). Leave them.
+- `src/` has no `any`, no `as` and no `!`, except in the vendored `src/components/ui/` folder and in
+  test files. No `@ts-expect-error` directive remains.
 
 ## Testing
 
 - Vitest, jsdom, `globals: true`. Tests live in `__tests__/` beside the code. Glob:
   `src/**/*.test.ts`.
 - **Mock exactly one boundary: `@/utils/http`.** Composables, stores and api modules run for real.
-  Also mock `vue-router` and the antd `message`. Leave `@/utils/storage` real.
+  Also mock `vue-router` and `vue-sonner`:
+  `vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))`. Leave
+  `@/utils/storage` real.
 - Build mocked responses with the factories in `src/test/fixtures.ts` (`makeX`, `ok`,
   `okPaginated`), never with object literals. `makeInvitationPreview` deliberately does not spread
   `makeInvitation`.
-- Reach the mock through `vi.mocked(request.get)`, not a cast. A component test that mounts an antd
-  grid must stub `window.matchMedia`.
+- Reach the mock through `vi.mocked(request.get)`, not a cast.
+- `src/test/setup.ts` stubs `matchMedia`, `ResizeObserver`, `scrollIntoView` and
+  `hasPointerCapture` for every test. Do not stub them again, except to pick a viewport.
+- Reka portals render into `document.body`. Mount dialog and menu tests with
+  `attachTo: document.body` and query `document.body`. A component that uses `Sidebar*` mounts
+  inside `SidebarProvider`. A `matchMedia` stub that a test adds must return `matches`,
+  `addEventListener` and `removeEventListener`.
+- After a VeeValidate submit, wait with `await vi.waitFor(() => expect(...))`. The Zod parse is
+  async, so `flushPromises()` alone is not enough.
 - Give each test a fresh Pinia: `setActivePinia(createPinia())`, or pass `createPinia()` in
   `mount` plugins.
 

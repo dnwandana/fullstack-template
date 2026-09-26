@@ -53,7 +53,8 @@ implements the same auth and todo contract and works as an alternative — see
 | TypeScript     | `strict` throughout `src/`, checked by `vue-tsc`    |
 | Vite           | Next-generation frontend tooling                    |
 | Pinia          | State management                                    |
-| Ant Design Vue | UI component library                                |
+| VeeValidate    | Forms, with Zod schemas                             |
+| shadcn-vue     | UI components on reka-ui and Tailwind CSS v4        |
 | Fetch API      | Native HTTP client with cookie-based auth           |
 | Vue Router     | Client-side routing with guards                     |
 
@@ -153,7 +154,7 @@ vitest projects) and checked with `vue-tsc -b`. Every SFC is `<script setup lang
 lint config rejects one that is not. API response types come from the workspace package
 [`@fullstack/contracts`](../../packages/contracts), consumed as `Wire<Entity>` because `Date` fields
 arrive over the wire as strings. The traps worth knowing before you add a file — which config owns
-which glob, why `node` types are kept out of the app project, and the two deliberate type
+which glob, why `node` types are kept out of the app project, and the rule on type
 suppressions — are in [`AGENTS.md`](AGENTS.md#typescript).
 
 ## Browser DevTools Setup
