@@ -1,5 +1,5 @@
 import type { ErrorEnvelope } from "@fullstack/contracts"
-import { message } from "ant-design-vue"
+import { toast } from "vue-sonner"
 import { clearUserData } from "./storage"
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE"
@@ -217,7 +217,7 @@ async function send<E>(
 
       // Show error toast for non-401 errors (matches current axios interceptor behavior)
       if (response.status !== 401) {
-        message.error(errorMessage)
+        toast.error(errorMessage)
       }
 
       throw new HttpError(response.status, errorData, errorMessage)

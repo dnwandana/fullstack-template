@@ -7,7 +7,7 @@
 import type { Envelope, PaginatedEnvelope, PaginationMeta, Todo, Wire } from "@fullstack/contracts"
 import { defineStore } from "pinia"
 import { ref, computed } from "vue"
-import { message } from "ant-design-vue"
+import { toast } from "vue-sonner"
 import {
   getTodos as apiGetTodos,
   getTodoById as apiGetTodoById,
@@ -156,7 +156,7 @@ export const useTodosStore = defineStore("todos", () => {
     try {
       const { org, project } = ctx()
       const response = await apiCreateTodo(org, project, data)
-      message.success("Todo created successfully!")
+      toast.success("Todo created successfully!")
       // Refresh the list so the new item appears immediately
       await fetchTodos()
       return response.data
@@ -173,7 +173,7 @@ export const useTodosStore = defineStore("todos", () => {
     try {
       const { org, project } = ctx()
       const response = await apiUpdateTodo(org, project, todoId, data)
-      message.success("Todo updated successfully!")
+      toast.success("Todo updated successfully!")
       // Refresh the list to reflect the changes
       await fetchTodos()
       return response.data
@@ -190,7 +190,7 @@ export const useTodosStore = defineStore("todos", () => {
     try {
       const { org, project } = ctx()
       const response = await apiDeleteTodo(org, project, todoId)
-      message.success("Todo deleted successfully!")
+      toast.success("Todo deleted successfully!")
       // Refresh the list to remove the deleted item
       await fetchTodos()
       return response.data
@@ -214,7 +214,7 @@ export const useTodosStore = defineStore("todos", () => {
     try {
       const { org, project } = ctx()
       const response = await apiDeleteTodos(org, project, idsToDelete)
-      message.success(`${idsToDelete.length} todo(s) deleted successfully!`)
+      toast.success(`${idsToDelete.length} todo(s) deleted successfully!`)
       // Clear selection and refresh the list
       selectedIds.value = []
       await fetchTodos()

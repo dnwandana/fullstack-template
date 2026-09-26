@@ -5,7 +5,7 @@
 import type { Envelope, User, Wire } from "@fullstack/contracts"
 import { defineStore } from "pinia"
 import { ref, computed } from "vue"
-import { message } from "ant-design-vue"
+import { toast } from "vue-sonner"
 import {
   signup as apiSignup,
   signin as apiSignin,
@@ -56,7 +56,7 @@ export const useAuthStore = defineStore("auth", () => {
     loading.value = true
     try {
       const response = await apiSignup(name, email, password, confirmation_password)
-      message.success("Account created successfully! Please sign in.")
+      toast.success("Account created successfully! Please sign in.")
       return response.data
     } catch (error) {
       const errorMsg =
@@ -81,7 +81,7 @@ export const useAuthStore = defineStore("auth", () => {
       setUserData(userData)
       user.value = userData
 
-      message.success("Signed in successfully!")
+      toast.success("Signed in successfully!")
       return response.data
     } catch (error) {
       const errorMsg =
@@ -123,7 +123,7 @@ export const useAuthStore = defineStore("auth", () => {
       // that still thinks it is signed in.
     }
 
-    message.success("Logged out successfully")
+    toast.success("Logged out successfully")
   }
 
   return {

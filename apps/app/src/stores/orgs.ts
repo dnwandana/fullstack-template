@@ -5,7 +5,7 @@
 import type { Envelope, Org, Wire } from "@fullstack/contracts"
 import { defineStore } from "pinia"
 import { ref } from "vue"
-import { message } from "ant-design-vue"
+import { toast } from "vue-sonner"
 import {
   getOrgs as apiGetOrgs,
   getOrg as apiGetOrg,
@@ -62,7 +62,7 @@ export const useOrgsStore = defineStore("orgs", () => {
     loading.value = true
     try {
       const response = await apiCreateOrg(data)
-      message.success("Organization created successfully!")
+      toast.success("Organization created successfully!")
       // Refresh the list to include the newly created org
       await fetchOrgs()
       return response.data
@@ -83,7 +83,7 @@ export const useOrgsStore = defineStore("orgs", () => {
     loading.value = true
     try {
       const response = await apiUpdateOrg(orgId, data)
-      message.success("Organization updated successfully!")
+      toast.success("Organization updated successfully!")
       // Keep currentOrg in sync with the latest data
       currentOrg.value = response.data.data
       return response.data
@@ -101,7 +101,7 @@ export const useOrgsStore = defineStore("orgs", () => {
     loading.value = true
     try {
       const response = await apiDeleteOrg(orgId)
-      message.success("Organization deleted successfully!")
+      toast.success("Organization deleted successfully!")
       // Refresh the list to remove the deleted org
       await fetchOrgs()
       return response.data

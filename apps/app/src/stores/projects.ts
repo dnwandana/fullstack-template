@@ -5,7 +5,7 @@
 import type { Envelope, Project, Wire } from "@fullstack/contracts"
 import { defineStore } from "pinia"
 import { ref } from "vue"
-import { message } from "ant-design-vue"
+import { toast } from "vue-sonner"
 import {
   getProjects as apiGetProjects,
   getProject as apiGetProject,
@@ -68,7 +68,7 @@ export const useProjectsStore = defineStore("projects", () => {
     loading.value = true
     try {
       const response = await apiCreateProject(orgId, data)
-      message.success("Project created successfully!")
+      toast.success("Project created successfully!")
       // Refresh the list to include the newly created project
       await fetchProjects(orgId)
       return response.data
@@ -90,7 +90,7 @@ export const useProjectsStore = defineStore("projects", () => {
     loading.value = true
     try {
       const response = await apiUpdateProject(orgId, projectId, data)
-      message.success("Project updated successfully!")
+      toast.success("Project updated successfully!")
       // Keep currentProject in sync with the latest data
       currentProject.value = response.data.data
       return response.data
@@ -111,7 +111,7 @@ export const useProjectsStore = defineStore("projects", () => {
     loading.value = true
     try {
       const response = await apiDeleteProject(orgId, projectId)
-      message.success("Project deleted successfully!")
+      toast.success("Project deleted successfully!")
       // Refresh the list to remove the deleted project
       await fetchProjects(orgId)
       return response.data

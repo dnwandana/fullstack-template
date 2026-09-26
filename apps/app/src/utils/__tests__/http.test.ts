@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 
 vi.mock("../storage", () => ({ clearUserData: vi.fn() }))
-vi.mock("ant-design-vue", () => ({ message: { error: vi.fn(), success: vi.fn() } }))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-import { request } from "../http"
+import { toast } from "vue-sonner"
+import { request, HttpError } from "../http"
 
 /** Minimal stand-in for the parts of fetch's Response that http.ts reads. */
 function res(status: number, body: unknown = {}) {
@@ -68,5 +69,13 @@ describe("http.ts hard-redirect on failed refresh", () => {
     await expect(request.get("/orgs")).rejects.toBeDefined()
 
     expect(window.location.href).toBe("/login") // redirected
+  })
+
+  it("toasts the error message for a non-401 failure", async () => {
+    fetchMock.mockResolvedValueOnce(res(500, { message: "Server exploded" }))
+
+    await expect(request.get("/x")).rejects.toBeInstanceOf(HttpError)
+
+    expect(toast.error).toHaveBeenCalledWith("Server exploded")
   })
 })

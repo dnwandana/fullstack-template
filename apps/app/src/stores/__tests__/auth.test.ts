@@ -3,21 +3,27 @@ import { useAuthStore } from "@/stores/auth"
 import { getUserData } from "@/utils/storage"
 import { request } from "@/utils/http"
 import { ok, makeUser } from "@/test/fixtures"
+import { toast } from "vue-sonner"
 
 vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
   request: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn(), send: vi.fn() },
 }))
 
-vi.mock("ant-design-vue", () => ({
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 describe("auth store", () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
     localStorage.clear()
+  })
+
+  it("toasts after a successful signup", async () => {
+    vi.mocked(request.post).mockResolvedValueOnce(ok(makeUser()))
+    const store = useAuthStore()
+    await store.signup("A", "a@b.co", "12345678", "12345678")
+    expect(toast.success).toHaveBeenCalledWith("Account created successfully! Please sign in.")
   })
 
   it("maps the signin response onto user state and storage", async () => {

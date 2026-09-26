@@ -4,7 +4,7 @@
 
 import { defineStore } from "pinia"
 import { ref } from "vue"
-import { message } from "ant-design-vue"
+import { toast } from "vue-sonner"
 import type {
   Envelope,
   OrgMember,
@@ -63,7 +63,7 @@ export const useMembersStore = defineStore("members", () => {
     loading.value = true
     try {
       const response = await apiUpdateOrgMemberRole(orgId, userId, roleId)
-      message.success("Member role updated successfully!")
+      toast.success("Member role updated successfully!")
       // The API returns the updated membership row (same shape as the GET
       // list), so splice it in place instead of refetching the whole list.
       const updated = response.data.data
@@ -94,7 +94,7 @@ export const useMembersStore = defineStore("members", () => {
     loading.value = true
     try {
       const response = await apiRemoveOrgMember(orgId, userId)
-      message.success("Member removed successfully!")
+      toast.success("Member removed successfully!")
       // Refresh the org members list to remove the deleted member
       await fetchOrgMembers(orgId)
       return response.data
@@ -137,7 +137,7 @@ export const useMembersStore = defineStore("members", () => {
     loading.value = true
     try {
       const response = await apiUpdateProjectMemberRole(orgId, projectId, userId, roleId)
-      message.success("Member role updated successfully!")
+      toast.success("Member role updated successfully!")
       // The API returns the updated membership row (same shape as the GET
       // list), so splice it in place instead of refetching the whole list.
       const updated = response.data.data
@@ -169,7 +169,7 @@ export const useMembersStore = defineStore("members", () => {
     loading.value = true
     try {
       const response = await apiRemoveProjectMember(orgId, projectId, userId)
-      message.success("Member removed successfully!")
+      toast.success("Member removed successfully!")
       // Refresh the project members list to remove the deleted member
       await fetchProjectMembers(orgId, projectId)
       return response.data

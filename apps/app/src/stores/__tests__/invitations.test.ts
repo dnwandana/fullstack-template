@@ -9,9 +9,7 @@ vi.mock("@/utils/http", () => ({
   request: { get: vi.fn(), post: vi.fn(), put: vi.fn(), del: vi.fn(), send: vi.fn() },
 }))
 
-vi.mock("ant-design-vue", () => ({
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 describe("invitations store", () => {
   beforeEach(() => {

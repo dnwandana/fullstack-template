@@ -5,9 +5,7 @@ import { useAuthStore } from "@/stores/auth"
 // stores/auth.test.ts is protected and does not cover logout() at all, so this
 // is a separate file rather than an edit to it.
 
-vi.mock("ant-design-vue", () => ({
-  message: { success: vi.fn(), error: vi.fn() },
-}))
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 // Simulates the failure mode logout() has to survive: stores/tenant.ts is
 // imported dynamically at call time (see auth.ts's comment on the auth <->

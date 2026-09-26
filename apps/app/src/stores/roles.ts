@@ -4,7 +4,7 @@
 
 import { defineStore } from "pinia"
 import { ref } from "vue"
-import { message } from "ant-design-vue"
+import { toast } from "vue-sonner"
 import type { Envelope, Permission, Role, Wire } from "@fullstack/contracts"
 import {
   getRoles as apiGetRoles,
@@ -72,7 +72,7 @@ export const useRolesStore = defineStore("roles", () => {
     loading.value = true
     try {
       const response = await apiCreateRole(orgId, data)
-      message.success("Role created successfully!")
+      toast.success("Role created successfully!")
       // Refresh the roles list to include the newly created role
       await fetchRoles(orgId)
       return response.data
@@ -95,7 +95,7 @@ export const useRolesStore = defineStore("roles", () => {
     loading.value = true
     try {
       const response = await apiUpdateRole(orgId, roleId, data)
-      message.success("Role updated successfully!")
+      toast.success("Role updated successfully!")
       // Refresh the roles list to reflect the changes
       await fetchRoles(orgId)
       // The role's own permission set may have just changed under any member
@@ -120,7 +120,7 @@ export const useRolesStore = defineStore("roles", () => {
     loading.value = true
     try {
       const response = await apiDeleteRole(orgId, roleId)
-      message.success("Role deleted successfully!")
+      toast.success("Role deleted successfully!")
       // Refresh the roles list to remove the deleted role
       await fetchRoles(orgId)
       return response.data

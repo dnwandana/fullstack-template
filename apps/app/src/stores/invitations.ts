@@ -4,7 +4,7 @@
 
 import { defineStore } from "pinia"
 import { ref, computed } from "vue"
-import { message } from "ant-design-vue"
+import { toast } from "vue-sonner"
 import type {
   Envelope,
   InvitationListItem,
@@ -95,7 +95,7 @@ export const useInvitationsStore = defineStore("invitations", () => {
     try {
       const response = await apiInviteToOrg(orgId, data)
       lastAcceptUrl.value = response.data.data?.accept_url ?? null
-      message.success("Invitation sent successfully!")
+      toast.success("Invitation sent successfully!")
       // Refresh the org invitations list to include the new invitation
       await fetchOrgInvitations(orgId)
       return response.data
@@ -119,7 +119,7 @@ export const useInvitationsStore = defineStore("invitations", () => {
     try {
       const response = await apiInviteToProject(orgId, projectId, data)
       lastAcceptUrl.value = response.data.data?.accept_url ?? null
-      message.success("Invitation sent successfully!")
+      toast.success("Invitation sent successfully!")
       // Refresh org invitations since project invitations appear there too
       await fetchOrgInvitations(orgId)
       return response.data
@@ -141,7 +141,7 @@ export const useInvitationsStore = defineStore("invitations", () => {
     loading.value = true
     try {
       const response = await apiAcceptInvitation(invitationId, token)
-      message.success("Invitation accepted!")
+      toast.success("Invitation accepted!")
       // Refresh the user's invitations to update the status
       await fetchMyInvitations()
       return response.data
@@ -185,7 +185,7 @@ export const useInvitationsStore = defineStore("invitations", () => {
     loading.value = true
     try {
       const response = await apiDeclineInvitation(invitationId)
-      message.success("Invitation declined")
+      toast.success("Invitation declined")
       // Refresh the user's invitations to update the status
       await fetchMyInvitations()
       return response.data
@@ -207,7 +207,7 @@ export const useInvitationsStore = defineStore("invitations", () => {
     loading.value = true
     try {
       const response = await apiRevokeInvitation(orgId, invitationId)
-      message.success("Invitation revoked")
+      toast.success("Invitation revoked")
       // Refresh the org invitations list to remove the revoked invitation
       await fetchOrgInvitations(orgId)
       return response.data
@@ -230,7 +230,7 @@ export const useInvitationsStore = defineStore("invitations", () => {
     try {
       const response = await apiResendInvitation(orgId, invitationId)
       lastAcceptUrl.value = response.data.data?.accept_url ?? null
-      message.success("New invitation link generated")
+      toast.success("New invitation link generated")
       // Refresh the org invitations list to pick up the new expiry
       await fetchOrgInvitations(orgId)
       return response.data.data
