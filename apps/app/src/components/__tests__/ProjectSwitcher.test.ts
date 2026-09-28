@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from "vitest"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
 import { nextTick } from "vue"
-import { mount } from "@vue/test-utils"
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 
 // vi.mock factories are hoisted above regular top-level statements, so a
@@ -65,6 +65,12 @@ function setup(params: { orgId: string; projectId?: string } = { orgId: "o1", pr
 
 describe("ProjectSwitcher", () => {
   beforeEach(() => setActivePinia(createPinia()))
+  afterEach(() => {
+    document.body.innerHTML = ""
+  })
+  // Hooks run in reverse order, so this unmount runs before the body is cleared. Each setup()
+  // changes the shared route, and a wrapper that is still mounted then patches its portal.
+  enableAutoUnmount(afterEach)
 
   it("shows the current project name", () => {
     setup()
@@ -110,5 +116,26 @@ describe("ProjectSwitcher", () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(2)
     expect(fetchSpy).toHaveBeenCalledWith("o2")
+  })
+
+  it("truncates the name at 88 px below md", () => {
+    setup()
+    const name = mount(ProjectSwitcher).find('[data-slot="project-name"]')
+    expect(name.classes()).toEqual(expect.arrayContaining(["max-w-[88px]", "md:max-w-[160px]"]))
+  })
+
+  it("opens a 240 px menu with a check on the current project", async () => {
+    setup()
+    const wrapper = mount(ProjectSwitcher, { attachTo: document.body })
+    await wrapper.find(".project-switcher").trigger("keydown", { key: "Enter" })
+    await flushPromises()
+
+    const menu = document.body.querySelector('[data-slot="project-menu"]')
+    expect(menu?.className).toContain("w-[240px]")
+    const items = document.body.querySelectorAll('[data-slot="project-item"]')
+    expect(items[0]?.getAttribute("data-current")).toBe("true")
+    expect(items[0]?.querySelector("svg")).not.toBeNull()
+    expect(items[0]?.className).toContain("font-medium")
+    expect(items[1]?.getAttribute("data-current")).toBe("false")
   })
 })

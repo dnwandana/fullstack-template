@@ -9,14 +9,13 @@
 
 import { computed, watch } from "vue"
 import { useRouter } from "vue-router"
-import { ChevronDown } from "@lucide/vue"
+import { Check, ChevronsUpDown } from "@lucide/vue"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useTenantStore } from "@/stores/tenant"
@@ -53,19 +52,25 @@ defineExpose({ selectProject })
 <template>
   <DropdownMenu v-if="currentProject">
     <DropdownMenuTrigger as-child>
-      <Button variant="ghost" class="project-switcher gap-2 px-2">
-        <span class="max-w-[160px] truncate font-medium">{{ currentProject.name }}</span>
-        <ChevronDown class="size-4 text-muted-foreground" />
+      <Button variant="ghost" size="sm" class="project-switcher gap-2 px-2">
+        <span data-slot="project-name" class="max-w-[88px] truncate font-medium md:max-w-[160px]">{{
+          currentProject.name
+        }}</span>
+        <ChevronsUpDown class="size-4 text-muted-foreground" />
       </Button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="start" class="w-56">
+    <DropdownMenuContent data-slot="project-menu" align="start" class="w-[240px]">
       <DropdownMenuLabel>Projects</DropdownMenuLabel>
-      <DropdownMenuSeparator />
       <DropdownMenuItem
         v-for="project in projects"
         :key="project.id"
+        data-slot="project-item"
+        :data-current="project.id === currentProject.id"
+        :class="project.id === currentProject.id && 'font-medium'"
         @select="selectProject(project.id)"
       >
+        <Check v-if="project.id === currentProject.id" />
+        <span v-else class="size-4 shrink-0" aria-hidden="true" />
         <span class="truncate">{{ project.name }}</span>
       </DropdownMenuItem>
     </DropdownMenuContent>

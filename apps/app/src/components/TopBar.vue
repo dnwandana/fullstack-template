@@ -27,18 +27,23 @@ const hasProject = computed(() => Boolean(tenant.currentProjectId))
 </script>
 
 <template>
-  <header class="flex h-14 items-center gap-2 border-b px-4">
-    <SidebarTrigger />
-    <Separator orientation="vertical" class="mx-1 h-6" />
+  <header class="flex h-14 min-w-0 shrink-0 items-center gap-1 border-b bg-background px-3">
+    <SidebarTrigger class="h-8 w-8" />
+    <Separator orientation="vertical" class="mx-1.5 h-5" />
 
     <!-- The only way back to /orgs from inside an org: SideNav starts at
          Projects and AppBreadcrumb roots at the org, so without this,
          leaving an org means the browser back button or the URL bar. -->
     <RouterLink :to="{ name: 'OrgsList' }" class="top-bar__brand" aria-label="Organizations">
-      <Button variant="ghost" size="icon" as="span"><LayoutGrid class="size-5" /></Button>
+      <Button variant="ghost" size="icon-sm" as="span"><LayoutGrid /></Button>
     </RouterLink>
     <OrgSwitcher />
-    <span v-if="hasProject" class="top-bar__sep text-muted-foreground" aria-hidden="true">/</span>
+    <span
+      v-if="hasProject"
+      class="top-bar__sep -mx-0.5 text-[18px] font-light text-input"
+      aria-hidden="true"
+      >/</span
+    >
     <ProjectSwitcher />
 
     <div class="ml-auto flex items-center gap-1">

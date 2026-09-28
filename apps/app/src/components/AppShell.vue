@@ -12,6 +12,7 @@ import { useMediaQuery } from "@vueuse/core"
 import { useTenantStore } from "@/stores/tenant"
 import { Sidebar, SidebarContent, SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import SideNav from "./SideNav.vue"
+import SidebarBrand from "./SidebarBrand.vue"
 import TopBar from "./TopBar.vue"
 import AppBreadcrumb from "./AppBreadcrumb.vue"
 
@@ -90,17 +91,18 @@ defineExpose({ collapsed, toggleCollapsed })
 <template>
   <SidebarProvider v-model:open="sidebarOpen">
     <Sidebar collapsible="icon">
+      <SidebarBrand />
       <SidebarContent>
         <SideNav />
       </SidebarContent>
     </Sidebar>
     <!-- SidebarInset already renders the main landmark. -->
-    <SidebarInset>
+    <SidebarInset class="min-w-0">
       <TopBar />
-      <div class="px-6 pt-3">
+      <div class="px-4 pt-3 md:px-6">
         <AppBreadcrumb />
       </div>
-      <div class="flex-1 px-6 pt-4 pb-8">
+      <div data-slot="shell-content" class="min-w-0 flex-1 px-4 pt-4 pb-12 md:px-6">
         <RouterView />
       </div>
     </SidebarInset>

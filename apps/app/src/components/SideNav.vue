@@ -134,6 +134,7 @@ defineExpose({ items, selectedKeys })
             as-child
             :is-active="selectedKeys.includes(item.key)"
             :tooltip="item.label"
+            class="[&>svg]:text-muted-foreground data-[active=true]:[&>svg]:text-foreground"
           >
             <RouterLink :to="{ name: item.key, params }">
               <component :is="item.icon" />
@@ -144,4 +145,12 @@ defineExpose({ items, selectedKeys })
       </SidebarMenu>
     </SidebarGroup>
   </nav>
+  <div
+    v-else-if="!tenant.currentOrgId"
+    data-slot="no-org-card"
+    class="m-2 rounded-lg border border-dashed p-3 group-data-[collapsible=icon]:hidden"
+  >
+    <p class="text-sm font-medium">No organization open</p>
+    <p class="mt-1 text-[13px] text-muted-foreground">Open an organization to see its pages.</p>
+  </div>
 </template>

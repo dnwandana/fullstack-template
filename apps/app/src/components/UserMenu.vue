@@ -7,26 +7,31 @@
 
 import { computed } from "vue"
 import { useRouter } from "vue-router"
-import { LogOut } from "@lucide/vue"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { LogOut, Monitor, Moon, Sun } from "@lucide/vue"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useTheme } from "@/composables/useTheme"
 import { useAuthStore } from "@/stores/auth"
+import UserAvatar from "./UserAvatar.vue"
 
 const router = useRouter()
 const authStore = useAuthStore()
 
-const currentUser = computed(() => authStore.currentUser)
+const { mode } = useTheme()
 
-/** First letter of the display name, for the avatar. */
-const initial = computed(() => currentUser.value?.name?.charAt(0)?.toUpperCase() ?? "")
+const currentUser = computed(() => authStore.currentUser)
 
 /**
  * Sign out, then navigate.
@@ -45,23 +50,54 @@ defineExpose({ handleLogout })
 <template>
   <DropdownMenu v-if="currentUser">
     <DropdownMenuTrigger as-child>
-      <Button variant="ghost" class="user-menu gap-2 px-2">
-        <Avatar class="size-7">
-          <AvatarFallback class="text-xs">{{ initial }}</AvatarFallback>
-        </Avatar>
-        <span class="hidden max-w-[140px] truncate sm:inline">{{ currentUser.name }}</span>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="user-menu gap-2 pr-2 pl-1 max-sm:rounded-full max-sm:px-0.5"
+        :aria-label="`Account: ${currentUser.name}`"
+      >
+        <UserAvatar :name="currentUser.name" :size="28" />
+        <span
+          data-slot="user-trigger-name"
+          class="hidden max-w-[140px] truncate font-medium sm:inline"
+          >{{ currentUser.name }}</span
+        >
       </Button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent align="end" class="w-56">
-      <DropdownMenuLabel class="font-normal">
-        <div class="flex flex-col gap-0.5">
-          <span class="font-medium">{{ currentUser.name }}</span>
-          <span class="font-mono text-xs text-muted-foreground">{{ currentUser.email }}</span>
-        </div>
+    <DropdownMenuContent data-slot="user-menu" align="end" class="w-[240px]">
+      <DropdownMenuLabel class="grid gap-0.5 px-2 pt-1.5 pb-2 text-sm text-foreground">
+        <span data-slot="user-name" class="truncate font-semibold">{{ currentUser.name }}</span>
+        <span class="truncate font-mono text-xs font-normal text-muted-foreground">{{
+          currentUser.email
+        }}</span>
       </DropdownMenuLabel>
       <DropdownMenuSeparator />
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger data-slot="theme-trigger">
+          <Sun class="size-4 dark:hidden" />
+          <Moon class="hidden size-4 dark:block" />
+          Theme
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent class="w-40">
+          <DropdownMenuRadioGroup v-model="mode">
+            <DropdownMenuRadioItem value="auto">
+              <Monitor class="size-4" />
+              System
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="light">
+              <Sun class="size-4" />
+              Light
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="dark">
+              <Moon class="size-4" />
+              Dark
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+      <DropdownMenuSeparator />
       <DropdownMenuItem @select="handleLogout">
-        <LogOut class="size-4" />
+        <LogOut />
         Logout
       </DropdownMenuItem>
     </DropdownMenuContent>

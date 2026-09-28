@@ -38,7 +38,7 @@ describe("roles store — permission cache invalidation (finding 3)", () => {
 
     const tenant = useTenantStore()
     tenant.permissions = { o1: ["org:read"] }
-    tenant.orgMeta = { o1: { memberCount: 2, roleId: "r1", roleName: "Admin" } }
+    tenant.orgMeta = { o1: { memberCount: 2, roleId: "r1", roleName: "Admin", failed: false } }
 
     const roles = useRolesStore()
     await roles.updateRole("o1", "r1", { name: "Admin", permissions: [] })

@@ -29,6 +29,8 @@ export interface OrgMeta {
   memberCount: number
   roleId: string | null
   roleName: string | null
+  /** True when the member request failed. The UI shows "-" in place of the values. */
+  failed: boolean
 }
 
 export const useTenantStore = defineStore("tenant", () => {
@@ -72,11 +74,12 @@ export const useTenantStore = defineStore("tenant", () => {
         memberCount: members.length,
         roleId: mine?.role_id ?? null,
         roleName: mine?.role_name ?? null,
+        failed: false,
       }
     } catch {
       // Never leave the key absent on failure — an absent key means "not yet
       // loaded" and would make the switcher retry on every open.
-      orgMeta.value[orgId] = { memberCount: 0, roleId: null, roleName: null }
+      orgMeta.value[orgId] = { memberCount: 0, roleId: null, roleName: null, failed: true }
     }
   }
 

@@ -29,7 +29,7 @@ import { ok, okPaginated, makeOrgMember, makeProjectMember } from "@/test/fixtur
 function seedTenant() {
   const tenant = useTenantStore()
   tenant.permissions = { o1: ["org:read"] }
-  tenant.orgMeta = { o1: { memberCount: 2, roleId: "r1", roleName: "Member" } }
+  tenant.orgMeta = { o1: { memberCount: 2, roleId: "r1", roleName: "Member", failed: false } }
   return tenant
 }
 

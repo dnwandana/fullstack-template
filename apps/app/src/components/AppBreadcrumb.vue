@@ -80,10 +80,14 @@ defineExpose({ crumbs })
       <template v-for="(crumb, index) in crumbs" :key="index">
         <BreadcrumbSeparator v-if="index > 0" />
         <BreadcrumbItem>
-          <BreadcrumbLink v-if="crumb.to" as-child>
+          <BreadcrumbLink
+            v-if="crumb.to"
+            as-child
+            class="inline-block max-w-[200px] truncate align-bottom"
+          >
             <RouterLink :to="crumb.to">{{ crumb.label }}</RouterLink>
           </BreadcrumbLink>
-          <BreadcrumbPage v-else>{{ crumb.label }}</BreadcrumbPage>
+          <BreadcrumbPage v-else class="font-medium">{{ crumb.label }}</BreadcrumbPage>
         </BreadcrumbItem>
       </template>
     </BreadcrumbList>

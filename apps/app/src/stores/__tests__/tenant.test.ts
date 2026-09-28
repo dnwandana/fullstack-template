@@ -86,7 +86,39 @@ describe("tenant store", () => {
     await tenant.loadOrgMeta("o1")
     await tenant.loadOrgMeta("o1")
     expect(getCalls("/orgs/o1/members")).toBe(1)
-    expect(tenant.orgMeta.o1).toEqual({ memberCount: 2, roleId: "r-owner", roleName: "owner" })
+    expect(tenant.orgMeta.o1).toEqual({
+      memberCount: 2,
+      roleId: "r-owner",
+      roleName: "owner",
+      failed: false,
+    })
+  })
+
+  it("marks the meta as failed when the member request rejects", async () => {
+    vi.mocked(request.get).mockRejectedValue(new Error("boom"))
+    const tenant = useTenantStore()
+    await tenant.loadOrgMeta("o1")
+    expect(tenant.orgMeta.o1).toEqual({
+      memberCount: 0,
+      roleId: null,
+      roleName: null,
+      failed: true,
+    })
+  })
+
+  it("keeps the other orgs when one member request fails", async () => {
+    const orgs = useOrgsStore()
+    orgs.orgs = [makeOrg({ id: "o1", name: "Acme" }), makeOrg({ id: "o2", name: "Globex" })]
+    vi.mocked(request.get).mockImplementation((url) =>
+      url === "/orgs/o2/members"
+        ? Promise.reject(new Error("boom"))
+        : Promise.resolve(okPaginated(MEMBERS)),
+    )
+    const tenant = useTenantStore()
+    await tenant.loadAllOrgMeta()
+    expect(tenant.orgMeta.o1?.failed).toBe(false)
+    expect(tenant.orgMeta.o1?.memberCount).toBe(2)
+    expect(tenant.orgMeta.o2?.failed).toBe(true)
   })
 
   it("resolves permissions from cached metadata without refetching members", async () => {

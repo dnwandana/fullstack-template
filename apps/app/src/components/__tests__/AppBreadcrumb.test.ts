@@ -93,4 +93,12 @@ describe("AppBreadcrumb", () => {
     const wrapper = mountAt("ProjectSettings", { orgId: "o1", projectId: "p1" })
     expect(wrapper.vm.crumbs.at(-1)?.to).toBeNull()
   })
+
+  it("truncates the links and sets the current page in weight 500", () => {
+    const wrapper = mountAt("OrgMembers", { orgId: "o1" })
+    expect(wrapper.find("a").classes()).toEqual(
+      expect.arrayContaining(["max-w-[200px]", "truncate"]),
+    )
+    expect(wrapper.find('[aria-current="page"]').classes()).toContain("font-medium")
+  })
 })

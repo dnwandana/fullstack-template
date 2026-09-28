@@ -78,9 +78,24 @@ describe("SideNav", () => {
     expect(text).not.toContain("Roles")
   })
 
-  it("renders nothing when no org is selected", () => {
+  it("shows the no-org card when no org is selected", () => {
     const wrapper = mountWith(["org:read"], {})
-    expect(wrapper.find("nav").exists()).toBe(false)
+    expect(wrapper.find('nav[aria-label="Main"]').exists()).toBe(false)
+    const card = wrapper.find('[data-slot="no-org-card"]')
+    expect(card.text()).toContain("No organization open")
+    expect(card.text()).toContain("Open an organization to see its pages.")
+    expect(card.classes()).toContain("border-dashed")
+  })
+
+  it("does not show the card while the permissions of an open org load", () => {
+    const wrapper = mountWith([])
+    expect(wrapper.find('[data-slot="no-org-card"]').exists()).toBe(false)
+  })
+
+  it("mutes the inactive icons and keeps the active icon in the foreground color", () => {
+    const active = mountWith(["org:read"]).find('[data-active="true"]')
+    expect(active.classes()).toContain("[&>svg]:text-muted-foreground")
+    expect(active.classes()).toContain("data-[active=true]:[&>svg]:text-foreground")
   })
 
   it("marks the matched route as selected", () => {

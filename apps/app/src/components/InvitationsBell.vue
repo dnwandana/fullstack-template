@@ -2,8 +2,8 @@
 /**
  * InvitationsBell — pending-invitation count, linking to /invitations.
  *
- * A link rather than the component inventory's Badge + Dropdown: no artboard
- * shows that dropdown open, and MyInvitationsView already renders the list.
+ * A link rather than a dropdown: no artboard shows that dropdown open, and
+ * MyInvitationsView already renders the list.
  *
  * Owns its own fetch so TopBar does not have to know the badge needs data.
  */
@@ -11,7 +11,6 @@
 import { onMounted } from "vue"
 import { RouterLink } from "vue-router"
 import { Bell } from "@lucide/vue"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useInvitations } from "@/composables/useInvitations"
 
@@ -24,15 +23,14 @@ onMounted(() => {
 
 <template>
   <RouterLink :to="{ name: 'MyInvitations' }" aria-label="Invitations" class="relative inline-flex">
-    <Button variant="ghost" size="icon" as="span">
-      <Bell class="size-5" />
+    <Button variant="ghost" size="icon-sm" as="span">
+      <Bell />
     </Button>
-    <Badge
+    <span
       v-if="pendingCount > 0"
-      variant="destructive"
-      class="absolute -top-1 -right-1 h-5 min-w-5 justify-center px-1 text-[10px]"
+      data-slot="bell-count"
+      class="absolute top-px right-0 h-4 min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] leading-4 font-semibold text-destructive-foreground tabular-nums ring-2 ring-background"
+      >{{ pendingCount }}</span
     >
-      {{ pendingCount }}
-    </Badge>
   </RouterLink>
 </template>

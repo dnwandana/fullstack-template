@@ -81,6 +81,15 @@ describe("AppShell", () => {
     expect(wrapper.find(".rv").exists()).toBe(true)
   })
 
+  it("renders the brand header and a content wrapper that cannot overflow", () => {
+    const wrapper = mount(AppShell)
+    expect(wrapper.find('[data-slot="sidebar-brand"]').exists()).toBe(true)
+    const content = wrapper.find('[data-slot="shell-content"]')
+    expect(content.classes()).toEqual(
+      expect.arrayContaining(["min-w-0", "px-4", "md:px-6", "pb-12"]),
+    )
+  })
+
   it("starts expanded on a wide viewport", () => {
     expect(mount(AppShell).vm.collapsed).toBe(false)
   })

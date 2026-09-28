@@ -94,4 +94,20 @@ describe("TopBar", () => {
     expect(brand.exists()).toBe(true)
     expect(brand.props("to")).toEqual({ name: "OrgsList" })
   })
+
+  it("uses the mockup padding, gap and a thin separator", () => {
+    const wrapper = mountAt({ orgId: "o1", projectId: "p1" })
+    expect(wrapper.find("header").classes()).toEqual(expect.arrayContaining(["px-3", "gap-1"]))
+    expect(wrapper.find(".top-bar__sep").classes()).toEqual(
+      expect.arrayContaining(["text-input", "text-[18px]", "font-light"]),
+    )
+  })
+
+  it("draws the sidebar trigger and the orgs link as 32 px icon buttons", () => {
+    const wrapper = mountAt({ orgId: "o1", projectId: "p1" })
+    expect(wrapper.find('[data-sidebar="trigger"]').classes()).toEqual(
+      expect.arrayContaining(["h-8", "w-8"]),
+    )
+    expect(wrapper.find(".top-bar__brand > span").classes()).toContain("size-8")
+  })
 })

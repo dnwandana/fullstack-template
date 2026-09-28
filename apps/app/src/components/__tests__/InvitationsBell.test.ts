@@ -47,4 +47,27 @@ describe("InvitationsBell", () => {
       name: "MyInvitations",
     })
   })
+
+  it("draws a solid 16 px count badge with a background ring", async () => {
+    const wrapper = mount(InvitationsBell)
+    await vi.waitFor(() => expect(wrapper.find('[data-slot="bell-count"]').exists()).toBe(true))
+    const badge = wrapper.find('[data-slot="bell-count"]')
+    expect(badge.text()).toBe("2")
+    expect(badge.classes()).toEqual(
+      expect.arrayContaining([
+        "h-4",
+        "bg-destructive",
+        "tabular-nums",
+        "ring-2",
+        "ring-background",
+      ]),
+    )
+  })
+
+  it("hides the badge when nothing is pending", async () => {
+    vi.mocked(request.get).mockResolvedValue(ok([]))
+    const wrapper = mount(InvitationsBell)
+    await vi.waitFor(() => expect(request.get).toHaveBeenCalled())
+    expect(wrapper.find('[data-slot="bell-count"]').exists()).toBe(false)
+  })
 })
