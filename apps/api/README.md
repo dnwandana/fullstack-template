@@ -29,7 +29,7 @@ You can still run package-local commands from `apps/api` with `corepack pnpm`.
 - **Refresh Token Reuse Detection**: Refresh tokens rotate on every use. Presenting an already-revoked token revokes **all** of that user's refresh tokens, clears the cookies, and logs a warning — a replayed token cannot be used to keep a stolen session alive.
 - **Security Headers**: Helmet with strict Content Security Policy, referrer protection, and HSTS (1-year max-age with preload)
 - **CORS**: Configurable allowed origins with credentials support for cookie-based auth
-- **Rate Limiting**: `@nestjs/throttler` with a `general` limiter (`RATE_LIMIT_GENERAL_MAX`, 15-minute window) wired through `ThrottlerModule.forRootAsync`, plus a stricter class-level `@Throttle` override on the auth controller (`RATE_LIMIT_AUTH_MAX`). The health routes are exempt. Counters live in **Redis** (`@nest-lab/throttler-storage-redis`), so limits are shared across every API instance rather than counted per process.
+- **Rate Limiting**: `@nestjs/throttler` with a `general` limiter (`RATE_LIMIT_GENERAL_MAX`, 15-minute window) wired through `ThrottlerModule.forRootAsync`, plus a stricter class-level `@Throttle` override on the auth controller (`RATE_LIMIT_AUTH_MAX`). The health routes are exempt. Counters live in **Redis** (`@nest-lab/throttler-storage-redis`), so limits are shared across every API instance rather than counted per process. `THROTTLE_DISABLED=true` turns off every limit for local e2e runs. The API refuses it in production.
 - **Input Validation**: Zod request schemas, checked by a global `SchemaValidationPipe` (strict objects, so unknown keys are rejected; parsed values with defaults reach the handler); ILIKE wildcard sanitization on search
 - **Environment Validation**: Startup checks (a Zod schema) for required variables, secret strength, and placeholder detection — fail-fast before boot
 - **Body Size Limits**: 100kb cap on JSON and URL-encoded payloads
@@ -127,26 +127,27 @@ This table is the canonical environment reference for the monorepo. The root `RE
 
 Create a `.env` file in the project root with the following variables:
 
-| Variable                   | Description                                                                     | Default                            | Required |
-| -------------------------- | ------------------------------------------------------------------------------- | ---------------------------------- | -------- |
-| `NODE_ENV`                 | Environment mode — one of `development`, `production`, `test`                   | `development`                      | No       |
-| `PORT`                     | Server port — integer, 1–65535                                                  | `3000`                             | No       |
-| `DATABASE_URL`             | PostgreSQL connection string — URI with scheme `postgresql://` or `postgres://` | -                                  | Yes      |
-| `REDIS_URL`                | Redis connection string — URI with scheme `redis://` or `rediss://`             | -                                  | Yes      |
-| `ACCESS_TOKEN_SECRET`      | Secret for access tokens                                                        | -                                  | Yes      |
-| `ACCESS_TOKEN_EXPIRES_IN`  | Access token lifetime                                                           | `15m`                              | No       |
-| `REFRESH_TOKEN_SECRET`     | Secret for refresh tokens                                                       | -                                  | Yes      |
-| `REFRESH_TOKEN_EXPIRES_IN` | Refresh token lifetime                                                          | `7d`                               | No       |
-| `JWT_ISSUER`               | JWT issuer claim (iss)                                                          | -                                  | Yes      |
-| `JWT_AUDIENCE`             | JWT audience claim (aud)                                                        | -                                  | Yes      |
-| `LOG_LEVEL`                | Logging level                                                                   | `info`                             | No       |
-| `CLEANUP_ENABLED`          | Run the nightly cleanup cron job                                                | `true`                             | No       |
-| `SWAGGER_ENABLED`          | Serve Swagger UI at `/api/docs`                                                 | `false` in production, else `true` | No       |
-| `CORS_ALLOWED_ORIGINS`     | Comma-separated allowed origins                                                 | `http://localhost:8080`            | No       |
-| `APP_BASE_URL`             | Public SPA origin for invite links                                              | `http://localhost:8080`            | No\*     |
-| `RATE_LIMIT_AUTH_MAX`      | Auth endpoint rate limit (per 15min)                                            | `10` (max 50)                      | No       |
-| `RATE_LIMIT_GENERAL_MAX`   | Global rate limit (per 15min, shared across instances) — integer ≥ 1            | `1000`                             | No       |
-| `AUDIT_RETENTION_DAYS`     | Retention window for audit log entries — positive integer, in days              | `90`                               | No       |
+| Variable                   | Description                                                                           | Default                            | Required |
+| -------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------- | -------- |
+| `NODE_ENV`                 | Environment mode — one of `development`, `production`, `test`                         | `development`                      | No       |
+| `PORT`                     | Server port — integer, 1–65535                                                        | `3000`                             | No       |
+| `DATABASE_URL`             | PostgreSQL connection string — URI with scheme `postgresql://` or `postgres://`       | -                                  | Yes      |
+| `REDIS_URL`                | Redis connection string — URI with scheme `redis://` or `rediss://`                   | -                                  | Yes      |
+| `ACCESS_TOKEN_SECRET`      | Secret for access tokens                                                              | -                                  | Yes      |
+| `ACCESS_TOKEN_EXPIRES_IN`  | Access token lifetime                                                                 | `15m`                              | No       |
+| `REFRESH_TOKEN_SECRET`     | Secret for refresh tokens                                                             | -                                  | Yes      |
+| `REFRESH_TOKEN_EXPIRES_IN` | Refresh token lifetime                                                                | `7d`                               | No       |
+| `JWT_ISSUER`               | JWT issuer claim (iss)                                                                | -                                  | Yes      |
+| `JWT_AUDIENCE`             | JWT audience claim (aud)                                                              | -                                  | Yes      |
+| `LOG_LEVEL`                | Logging level                                                                         | `info`                             | No       |
+| `CLEANUP_ENABLED`          | Run the nightly cleanup cron job                                                      | `true`                             | No       |
+| `SWAGGER_ENABLED`          | Serve Swagger UI at `/api/docs`                                                       | `false` in production, else `true` | No       |
+| `CORS_ALLOWED_ORIGINS`     | Comma-separated allowed origins                                                       | `http://localhost:8080`            | No       |
+| `APP_BASE_URL`             | Public SPA origin for invite links                                                    | `http://localhost:8080`            | No\*     |
+| `RATE_LIMIT_AUTH_MAX`      | Auth endpoint rate limit (per 15min)                                                  | `10` (max 50)                      | No       |
+| `RATE_LIMIT_GENERAL_MAX`   | Global rate limit (per 15min, shared across instances) — integer ≥ 1                  | `1000`                             | No       |
+| `THROTTLE_DISABLED`        | Turns off every rate limit, for local e2e runs only. Refused when NODE_ENV=production | `false`                            | No       |
+| `AUDIT_RETENTION_DAYS`     | Retention window for audit log entries — positive integer, in days                    | `90`                               | No       |
 
 `REDIS_URL` is required in every environment and has **no default** — Redis backs the job queue, and BullMQ ships no in-memory driver, so an optional Redis with a fallback would mean jobs are accepted and never run while `/health/ready` still reports healthy. Local development uses `redis://localhost:6379`. The local Docker stack ships a `redis` service, so inside that container the host must be the compose service name (`redis://redis:6379`) — `localhost` there is the API process itself. The production stack ships no Redis container: point `REDIS_URL` at a managed instance (`rediss://` for TLS), the same way `DATABASE_URL` points at a managed PostgreSQL. `.env.test` deliberately points at **database 1** (`redis://localhost:6379/1`) so the test suite's writes and flushes cannot evict whatever local development is keeping on db 0.
 
