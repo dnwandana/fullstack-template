@@ -9,7 +9,8 @@
 
 import { computed, onMounted } from "vue"
 import { useRoute } from "vue-router"
-import { CalendarIcon, Search } from "@lucide/vue"
+import { CalendarIcon, History, Search, SearchX } from "@lucide/vue"
+import { useMediaQuery } from "@vueuse/core"
 import { parseDate, type DateValue } from "@internationalized/date"
 
 import AuditLogTable from "@/components/AuditLogTable.vue"
@@ -19,7 +20,7 @@ import { useMembersStore } from "@/stores/members"
 import { useProjectsStore } from "@/stores/projects"
 import PageHeader from "@/components/PageHeader.vue"
 import { Button } from "@/components/ui/button"
-import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@/components/ui/empty"
+import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { RangeCalendar } from "@/components/ui/range-calendar"
@@ -37,6 +38,9 @@ const orgId = String(route.params.orgId)
 const store = useAuditLogsStore()
 const projectsStore = useProjectsStore()
 const membersStore = useMembersStore()
+
+// The calendar shows two months on desktop and one month on a phone, as in the mockup.
+const isDesktop = useMediaQuery("(min-width: 768px)")
 
 const { logs, pagination, loading, handlePageChange, handleFilterChange, handleSearch } =
   useAuditLogs()
@@ -166,12 +170,17 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6">
-    <PageHeader title="Audit Logs" />
+    <PageHeader title="Audit Logs" :loading="loading && logs.length > 0" />
 
     <!-- Filter bar: every control writes the store, then refetches page 1 -->
-    <div class="flex flex-wrap gap-2">
+    <div
+      data-slot="audit-filters"
+      class="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center"
+    >
       <Select :model-value="selectValue(store.projectId)" @update:model-value="onProjectChange">
-        <SelectTrigger class="w-[180px]"><SelectValue placeholder="Project" /></SelectTrigger>
+        <SelectTrigger class="w-full md:w-[180px]">
+          <SelectValue placeholder="Project" />
+        </SelectTrigger>
         <SelectContent>
           <SelectItem :value="ALL">All projects</SelectItem>
           <SelectItem v-for="option in projectOptions" :key="option.value" :value="option.value">
@@ -180,7 +189,9 @@ onMounted(() => {
         </SelectContent>
       </Select>
       <Select :model-value="selectValue(store.actorId)" @update:model-value="onActorChange">
-        <SelectTrigger class="w-[180px]"><SelectValue placeholder="Member" /></SelectTrigger>
+        <SelectTrigger class="w-full md:w-[180px]">
+          <SelectValue placeholder="Member" />
+        </SelectTrigger>
         <SelectContent>
           <SelectItem :value="ALL">All members</SelectItem>
           <SelectItem v-for="option in memberOptions" :key="option.value" :value="option.value">
@@ -189,7 +200,9 @@ onMounted(() => {
         </SelectContent>
       </Select>
       <Select :model-value="selectValue(store.action)" @update:model-value="onActionChange">
-        <SelectTrigger class="w-[200px]"><SelectValue placeholder="Action" /></SelectTrigger>
+        <SelectTrigger class="w-full md:w-[200px]">
+          <SelectValue placeholder="Action" />
+        </SelectTrigger>
         <SelectContent>
           <SelectItem :value="ALL">All actions</SelectItem>
           <SelectItem v-for="option in ACTION_OPTIONS" :key="option.value" :value="option.value">
@@ -200,7 +213,7 @@ onMounted(() => {
 
       <Popover>
         <PopoverTrigger as-child>
-          <Button variant="outline" class="w-[240px] justify-start font-normal">
+          <Button variant="outline" class="w-full justify-start font-normal md:w-[240px]">
             <CalendarIcon class="size-4" />
             <span v-if="dateRange.start">{{ store.dateFrom }} – {{ store.dateTo ?? "…" }}</span>
             <span v-else class="text-muted-foreground">Date range</span>
@@ -209,13 +222,14 @@ onMounted(() => {
         <PopoverContent class="w-auto p-0" align="start">
           <RangeCalendar
             :model-value="dateRange"
-            :number-of-months="2"
+            :number-of-months="isDesktop ? 2 : 1"
+            :week-starts-on="1"
             @update:model-value="onDateRangeChange"
           />
         </PopoverContent>
       </Popover>
 
-      <InputGroup class="w-[220px]">
+      <InputGroup class="w-full md:w-[220px]">
         <InputGroupAddon><Search class="size-4" /></InputGroupAddon>
         <InputGroupInput
           v-model="store.searchQuery"
@@ -237,6 +251,10 @@ onMounted(() => {
     <!-- Two-branch empty state: Clear filters appears only when a filter is set -->
     <Empty v-else>
       <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <SearchX v-if="hasActiveFilters" />
+          <History v-else />
+        </EmptyMedia>
         <EmptyTitle>{{
           hasActiveFilters ? "No entries match your filters" : "No audit entries yet"
         }}</EmptyTitle>

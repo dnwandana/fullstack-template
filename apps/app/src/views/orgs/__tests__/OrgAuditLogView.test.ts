@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
+import { nextTick } from "vue"
 import { mount, flushPromises } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import type { Pinia } from "pinia"
@@ -146,5 +147,39 @@ describe("OrgAuditLogView", () => {
     expect(store.dateFrom).toBe("2026-01-01")
     expect(store.dateTo).toBeUndefined()
     expect(request.get).not.toHaveBeenCalled()
+  })
+
+  it("shows a History tile when there are no entries, and a SearchX tile when filtered", async () => {
+    stubGet(okPaginated([]))
+    const pinia = createPinia()
+    const wrapper = mountView(pinia)
+    await flushPromises()
+    expect(wrapper.find('[data-slot="empty-icon"] svg.lucide-history').exists()).toBe(true)
+    useAuditLogsStore(pinia).action = "todo.deleted"
+    await flushPromises()
+    expect(wrapper.find('[data-slot="empty-icon"] svg.lucide-search-x').exists()).toBe(true)
+  })
+
+  it("stacks the filters at full width below md", async () => {
+    stubGet(okPaginated([]))
+    const wrapper = mountView(createPinia())
+    await flushPromises()
+    const bar = wrapper.find('[data-slot="audit-filters"]')
+    expect(bar.classes()).toEqual(expect.arrayContaining(["flex-col", "md:flex-row"]))
+    const triggers = bar.findAll('button[role="combobox"]')
+    expect(triggers).toHaveLength(3)
+    for (const trigger of triggers) expect(trigger.classes()).toContain("w-full")
+  })
+
+  it("keeps the rows and shows the header spinner during a reload", async () => {
+    stubGet(okPaginated([makeAuditLog()]))
+    const pinia = createPinia()
+    const wrapper = mountView(pinia)
+    await flushPromises()
+    expect(wrapper.find('[data-slot="page-spinner"]').exists()).toBe(false)
+    useAuditLogsStore(pinia).loading = true
+    await nextTick()
+    expect(wrapper.find('[data-slot="page-spinner"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain("Ada Lovelace")
   })
 })

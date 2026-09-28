@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from "vitest"
-import { mount } from "@vue/test-utils"
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
+import { mount, flushPromises } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 import {
   ok,
@@ -37,14 +37,16 @@ vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 import ProjectsListView from "../ProjectsListView.vue"
 import { useAuthStore } from "@/stores/auth"
 
-function setup(permissionNames: string[]) {
+const RouterLinkStub = { props: ["to"], template: '<a :href="String(to)"><slot /></a>' }
+
+function setup(permissionNames: string[], projects = [makeProject()]) {
   setActivePinia(createPinia())
   useAuthStore().user = { id: "u1", name: "Ada", email: "ada@example.com" }
   vi.mocked(request.get)
     .mockReset()
     .mockImplementation((url: string) => {
       if (url === "/orgs/o1") return Promise.resolve(ok(makeOrg()))
-      if (url === "/orgs/o1/projects") return Promise.resolve(ok([makeProject()]))
+      if (url === "/orgs/o1/projects") return Promise.resolve(ok(projects))
       if (url.endsWith("/members"))
         return Promise.resolve(okPaginated([makeOrgMember({ user_id: "u1", role_id: "r1" })]))
       if (url.includes("/roles/"))
@@ -53,17 +55,61 @@ function setup(permissionNames: string[]) {
         )
       return Promise.reject(new Error(`unexpected GET ${url}`))
     })
-  return mount(ProjectsListView)
+  return mount(ProjectsListView, {
+    attachTo: document.body,
+    global: { stubs: { RouterLink: RouterLinkStub } },
+  })
 }
 
 describe("ProjectsListView", () => {
   beforeEach(() => push.mockReset())
 
-  it("renders a card for each project under the organization name", async () => {
+  afterEach(() => {
+    document.body.innerHTML = ""
+  })
+
+  it("renders a table row for each project under the organization name", async () => {
     const wrapper = setup([])
     await vi.waitFor(() => expect(wrapper.text()).toContain("Apollo"))
-    expect(wrapper.findAll("div.bg-card")).toHaveLength(1)
+    const rows = wrapper.findAll('[data-slot="project-row"]')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.find('a[href="/orgs/o1/projects/p1"]').text()).toContain("View Todos")
     await vi.waitFor(() => expect(wrapper.find("h1").text()).toBe("Acme"))
+  })
+
+  it("opens the todos on a row click and on Enter", async () => {
+    const wrapper = setup([])
+    await vi.waitFor(() => expect(wrapper.find('[data-slot="project-row"]').exists()).toBe(true))
+    const row = wrapper.find('[data-slot="project-row"]')
+    await row.trigger("click")
+    await row.trigger("keydown", { key: "Enter" })
+    expect(push).toHaveBeenCalledTimes(2)
+    expect(push).toHaveBeenCalledWith("/orgs/o1/projects/p1")
+  })
+
+  // Review Focus 3: the link navigates by itself, so the row must not navigate a second time.
+  it("does not navigate from the row for a click or Enter on the link", async () => {
+    const wrapper = setup([])
+    await vi.waitFor(() => expect(wrapper.find('[data-slot="project-row"] a').exists()).toBe(true))
+    const link = wrapper.find('[data-slot="project-row"] a')
+    await link.trigger("click")
+    await link.trigger("keydown", { key: "Enter" })
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it("shows No description in italic for an empty description", async () => {
+    const wrapper = setup([], [makeProject({ description: null })])
+    await vi.waitFor(() => expect(wrapper.text()).toContain("No description"))
+    expect(wrapper.find('[data-slot="project-desc"]').classes()).toContain("italic")
+  })
+
+  it("shows the FolderKanban tile when the org has no projects", async () => {
+    const wrapper = setup([], [])
+    // The empty state also shows before the mount fetch starts, so wait for the fetch to end.
+    await vi.waitFor(() => expect(request.get).toHaveBeenCalledWith("/orgs/o1/projects"))
+    await flushPromises()
+    expect(wrapper.text()).toContain("No projects yet")
+    expect(wrapper.find("svg.lucide-folder-kanban").exists()).toBe(true)
   })
 
   it("shows Create Project with the project:create permission", async () => {
@@ -75,15 +121,5 @@ describe("ProjectsListView", () => {
     const wrapper = setup([])
     await vi.waitFor(() => expect(wrapper.text()).toContain("Apollo"))
     expect(wrapper.text()).not.toContain("Create Project")
-  })
-
-  it("pushes the todos route from View Todos", async () => {
-    const wrapper = setup([])
-    await vi.waitFor(() => expect(wrapper.text()).toContain("Apollo"))
-    await wrapper
-      .findAll("button")
-      .find((b) => b.text() === "View Todos")
-      ?.trigger("click")
-    expect(push).toHaveBeenCalledWith("/orgs/o1/projects/p1")
   })
 })
