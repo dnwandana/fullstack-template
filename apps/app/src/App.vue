@@ -3,9 +3,13 @@ import { computed, ref } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import AppShell from "@/components/AppShell.vue"
 import { Toaster } from "@/components/ui/sonner"
+import { useTheme } from "@/composables/useTheme"
 
 const route = useRoute()
 const router = useRouter()
+
+// Runs here, not in the user menu, so the sign-in page follows the theme too.
+useTheme()
 
 // Render nothing until the first navigation resolves. Until then `route` sits
 // at vue-router's START_LOCATION (path "/") regardless of the real URL, so
@@ -27,7 +31,7 @@ const isChromeless = computed(
 </script>
 
 <template>
-  <Toaster position="top-right" rich-colors />
+  <Toaster position="top-right" close-button />
   <template v-if="routerReady">
     <RouterView v-if="isChromeless" />
     <AppShell v-else />

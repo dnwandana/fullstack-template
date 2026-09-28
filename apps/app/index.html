@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <link rel="icon" href="/favicon.ico">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+      // Sets the theme class before the first paint. useTheme owns the same key.
+      try {
+        var theme = localStorage.getItem("ui.theme")
+        var system = window.matchMedia("(prefers-color-scheme: dark)").matches
+        if (theme === "dark" || (theme !== "light" && system)) document.documentElement.classList.add("dark")
+      } catch (e) {}
+    </script>
     <title>Vite App</title>
   </head>
   <body>
