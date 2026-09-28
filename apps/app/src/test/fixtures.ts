@@ -200,6 +200,7 @@ export function makeInvitationListItem(
     inviter_name: "Ada Lovelace",
     invitee_name: null,
     role_name: "member",
+    project_name: null,
     ...o,
   }
 }

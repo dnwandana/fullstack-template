@@ -26,6 +26,7 @@ export type InvitationListItem = Invitation & {
   inviter_name: string
   invitee_name: string | null
   role_name: string
+  project_name: string | null
 }
 
 export type InvitationList = {

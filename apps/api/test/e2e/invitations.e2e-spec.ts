@@ -492,7 +492,7 @@ describe("Invitations (e2e)", () => {
       .set("Cookie", owner.cookies)
 
     expect(Object.keys(listed.body.data[0]).toSorted()).toEqual(
-      [...INVITATION_KEYS, "invitee_name", "inviter_name", "role_name"].toSorted(),
+      [...INVITATION_KEYS, "invitee_name", "inviter_name", "project_name", "role_name"].toSorted(),
     )
   })
 
@@ -540,5 +540,39 @@ describe("Invitations (e2e)", () => {
       "role_name",
       "status",
     ])
+  })
+
+  it("names the project on a project invitation in the org list, and null for the org", async () => {
+    const owner = await signupAndSignin(app)
+    const org = await createOrg(app, owner.cookies)
+    const memberRoleId = await getRoleId(prisma, org.id, "member")
+    const project = await agent()
+      .post(`/api/v1/orgs/${org.id}/projects`)
+      .set("Cookie", owner.cookies)
+      .send({ name: "Apollo" })
+      .expect(201)
+    await agent()
+      .post(`/api/v1/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "org@x.io", role_id: memberRoleId })
+      .expect(201)
+    await agent()
+      .post(`/api/v1/orgs/${org.id}/projects/${project.body.data.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .send({ email: "project@x.io", role_id: memberRoleId })
+      .expect(201)
+
+    const listed = await agent()
+      .get(`/api/v1/orgs/${org.id}/invitations`)
+      .set("Cookie", owner.cookies)
+      .expect(200)
+    const byEmail = new Map(
+      listed.body.data.map((row: { invitee_email: string; project_name: string | null }) => [
+        row.invitee_email,
+        row.project_name,
+      ]),
+    )
+    expect(byEmail.get("org@x.io")).toBeNull()
+    expect(byEmail.get("project@x.io")).toBe("Apollo")
   })
 })

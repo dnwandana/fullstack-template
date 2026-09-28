@@ -170,6 +170,7 @@ export class InvitationsService {
         inviter: { select: { name: true } },
         invitee: { select: { name: true } },
         role: { select: { name: true } },
+        project: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
       skip: (query.page - 1) * query.limit,
@@ -177,11 +178,12 @@ export class InvitationsService {
     })
     return {
       // Destructure the relations off before mapping — the key mapper is shallow.
-      data: rows.map(({ inviter, invitee, role, ...cols }) => ({
+      data: rows.map(({ inviter, invitee, role, project, ...cols }) => ({
         ...toInvitationResponse(cols),
         inviter_name: inviter.name,
         invitee_name: invitee?.name ?? null,
         role_name: role.name,
+        project_name: project?.name ?? null,
       })),
       pagination: this.pagination.buildMeta(query.page, query.limit, totalItems),
     }

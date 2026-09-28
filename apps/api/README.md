@@ -434,17 +434,17 @@ Create and update bodies take `permission_ids: string[]`.
 
 ### Invitation Endpoints
 
-| Method | Endpoint                                                 | Description                          | Auth Required       | Permission           |
-| ------ | -------------------------------------------------------- | ------------------------------------ | ------------------- | -------------------- |
-| POST   | `/api/v1/orgs/:org_id/invitations`                       | Create org invitation                | Access Token        | `invitations:create` |
-| GET    | `/api/v1/orgs/:org_id/invitations`                       | List org invitations                 | Access Token        | `invitations:manage` |
-| DELETE | `/api/v1/orgs/:org_id/invitations/:invitation_id`        | Revoke invitation                    | Access Token        | `invitations:manage` |
-| POST   | `/api/v1/orgs/:org_id/invitations/:invitation_id/resend` | Reissue invitation (new token/link)  | Access Token        | `invitations:manage` |
-| POST   | `/api/v1/orgs/:org_id/projects/:project_id/invitations`  | Create project invitation            | Access Token        | `invitations:create` |
-| GET    | `/api/v1/invitations`                                    | List my pending invitations          | Access Token        | —                    |
-| GET    | `/api/v1/invitations/:invitation_id/preview?token=…`     | Preview an invitation (public)       | No — token in query | —                    |
-| POST   | `/api/v1/invitations/:invitation_id/accept`              | Accept invitation — body `{ token }` | Access Token        | —                    |
-| POST   | `/api/v1/invitations/:invitation_id/decline`             | Decline invitation                   | Access Token        | —                    |
+| Method | Endpoint                                                 | Description                                        | Auth Required       | Permission           |
+| ------ | -------------------------------------------------------- | -------------------------------------------------- | ------------------- | -------------------- |
+| POST   | `/api/v1/orgs/:org_id/invitations`                       | Create org invitation                              | Access Token        | `invitations:create` |
+| GET    | `/api/v1/orgs/:org_id/invitations`                       | List org invitations (each row has `project_name`) | Access Token        | `invitations:manage` |
+| DELETE | `/api/v1/orgs/:org_id/invitations/:invitation_id`        | Revoke invitation                                  | Access Token        | `invitations:manage` |
+| POST   | `/api/v1/orgs/:org_id/invitations/:invitation_id/resend` | Reissue invitation (new token/link)                | Access Token        | `invitations:manage` |
+| POST   | `/api/v1/orgs/:org_id/projects/:project_id/invitations`  | Create project invitation                          | Access Token        | `invitations:create` |
+| GET    | `/api/v1/invitations`                                    | List my pending invitations                        | Access Token        | —                    |
+| GET    | `/api/v1/invitations/:invitation_id/preview?token=…`     | Preview an invitation (public)                     | No — token in query | —                    |
+| POST   | `/api/v1/invitations/:invitation_id/accept`              | Accept invitation — body `{ token }`               | Access Token        | —                    |
+| POST   | `/api/v1/invitations/:invitation_id/decline`             | Decline invitation                                 | Access Token        | —                    |
 
 ### Audit Log Endpoints (nested under org)
 

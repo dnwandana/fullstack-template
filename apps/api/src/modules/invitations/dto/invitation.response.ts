@@ -35,11 +35,12 @@ export class InvitationWithTokenResponse extends InvitationResponse implements I
   @ApiProperty() accept_url!: string
 }
 
-// listForOrg() flattens the inviter/invitee/role relations onto each row.
+// listForOrg() flattens the inviter/invitee/role/project relations onto each row.
 export class InvitationListItemResponse extends InvitationResponse implements InvitationListItem {
   @ApiProperty() inviter_name!: string
   @ApiProperty({ type: String, nullable: true }) invitee_name!: string | null
   @ApiProperty() role_name!: string
+  @ApiProperty({ type: String, nullable: true }) project_name!: string | null
 }
 
 export class InvitationListResponse implements InvitationList {
