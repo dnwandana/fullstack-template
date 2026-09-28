@@ -30,6 +30,8 @@ const envSchema = z
     APP_BASE_URL: z.url().default("http://localhost:8080"),
     RATE_LIMIT_AUTH_MAX: z.coerce.number().int().min(1).max(50).default(10),
     RATE_LIMIT_GENERAL_MAX: z.coerce.number().int().min(1).default(1000),
+    // Local e2e runs only: parallel browser agents share one client IP and exhaust the limits.
+    THROTTLE_DISABLED: z.enum(["true", "false"]).default("false"),
     JWT_ISSUER: z.string(required),
     JWT_AUDIENCE: z.string(required),
     // Required with no default, in every environment. BullMQ has no in-memory driver, so an
@@ -57,6 +59,13 @@ const envSchema = z
           message: "contains a placeholder value. Generate a random secret.",
         })
       }
+    }
+    if (env.NODE_ENV === "production" && env.THROTTLE_DISABLED === "true") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["THROTTLE_DISABLED"],
+        message: "must not be true when NODE_ENV is production",
+      })
     }
   })
   // Off in production by default: publishing a fresh deployment's full route and schema surface

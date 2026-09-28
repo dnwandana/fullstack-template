@@ -4,8 +4,6 @@ import { ConfigModule, ConfigService } from "@nestjs/config"
 import { LoggerModule } from "nestjs-pino"
 import { ScheduleModule } from "@nestjs/schedule"
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
-import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis"
-import type Redis from "ioredis"
 import { PrismaModule } from "@core/database/prisma.module"
 import { RedisModule } from "@core/redis/redis.module"
 import { REDIS_CLIENT } from "@core/redis/redis.constants"
@@ -13,6 +11,7 @@ import { QueueModule } from "@core/queue/queue.module"
 import { AuditModule } from "@core/audit/audit.module"
 import { validate } from "@core/config/env.validation"
 import { buildPinoHttpOptions } from "@core/config/pino.config"
+import { buildThrottlerOptions } from "@core/config/throttler-options"
 import { HealthModule } from "@modules/health/health.module"
 import { UsersModule } from "@modules/users/users.module"
 import { AuthModule } from "@modules/auth/auth.module"
@@ -55,24 +54,7 @@ import { SchemaValidationPipe } from "@shared/validation/schema-validation.pipe"
       // (nestjs/throttler#2671).
       imports: [],
       inject: [ConfigService, REDIS_CLIENT],
-      // The object form, not the bare array: an array has nowhere to put `storage`,
-      // and an array carrying a stray `storage` key is silently ignored.
-      useFactory: (config: ConfigService, redis: Redis) => ({
-        // Counters in Redis so the limit belongs to the deployment, not to each process: the
-        // default in-memory store gives N replicas N independent counters and an effective limit
-        // of N x max — including the auth lockout that exists to slow credential stuffing.
-        storage: new ThrottlerStorageRedisService(redis),
-        throttlers: [
-          {
-            name: "general",
-            ttl: 15 * 60 * 1000,
-            // Via ConfigService, not process.env: the factory runs after ConfigModule validation,
-            // so the env schema's coercion and default apply by construction. The old inline
-            // `Number(process.env.X ?? 100)` yielded NaN on a reorder — throttling silently off.
-            limit: config.getOrThrow<number>("RATE_LIMIT_GENERAL_MAX"),
-          },
-        ],
-      }),
+      useFactory: buildThrottlerOptions,
     }),
     HealthModule,
     UsersModule,

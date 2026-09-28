@@ -29,6 +29,7 @@
         "APP_BASE_URL",
         "RATE_LIMIT_AUTH_MAX",
         "RATE_LIMIT_GENERAL_MAX",
+        "THROTTLE_DISABLED",
         "CLEANUP_ENABLED",
         "SWAGGER_ENABLED",
         "AUDIT_RETENTION_DAYS"
@@ -60,6 +61,7 @@
         "APP_BASE_URL",
         "RATE_LIMIT_AUTH_MAX",
         "RATE_LIMIT_GENERAL_MAX",
+        "THROTTLE_DISABLED",
         "CLEANUP_ENABLED",
         "SWAGGER_ENABLED",
         "AUDIT_RETENTION_DAYS"
