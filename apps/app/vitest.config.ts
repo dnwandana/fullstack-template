@@ -8,6 +8,7 @@ export default defineConfig((configEnv) =>
       globals: true,
       include: ['src/**/*.test.ts'],
       setupFiles: ['src/test/setup.ts'],
+      env: { TZ: 'UTC' },
     },
   }),
 )
