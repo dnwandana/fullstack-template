@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { ToasterProps } from "vue-sonner"
 import { reactiveOmit } from "@vueuse/core"
-import { CircleCheckIcon, InfoIcon, Loader2Icon, OctagonXIcon, TriangleAlertIcon, XIcon } from "@lucide/vue"
+import { CircleCheckIcon, CircleXIcon, InfoIcon, Loader2Icon, TriangleAlertIcon, XIcon } from "@lucide/vue"
 import { Toaster as Sonner } from "vue-sonner"
 import "vue-sonner/style.css"
 
@@ -14,7 +14,7 @@ const delegatedProps = reactiveOmit(props, "toastOptions")
     class="toaster group"
     :toast-options="{
       classes: {
-        toast: 'group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg',
+        toast: 'group toast group-[.toaster]:bg-popover group-[.toaster]:text-popover-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg',
         description: 'group-[.toast]:text-muted-foreground',
         actionButton:
           'group-[.toast]:bg-primary group-[.toast]:text-primary-foreground',
@@ -25,7 +25,7 @@ const delegatedProps = reactiveOmit(props, "toastOptions")
     v-bind="delegatedProps"
   >
     <template #success-icon>
-      <CircleCheckIcon class="size-4" />
+      <CircleCheckIcon class="size-4 text-foreground" />
     </template>
     <template #info-icon>
       <InfoIcon class="size-4" />
@@ -34,7 +34,7 @@ const delegatedProps = reactiveOmit(props, "toastOptions")
       <TriangleAlertIcon class="size-4" />
     </template>
     <template #error-icon>
-      <OctagonXIcon class="size-4" />
+      <CircleXIcon class="size-4 text-destructive" />
     </template>
     <template #loading-icon>
       <div>

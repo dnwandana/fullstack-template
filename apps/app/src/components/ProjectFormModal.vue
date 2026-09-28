@@ -53,7 +53,7 @@ const modalTitle = computed(() => (props.project ? "Edit Project" : "Create Proj
 
 <template>
   <Dialog :open="open" @update:open="onOpenChange">
-    <DialogContent class="sm:max-w-lg" :aria-describedby="undefined">
+    <DialogContent :aria-describedby="undefined">
       <DialogHeader>
         <DialogTitle>{{ modalTitle }}</DialogTitle>
       </DialogHeader>

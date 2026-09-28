@@ -64,7 +64,7 @@ const modalTitle = computed(() => (props.todo ? "Edit Todo" : "Create Todo"))
 
 <template>
   <Dialog :open="open" @update:open="onOpenChange">
-    <DialogContent class="sm:max-w-lg" :aria-describedby="undefined">
+    <DialogContent :aria-describedby="undefined">
       <DialogHeader>
         <DialogTitle>{{ modalTitle }}</DialogTitle>
       </DialogHeader>

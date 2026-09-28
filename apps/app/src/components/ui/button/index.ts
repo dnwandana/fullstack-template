@@ -16,15 +16,15 @@ export const buttonVariants = cva(
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
+        link: "text-link font-medium underline-offset-4 hover:underline",
       },
       size: {
-        "default": "h-10 px-4 py-2",
-        "sm": "h-9 rounded-md px-3",
-        "lg": "h-11 rounded-md px-8",
-        "icon": "h-10 w-10",
-        "icon-sm": "size-9",
-        "icon-lg": "size-11",
+        "default": "h-9 px-4 py-2",
+        "sm": "h-8 rounded-md px-3",
+        "lg": "h-10 rounded-md px-6",
+        "icon": "size-9",
+        "icon-sm": "size-8",
+        "icon-lg": "size-10",
       },
     },
     defaultVariants: {
