@@ -8,17 +8,24 @@ import type { Envelope, InvitationWithToken, Wire } from "@fullstack/contracts"
 import type { InviteInput } from "@/api/invitations"
 import type { MemberScope } from "@/composables/useMembers"
 import { useInvitationsStore } from "@/stores/invitations"
+import { copyInviteLink } from "@/utils/clipboard"
 
 export function useInvitations() {
   const invitationsStore = useInvitationsStore()
 
   // Local state for the invite modal
   const isInviteModalVisible = ref(false)
+  // The accept URL of the last invite. The API returns it once, so only the open modal holds it.
+  const inviteUrl = ref<string | null>(null)
+  // The "New link" fallback. The link stays set after close, so it does not vanish in the fade-out.
+  const isNewLinkVisible = ref(false)
+  const newLinkUrl = ref<string | null>(null)
 
   /**
    * Open the invite modal
    */
   function openInviteModal(): void {
+    inviteUrl.value = null
     isInviteModalVisible.value = true
   }
 
@@ -30,23 +37,23 @@ export function useInvitations() {
   }
 
   /**
-   * Handle sending an invitation at either the org or project scope
-   * Delegates to the appropriate store action based on scope, then closes the modal
+   * Sends an invitation at the org or the project scope. The modal stays open and shows the link.
+   * Returns the accept URL, or null when the request fails.
    */
   async function handleInvite(
     orgId: string,
     data: InviteInput,
     scope: MemberScope,
     projectId?: string,
-  ): Promise<void> {
-    if (scope === "org") {
-      await invitationsStore.inviteToOrg(orgId, data)
-    } else if (scope === "project") {
-      // `projectId` is optional in the signature but required by this branch. `String()` keeps the
-      // missing-id request byte-identical to the JavaScript version rather than skipping the call.
-      await invitationsStore.inviteToProject(orgId, String(projectId), data)
-    }
-    closeInviteModal()
+  ): Promise<string | null> {
+    // `projectId` is optional in the signature but required by the project branch. `String()` keeps
+    // the missing-id request byte-identical to the JavaScript version rather than skipping the call.
+    const url =
+      scope === "org"
+        ? await invitationsStore.inviteToOrg(orgId, data)
+        : await invitationsStore.inviteToProject(orgId, String(projectId), data)
+    inviteUrl.value = url
+    return url
   }
 
   /**
@@ -84,15 +91,34 @@ export function useInvitations() {
     return invitationsStore.resendInvitation(orgId, invitationId)
   }
 
+  /**
+   * Reissues an invitation and copies the new link. Opens the link dialog when the copy fails.
+   * The API returns the raw token only once, so the link must stay visible until the admin copies it.
+   */
+  async function handleNewLink(orgId: string, invitationId: string): Promise<void> {
+    const result = await handleResend(orgId, invitationId)
+    if (!result) return
+    if (await copyInviteLink(result.accept_url)) return
+    newLinkUrl.value = result.accept_url
+    isNewLinkVisible.value = true
+  }
+
+  /** Closes the link dialog. */
+  function closeNewLink(): void {
+    isNewLinkVisible.value = false
+  }
+
   return {
     // Store state as computed
     orgInvitations: computed(() => invitationsStore.orgInvitations),
     myInvitations: computed(() => invitationsStore.myInvitations),
     loading: computed(() => invitationsStore.loading),
     pendingCount: computed(() => invitationsStore.pendingCount),
-    lastAcceptUrl: computed(() => invitationsStore.lastAcceptUrl),
     // Local modal state
     isInviteModalVisible,
+    inviteUrl,
+    isNewLinkVisible,
+    newLinkUrl,
     // Delegated store actions
     fetchOrgInvitations: invitationsStore.fetchOrgInvitations,
     fetchMyInvitations: invitationsStore.fetchMyInvitations,
@@ -107,5 +133,7 @@ export function useInvitations() {
     handleDecline,
     handleRevoke,
     handleResend,
+    closeNewLink,
+    handleNewLink,
   }
 }

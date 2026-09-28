@@ -20,3 +20,24 @@ describe("Badge status variants", () => {
     expect(wrapper.classes()).toContain(`text-${variant}-foreground`)
   })
 })
+
+describe("Badge shape", () => {
+  it("renders a 6 px radius with 12 px text and a data-slot", () => {
+    const wrapper = mount(Badge, { slots: { default: "x" } })
+    expect(wrapper.attributes("data-slot")).toBe("badge")
+    expect(wrapper.classes()).toEqual(expect.arrayContaining(["rounded-md", "text-xs"]))
+    expect(wrapper.classes()).not.toContain("rounded-full")
+  })
+
+  it("renders destructive as a soft fill with destructive text", () => {
+    const wrapper = mount(Badge, { props: { variant: "destructive" }, slots: { default: "x" } })
+    expect(wrapper.classes()).toEqual(
+      expect.arrayContaining(["bg-destructive/10", "text-destructive"]),
+    )
+  })
+
+  it("gives secondary a border", () => {
+    const wrapper = mount(Badge, { props: { variant: "secondary" }, slots: { default: "x" } })
+    expect(wrapper.classes()).toEqual(expect.arrayContaining(["bg-secondary", "border-border"]))
+  })
+})

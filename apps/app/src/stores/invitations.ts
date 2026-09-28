@@ -32,10 +32,6 @@ export const useInvitationsStore = defineStore("invitations", () => {
   const orgInvitations = ref<Wire<InvitationListItem>[]>([])
   const myInvitations = ref<Wire<MyInvitation>[]>([])
   const loading = ref(false)
-  // Accept URL of the most recently issued invitation link. The template ships
-  // no mail provider, so the admin is the delivery mechanism — this keeps the
-  // freshly minted link available to the UI right after inviting.
-  const lastAcceptUrl = ref<string | null>(null)
 
   // Getters
 
@@ -86,21 +82,19 @@ export const useInvitationsStore = defineStore("invitations", () => {
   /**
    * Invite a user to an organization
    * Refreshes the org invitations list after a successful invite
+   * Returns the accept URL, or null when the request fails.
    */
-  async function inviteToOrg(
-    orgId: string,
-    data: InviteInput,
-  ): Promise<Envelope<Wire<InvitationWithToken>> | undefined> {
+  async function inviteToOrg(orgId: string, data: InviteInput): Promise<string | null> {
     loading.value = true
     try {
       const response = await apiInviteToOrg(orgId, data)
-      lastAcceptUrl.value = response.data.data?.accept_url ?? null
       toast.success("Invitation sent successfully!")
       // Refresh the org invitations list to include the new invitation
       await fetchOrgInvitations(orgId)
-      return response.data
+      return response.data.data.accept_url
     } catch {
       // Axios interceptor handles error display
+      return null
     } finally {
       loading.value = false
     }
@@ -109,22 +103,23 @@ export const useInvitationsStore = defineStore("invitations", () => {
   /**
    * Invite a user to a project within an organization
    * Refreshes the org invitations list after a successful invite
+   * Returns the accept URL, or null when the request fails.
    */
   async function inviteToProject(
     orgId: string,
     projectId: string,
     data: InviteInput,
-  ): Promise<Envelope<Wire<InvitationWithToken>> | undefined> {
+  ): Promise<string | null> {
     loading.value = true
     try {
       const response = await apiInviteToProject(orgId, projectId, data)
-      lastAcceptUrl.value = response.data.data?.accept_url ?? null
       toast.success("Invitation sent successfully!")
       // Refresh org invitations since project invitations appear there too
       await fetchOrgInvitations(orgId)
-      return response.data
+      return response.data.data.accept_url
     } catch {
       // Axios interceptor handles error display
+      return null
     } finally {
       loading.value = false
     }
@@ -180,8 +175,9 @@ export const useInvitationsStore = defineStore("invitations", () => {
   /**
    * Decline a pending invitation
    * Refreshes the user's invitations list after decline
+   * Rejects when the request fails. The HTTP layer shows the error toast.
    */
-  async function declineInvitation(invitationId: string): Promise<Envelope<null> | undefined> {
+  async function declineInvitation(invitationId: string): Promise<Envelope<null>> {
     loading.value = true
     try {
       const response = await apiDeclineInvitation(invitationId)
@@ -189,8 +185,6 @@ export const useInvitationsStore = defineStore("invitations", () => {
       // Refresh the user's invitations to update the status
       await fetchMyInvitations()
       return response.data
-    } catch {
-      // Axios interceptor handles error display
     } finally {
       loading.value = false
     }
@@ -199,11 +193,9 @@ export const useInvitationsStore = defineStore("invitations", () => {
   /**
    * Revoke an invitation from an organization (admin action)
    * Refreshes the org invitations list after revocation
+   * Rejects when the request fails. The HTTP layer shows the error toast.
    */
-  async function revokeInvitation(
-    orgId: string,
-    invitationId: string,
-  ): Promise<Envelope<null> | undefined> {
+  async function revokeInvitation(orgId: string, invitationId: string): Promise<Envelope<null>> {
     loading.value = true
     try {
       const response = await apiRevokeInvitation(orgId, invitationId)
@@ -211,8 +203,6 @@ export const useInvitationsStore = defineStore("invitations", () => {
       // Refresh the org invitations list to remove the revoked invitation
       await fetchOrgInvitations(orgId)
       return response.data
-    } catch {
-      // Axios interceptor handles error display
     } finally {
       loading.value = false
     }
@@ -229,8 +219,6 @@ export const useInvitationsStore = defineStore("invitations", () => {
     loading.value = true
     try {
       const response = await apiResendInvitation(orgId, invitationId)
-      lastAcceptUrl.value = response.data.data?.accept_url ?? null
-      toast.success("New invitation link generated")
       // Refresh the org invitations list to pick up the new expiry
       await fetchOrgInvitations(orgId)
       return response.data.data
@@ -263,7 +251,6 @@ export const useInvitationsStore = defineStore("invitations", () => {
     orgInvitations,
     myInvitations,
     loading,
-    lastAcceptUrl,
     // Getters
     pendingCount,
     // Actions

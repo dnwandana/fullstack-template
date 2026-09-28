@@ -11,7 +11,7 @@
 
 import { ref, computed, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { CircleCheck, CircleX, Clock, Link2Off } from "@lucide/vue"
+import { CircleCheck, CircleX, Clock, Link2Off, Repeat } from "@lucide/vue"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -25,6 +25,9 @@ import { Spinner } from "@/components/ui/spinner"
 import type { InvitationPreview, Wire } from "@fullstack/contracts"
 import { useAuthStore } from "@/stores/auth"
 import { useInvitations } from "@/composables/useInvitations"
+import AuthLayout from "@/components/AuthLayout.vue"
+import UserAvatar from "@/components/UserAvatar.vue"
+import { formatDate } from "@/utils/format"
 
 const route = useRoute()
 const router = useRouter()
@@ -139,14 +142,14 @@ async function switchAccount(): Promise<void> {
 </script>
 
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-muted p-4">
-    <Card class="w-full max-w-[460px]">
-      <CardContent class="pt-6">
-        <div v-if="state === 'loading'" class="flex justify-center py-10">
-          <Spinner class="size-6" />
+  <AuthLayout wide>
+    <Card>
+      <CardContent class="p-0">
+        <div v-if="state === 'loading'" class="flex h-60 items-center justify-center">
+          <Spinner class="size-6 text-muted-foreground" />
         </div>
 
-        <Empty v-else-if="state === 'no-token'">
+        <Empty v-else-if="state === 'no-token'" class="border-0">
           <EmptyHeader>
             <EmptyMedia variant="icon"><Link2Off /></EmptyMedia>
             <EmptyTitle>Open this invitation from your email</EmptyTitle>
@@ -158,7 +161,7 @@ async function switchAccount(): Promise<void> {
           </EmptyHeader>
         </Empty>
 
-        <Empty v-else-if="state === 'invalid'">
+        <Empty v-else-if="state === 'invalid'" class="border-0">
           <EmptyHeader>
             <EmptyMedia variant="icon"><CircleX /></EmptyMedia>
             <EmptyTitle>This invitation is no longer valid</EmptyTitle>
@@ -168,7 +171,7 @@ async function switchAccount(): Promise<void> {
           </EmptyHeader>
         </Empty>
 
-        <Empty v-else-if="state === 'expired'">
+        <Empty v-else-if="state === 'expired'" class="border-0">
           <EmptyHeader>
             <EmptyMedia variant="icon"><Clock /></EmptyMedia>
             <EmptyTitle>This invitation has expired</EmptyTitle>
@@ -176,48 +179,66 @@ async function switchAccount(): Promise<void> {
           </EmptyHeader>
         </Empty>
 
-        <Empty v-else-if="state === 'handled'">
+        <Empty v-else-if="state === 'handled'" class="border-0">
           <EmptyHeader>
             <EmptyMedia variant="icon"><CircleCheck /></EmptyMedia>
             <EmptyTitle>This invitation was already {{ preview?.status }}</EmptyTitle>
           </EmptyHeader>
         </Empty>
 
-        <div v-else class="space-y-6">
-          <div class="space-y-1 text-center">
-            <h1 class="text-xl font-semibold tracking-tight">
+        <div v-else class="grid gap-5 px-6 pt-7 pb-6 text-center">
+          <div class="grid justify-items-center gap-3">
+            <UserAvatar :name="preview?.org_name" :size="40" shape="square" />
+            <h1 class="text-xl font-semibold tracking-tight text-balance">
               {{ preview?.inviter_name }} invited you to {{ scopeLabel }}
             </h1>
-            <p class="text-sm text-muted-foreground">
-              as <strong>{{ preview?.role_name }}</strong>
+            <div
+              v-if="state !== 'wrong-account'"
+              data-slot="invite-role"
+              class="grid gap-0.5 text-sm text-muted-foreground"
+            >
+              <span
+                >as <strong class="font-semibold text-foreground">{{ preview?.role_name }}</strong></span
+              >
+              <span>{{ preview?.invitee_email }}</span>
+            </div>
+            <p v-else class="text-sm text-pretty text-muted-foreground">
+              You are signed in as
+              <strong class="font-semibold text-foreground">{{ authStore.currentUser?.email }}</strong>,
+              but this invitation is for
+              <strong class="font-semibold text-foreground">{{ preview?.invitee_email }}</strong>.
             </p>
-            <p class="text-sm text-muted-foreground">{{ preview?.invitee_email }}</p>
           </div>
 
-          <div v-if="state === 'guest'" class="flex flex-col gap-2">
-            <Button v-if="preview?.requires_signup" @click="goToSignup">
+          <div v-if="state === 'guest'" class="grid gap-3">
+            <Button v-if="preview?.requires_signup" size="lg" class="w-full" @click="goToSignup">
               Create account &amp; join
             </Button>
-            <Button v-else @click="goToLogin">Sign in &amp; join</Button>
-            <Button v-if="preview?.requires_signup" variant="link" @click="goToLogin">
-              I already have an account
-            </Button>
+            <Button v-else size="lg" class="w-full" @click="goToLogin">Sign in &amp; join</Button>
+            <Button v-if="preview?.requires_signup" variant="link" class="h-auto" @click="goToLogin"
+              >I already have an account</Button
+            >
           </div>
-
-          <div v-else-if="state === 'wrong-account'" class="space-y-3 text-center">
-            <p class="text-sm">
-              You are signed in as {{ authStore.currentUser?.email }}, but this invitation is for
-              {{ preview?.invitee_email }}.
-            </p>
-            <Button variant="outline" @click="switchAccount">Switch account</Button>
-          </div>
-
-          <Button v-else class="w-full" :disabled="accepting" @click="onAccept">
+          <Button
+            v-else-if="state === 'wrong-account'"
+            variant="outline"
+            size="lg"
+            class="w-full"
+            @click="switchAccount"
+          >
+            <Repeat />
+            Switch account
+          </Button>
+          <Button v-else size="lg" class="w-full" :disabled="accepting" @click="onAccept">
             <Spinner v-if="accepting" />
             Accept invitation
           </Button>
+
+          <p data-slot="invite-expires" class="text-xs text-muted-foreground">
+            Expires {{ formatDate(preview?.expires_at) }}
+          </p>
         </div>
       </CardContent>
     </Card>
-  </div>
+  </AuthLayout>
 </template>

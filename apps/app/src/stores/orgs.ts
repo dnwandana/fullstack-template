@@ -96,8 +96,9 @@ export const useOrgsStore = defineStore("orgs", () => {
 
   /**
    * Delete an organization and refresh the list
+   * Rejects when the request fails. The HTTP layer shows the error toast.
    */
-  async function deleteOrg(orgId: string): Promise<Envelope<null> | undefined> {
+  async function deleteOrg(orgId: string): Promise<Envelope<null>> {
     loading.value = true
     try {
       const response = await apiDeleteOrg(orgId)
@@ -105,8 +106,6 @@ export const useOrgsStore = defineStore("orgs", () => {
       // Refresh the list to remove the deleted org
       await fetchOrgs()
       return response.data
-    } catch {
-      // Axios interceptor handles error display
     } finally {
       loading.value = false
     }

@@ -5,11 +5,12 @@
  * Extracted from the Invitations tab of ProjectSettingsView. The table lists
  * ORG invitations: no project-scoped listing endpoint exists. Sending an invite
  * is project-scoped. That asymmetry is pre-existing and deliberate here.
+ * The "New link" flow is the same as on the org page.
  */
 
 import { computed, onMounted } from "vue"
 import { useRoute } from "vue-router"
-import { Plus } from "@lucide/vue"
+import { UserPlus } from "@lucide/vue"
 
 import { useInvitations } from "@/composables/useInvitations"
 import { useRoles } from "@/composables/useRoles"
@@ -17,6 +18,7 @@ import { usePermissions } from "@/composables/usePermissions"
 import { useAuthStore } from "@/stores/auth"
 import InviteFormModal from "@/components/InviteFormModal.vue"
 import InvitationsTable from "@/components/InvitationsTable.vue"
+import InviteLinkDialog from "@/components/InviteLinkDialog.vue"
 import PageHeader from "@/components/PageHeader.vue"
 import { Button } from "@/components/ui/button"
 import type { InviteInput } from "@/api/invitations"
@@ -35,10 +37,15 @@ const {
   orgInvitations,
   fetchOrgInvitations,
   isInviteModalVisible,
+  inviteUrl,
   openInviteModal,
   closeInviteModal,
   handleInvite,
   handleRevoke,
+  handleNewLink,
+  closeNewLink,
+  isNewLinkVisible,
+  newLinkUrl,
 } = invitationsComposable
 const { roles, fetchRoles } = rolesComposable
 
@@ -49,8 +56,13 @@ function onInviteSubmit(data: InviteInput): void {
   handleInvite(orgId, data, "project", projectId)
 }
 
-function onRevoke(invitationId: string): void {
-  handleRevoke(orgId, invitationId)
+function onRevoke(invitationId: string): Promise<void> {
+  return handleRevoke(orgId, invitationId)
+}
+
+/** Reissues the invitation and copies the new link. The dialog opens only if the copy fails. */
+function onResend(invitationId: string): Promise<void> {
+  return handleNewLink(orgId, invitationId)
 }
 
 onMounted(() => {
@@ -63,24 +75,28 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6">
-    <PageHeader title="Invitations">
+    <PageHeader title="Invitations" :loading="invitationsLoading && orgInvitations.length > 0">
       <!-- Invite member button — gated by permission -->
       <Button v-if="can('invitations:create')" @click="openInviteModal()">
-        <Plus /> Invite Member
+        <UserPlus /> Invite Member
       </Button>
     </PageHeader>
     <InvitationsTable
       :invitations="orgInvitations"
       :loading="invitationsLoading"
       :can-revoke="can('invitations:manage')"
-      @revoke="onRevoke"
+      :can-resend="can('invitations:manage')"
+      :revoke-action="onRevoke"
+      @resend="onResend"
     />
     <InviteFormModal
       :open="isInviteModalVisible"
       :roles="roles"
       :loading="invitationsLoading"
+      :accept-url="inviteUrl"
       @submit="onInviteSubmit"
       @cancel="closeInviteModal()"
     />
+    <InviteLinkDialog :open="isNewLinkVisible" :url="newLinkUrl" @close="closeNewLink()" />
   </div>
 </template>

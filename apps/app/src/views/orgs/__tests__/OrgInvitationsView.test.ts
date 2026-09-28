@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { mount } from "@vue/test-utils"
+import { flushPromises, mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 import {
   ok,
@@ -11,6 +11,7 @@ import {
   makeRole,
 } from "@/test/fixtures"
 import { request } from "@/utils/http"
+import { toast } from "vue-sonner"
 
 vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
@@ -35,6 +36,7 @@ vi.mock("@/router", () => ({ default: { currentRoute } }))
 vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 import OrgInvitationsView from "../OrgInvitationsView.vue"
+import InviteFormModal from "@/components/InviteFormModal.vue"
 import { useAuthStore } from "@/stores/auth"
 
 // The listing endpoint returns `InvitationListItem` — the row shape with the resolved inviter,
@@ -62,6 +64,7 @@ function buttonByText(text: string): HTMLButtonElement {
 
 describe("OrgInvitationsView", () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     pinia = createPinia()
     setActivePinia(pinia)
     useAuthStore().user = { id: "u1", name: "Ada", email: "ada@example.com" }
@@ -94,7 +97,7 @@ describe("OrgInvitationsView", () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain("new@example.com"))
   })
 
-  it("shows the new link in a dialog when the clipboard write rejects", async () => {
+  it("shows one error toast and the new link dialog when the clipboard write rejects", async () => {
     vi.mocked(request.post).mockResolvedValue(
       ok(makeInvitationWithToken({ accept_url: "http://test/invite/i1?token=abc" })),
     )
@@ -110,10 +113,15 @@ describe("OrgInvitationsView", () => {
     await vi.waitFor(() => expect(buttonByText("New link")).toBeTruthy())
     buttonByText("New link").click()
     await vi.waitFor(() => {
-      const link = document.body.querySelector<HTMLInputElement>("input[readonly]")
+      const link = document.body.querySelector<HTMLInputElement>(
+        'input[aria-label="Invitation link"]',
+      )
       expect(link?.value).toBe("http://test/invite/i1?token=abc")
     })
     expect(request.post).toHaveBeenCalledWith("/orgs/o1/invitations/i1/resend")
+    expect(toast.error).toHaveBeenCalledWith("Copy failed. Select the link and copy it by hand.")
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.success).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain("New invitation link")
     wrapper.unmount()
     vi.unstubAllGlobals()
@@ -131,8 +139,34 @@ describe("OrgInvitationsView", () => {
     await vi.waitFor(() => expect(buttonByText("New link")).toBeTruthy())
     buttonByText("New link").click()
     await vi.waitFor(() => expect(writeText).toHaveBeenCalled())
-    expect(document.body.querySelector("input[readonly]")).toBeNull()
+    await vi.waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Invitation link copied to clipboard"),
+    )
+    expect(toast.success).toHaveBeenCalledTimes(1)
+    expect(document.body.querySelector('input[aria-label="Invitation link"]')).toBeNull()
     wrapper.unmount()
     vi.unstubAllGlobals()
+  })
+
+  it("shows the new link in the invite modal after a successful invite", async () => {
+    vi.mocked(request.post).mockResolvedValue(
+      ok(makeInvitationWithToken({ accept_url: "http://test/invite/i2?token=xyz" })),
+    )
+    const wrapper = mount(OrgInvitationsView, {
+      attachTo: document.body,
+      global: { plugins: [pinia] },
+    })
+    await vi.waitFor(() => expect(buttonByText("Invite Member")).toBeTruthy())
+    buttonByText("Invite Member").click()
+    await flushPromises()
+    wrapper
+      .findComponent(InviteFormModal)
+      .vm.$emit("submit", { email: "b@example.com", role_id: "r1" })
+    await vi.waitFor(() => {
+      const link = document.body.querySelector<HTMLInputElement>("input[readonly]")
+      expect(link?.value).toBe("http://test/invite/i2?token=xyz")
+    })
+    expect(wrapper.findComponent(InviteFormModal).props("open")).toBe(true)
+    wrapper.unmount()
   })
 })

@@ -3,6 +3,7 @@ import { useInvitationsStore } from "@/stores/invitations"
 import { request } from "@/utils/http"
 import type { InvitationListItem, MyInvitation, Wire } from "@fullstack/contracts"
 import { ok, okPaginated, makeInvitationPreview, makeInvitationWithToken } from "@/test/fixtures"
+import { toast } from "vue-sonner"
 
 vi.mock("@/utils/http", () => ({
   baseURL: "http://test/api",
@@ -52,28 +53,43 @@ describe("invitations store", () => {
     expect(preview).toBeNull()
   })
 
-  it("captures the accept url returned when inviting to an org", async () => {
+  it("returns the accept url when inviting to an org", async () => {
     vi.mocked(request.post).mockResolvedValue(
       ok(makeInvitationWithToken({ id: "inv-1", accept_url: "http://test/invite/inv-1?token=x" })),
     )
     vi.mocked(request.get).mockResolvedValue(okPaginated<Wire<InvitationListItem>>([]))
 
     const store = useInvitationsStore()
-    await store.inviteToOrg("org-1", { email: "a@test.com", role_id: "role-1" })
+    const url = await store.inviteToOrg("org-1", { email: "a@test.com", role_id: "role-1" })
 
-    expect(store.lastAcceptUrl).toBe("http://test/invite/inv-1?token=x")
+    expect(url).toBe("http://test/invite/inv-1?token=x")
+    expect(toast.success).toHaveBeenCalledWith("Invitation sent successfully!")
+    expect("lastAcceptUrl" in store).toBe(false)
   })
 
-  it("captures the accept url returned when inviting to a project", async () => {
+  it("returns the accept url when inviting to a project", async () => {
     vi.mocked(request.post).mockResolvedValue(
       ok(makeInvitationWithToken({ id: "inv-2", accept_url: "http://test/invite/inv-2?token=y" })),
     )
     vi.mocked(request.get).mockResolvedValue(okPaginated<Wire<InvitationListItem>>([]))
 
     const store = useInvitationsStore()
-    await store.inviteToProject("org-1", "proj-1", { email: "b@test.com", role_id: "role-1" })
+    const url = await store.inviteToProject("org-1", "proj-1", {
+      email: "b@test.com",
+      role_id: "role-1",
+    })
 
-    expect(store.lastAcceptUrl).toBe("http://test/invite/inv-2?token=y")
+    expect(url).toBe("http://test/invite/inv-2?token=y")
+  })
+
+  it("returns null when an invite fails", async () => {
+    vi.mocked(request.post).mockRejectedValue(new Error("409"))
+
+    const store = useInvitationsStore()
+    const url = await store.inviteToOrg("org-1", { email: "a@test.com", role_id: "role-1" })
+
+    expect(url).toBeNull()
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it("resends an invitation and returns the fresh link", async () => {
@@ -93,6 +109,7 @@ describe("invitations store", () => {
 
     expect(request.post).toHaveBeenCalledWith("/orgs/org-1/invitations/inv-1/resend")
     expect(result?.accept_url).toBe("http://test/invite/inv-1")
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it("returns null when a resend fails", async () => {

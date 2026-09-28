@@ -105,4 +105,25 @@ describe("ProjectSettingsView", () => {
     await vi.waitFor(() => expect(request.del).toHaveBeenCalledWith("/orgs/o1/projects/p1"))
     await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/orgs/o1"))
   })
+
+  it("puts Save in a muted footer bar and Delete in a danger-zone card", async () => {
+    wrapper = setup(PERMS)
+    await flushPromises()
+    const footer = wrapper.find('[data-slot="settings-footer"]')
+    expect(footer.classes()).toEqual(
+      expect.arrayContaining(["justify-end", "border-t", "bg-muted"]),
+    )
+    expect(footer.text()).toBe("Save")
+    const danger = wrapper.find('[data-slot="danger-zone"]')
+    expect(danger.text()).toContain("Permanently delete the project and all its todos.")
+    const button = danger.findAll("button").find((b) => b.text() === "Delete Project")
+    expect(button?.find("svg.lucide-trash-2").exists()).toBe(true)
+  })
+
+  it("renders no footer and no danger zone without the permissions", async () => {
+    wrapper = setup([])
+    await flushPromises()
+    expect(wrapper.find('[data-slot="settings-footer"]').exists()).toBe(false)
+    expect(wrapper.find('[data-slot="danger-zone"]').exists()).toBe(false)
+  })
 })

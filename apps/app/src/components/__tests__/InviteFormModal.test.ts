@@ -2,6 +2,8 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { makeRole } from "@/test/fixtures"
 import InviteFormModal from "../InviteFormModal.vue"
 
+vi.mock("vue-sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+
 const ROLES = [makeRole({ id: "r1", name: "Admin" }), makeRole({ id: "r2", name: "Member" })]
 const EMAIL = 'input[placeholder="Enter email address"]'
 let wrapper: VueWrapper<InstanceType<typeof InviteFormModal>>
@@ -70,5 +72,30 @@ describe("InviteFormModal", () => {
     expect(document.body.textContent).toContain("Please enter an email address")
     expect(document.body.textContent).toContain("Please select a role")
     expect(wrapper.emitted("submit")).toBeUndefined()
+  })
+
+  it("shows the link view with one OK button when acceptUrl is set", async () => {
+    await open({ acceptUrl: "http://test/invite/i1?token=abc" })
+    const describedBy = q('[role="dialog"]').getAttribute("aria-describedby")
+    expect(document.getElementById(describedBy ?? "")?.textContent).toBe(
+      "Copy this link and send it to the invitee. It is shown once.",
+    )
+    expect(q<HTMLInputElement>("input[readonly]").value).toBe("http://test/invite/i1?token=abc")
+    expect(document.body.querySelector(EMAIL)).toBeNull()
+    const footer = Array.from(q("[data-slot=dialog-footer]").querySelectorAll("button"))
+    expect(footer.map((b) => b.textContent?.trim())).toEqual(["OK"])
+    footer[0]?.click()
+    expect(wrapper.emitted("cancel")).toHaveLength(1)
+  })
+
+  it("keeps the typed values after a submit that does not return a link", async () => {
+    await open()
+    q<HTMLInputElement>(EMAIL).value = "new@example.com"
+    q<HTMLInputElement>(EMAIL).dispatchEvent(new Event("input"))
+    wrapper.vm.setRole("r2")
+    await submit()
+    await wrapper.setProps({ loading: true })
+    await wrapper.setProps({ loading: false })
+    expect(q<HTMLInputElement>(EMAIL).value).toBe("new@example.com")
   })
 })

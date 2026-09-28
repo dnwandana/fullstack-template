@@ -88,7 +88,31 @@ describe("RoleFormModal", () => {
     expect(q<HTMLInputElement>(NAME).value).toBe("")
     expect(boxes().every((b) => b.getAttribute("aria-checked") === "false")).toBe(true)
     await submit()
-    expect(document.body.textContent).toContain("Please enter a role name")
+    await vi.waitFor(() => expect(document.body.textContent).toContain("Please enter a role name"))
     expect(wrapper.emitted("submit")).toBeUndefined()
+  })
+
+  it("draws the permission box and turns its border destructive on the error", async () => {
+    await open()
+    const box = q<HTMLElement>('[data-slot="permission-box"]')
+    expect(box.className).toContain("rounded-lg")
+    expect(box.className).toContain("p-3")
+    expect(box.className).not.toContain("border-destructive")
+    await submit()
+    expect(q<HTMLElement>('[data-slot="permission-box"]').className).toContain("border-destructive")
+  })
+
+  it("styles the group headings at 13 px with no indent under them", async () => {
+    await open()
+    const heading = q<HTMLElement>("[data-testid='perm-group']")
+    expect(heading.className).toContain("text-[13px]")
+    expect(heading.className).toContain("font-semibold")
+    const row = q<HTMLButtonElement>('button[role="checkbox"]').closest("div")
+    expect(row?.className).not.toContain("ml-2")
+  })
+
+  it("has no placeholder on the description field", async () => {
+    await open()
+    expect(q<HTMLTextAreaElement>("textarea").getAttribute("placeholder")).toBeNull()
   })
 })

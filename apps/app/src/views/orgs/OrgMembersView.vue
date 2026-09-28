@@ -35,8 +35,8 @@ function onMemberRoleChange({ userId, roleId }: { userId: string; roleId: string
   handleRoleChange(orgId, userId, roleId, "org")
 }
 
-function onMemberRemove(userId: string): void {
-  handleRemove(orgId, userId, "org")
+function onMemberRemove(userId: string): Promise<void> {
+  return handleRemove(orgId, userId, "org")
 }
 
 onMounted(() => {
@@ -49,7 +49,7 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6">
-    <PageHeader title="Members" />
+    <PageHeader title="Members" :loading="membersLoading && orgMembers.length > 0" />
     <MembersTable
       :members="orgMembers"
       :roles="roles"
@@ -57,7 +57,7 @@ onMounted(() => {
       :can-update-role="can('org:manage_members')"
       :can-remove="can('org:manage_members')"
       @role-change="onMemberRoleChange"
-      @remove="onMemberRemove"
+      :remove-action="onMemberRemove"
     />
   </div>
 </template>

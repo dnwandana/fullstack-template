@@ -17,6 +17,7 @@ import { ref, watch, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { useForm } from "vee-validate"
 import { toTypedSchema } from "@vee-validate/zod"
+import { Trash2 } from "@lucide/vue"
 
 import { useOrgs } from "@/composables/useOrgs"
 import { useProjects } from "@/composables/useProjects"
@@ -28,6 +29,7 @@ import { settingsFormSchema } from "@/schemas/org"
 import ConfirmDialog from "@/components/ConfirmDialog.vue"
 import PageHeader from "@/components/PageHeader.vue"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
@@ -82,7 +84,7 @@ const handleSave = form.handleSubmit(async (values) => {
 
 /**
  * Delete the project and navigate back to the org's projects list.
- * Called after user confirms via ConfirmDialog.
+ * ConfirmDialog runs it and stays open if it rejects.
  */
 async function handleDeleteProject(): Promise<void> {
   await deleteProject(orgId, projectId)
@@ -104,42 +106,53 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="w-full">
+  <div class="grid max-w-[600px] min-w-0 gap-4">
     <PageHeader title="General" />
-    <form
-      id="project-settings-form"
-      class="max-w-[600px] space-y-4"
-      novalidate
-      @submit="handleSave"
+    <form id="project-settings-form" novalidate @submit="handleSave">
+      <Card>
+        <CardContent class="grid gap-4 p-5">
+          <FormField v-slot="{ componentField }" name="name">
+            <FormItem>
+              <FormLabel>Name</FormLabel>
+              <FormControl><Input v-bind="componentField" /></FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+          <FormField v-slot="{ componentField }" name="description">
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl><Textarea v-bind="componentField" rows="3" /></FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+        </CardContent>
+        <CardFooter
+          v-if="can('project:update')"
+          data-slot="settings-footer"
+          class="justify-end rounded-b-lg border-t bg-muted px-5 py-3"
+        >
+          <Button type="submit" :disabled="saving"><Spinner v-if="saving" /> Save</Button>
+        </CardFooter>
+      </Card>
+    </form>
+    <Card
+      v-if="can('project:delete')"
+      data-slot="danger-zone"
+      class="border-[color-mix(in_oklch,var(--destructive)_40%,var(--border))]"
     >
-      <FormField v-slot="{ componentField }" name="name">
-        <FormItem>
-          <FormLabel>Name</FormLabel>
-          <FormControl><Input v-bind="componentField" /></FormControl>
-          <FormMessage />
-        </FormItem>
-      </FormField>
-      <FormField v-slot="{ componentField }" name="description">
-        <FormItem>
-          <FormLabel>Description</FormLabel>
-          <FormControl><Textarea v-bind="componentField" rows="3" /></FormControl>
-          <FormMessage />
-        </FormItem>
-      </FormField>
-      <div class="flex items-center gap-2">
-        <Button v-if="can('project:update')" type="submit" :disabled="saving">
-          <Spinner v-if="saving" /> Save
-        </Button>
+      <CardContent class="flex flex-wrap items-center justify-between gap-3 p-5">
+        <p class="max-w-[320px] text-sm text-pretty text-muted-foreground">
+          Permanently delete the project and all its todos.
+        </p>
         <ConfirmDialog
-          v-if="can('project:delete')"
           title="Delete this project? This cannot be undone."
           confirm-label="Delete"
           destructive
-          @confirm="handleDeleteProject"
+          :action="handleDeleteProject"
         >
-          <Button type="button" variant="destructive">Delete Project</Button>
+          <Button type="button" variant="destructive"><Trash2 /> Delete Project</Button>
         </ConfirmDialog>
-      </div>
-    </form>
+      </CardContent>
+    </Card>
   </div>
 </template>

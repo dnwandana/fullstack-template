@@ -69,7 +69,7 @@ const modalTitle = computed(() => (props.role ? "Edit Role" : "Create Role"))
 
 <template>
   <Dialog :open="open" @update:open="onOpenChange">
-    <DialogContent class="sm:max-w-lg" :aria-describedby="undefined">
+    <DialogContent :aria-describedby="undefined">
       <DialogHeader><DialogTitle>{{ modalTitle }}</DialogTitle></DialogHeader>
       <form id="role-form" class="space-y-4" autocomplete="off" @submit="onSubmit">
         <FormField v-slot="{ componentField }" name="name">
@@ -82,31 +82,44 @@ const modalTitle = computed(() => (props.role ? "Edit Role" : "Create Role"))
         <FormField v-slot="{ componentField }" name="description">
           <FormItem>
             <FormLabel>Description</FormLabel>
-            <FormControl><Textarea placeholder="Enter description (optional)" :rows="3" v-bind="componentField" /></FormControl>
+            <FormControl><Textarea :rows="3" v-bind="componentField" /></FormControl>
             <FormMessage />
           </FormItem>
         </FormField>
-        <FormField name="permissions">
+        <FormField v-slot="{ errorMessage }" name="permissions">
           <FormItem>
             <FormLabel>Permissions</FormLabel>
-            <div v-for="(perms, resource) in groupedPermissions" :key="resource" class="mb-3">
-              <p data-testid="perm-group" class="mb-1 text-sm font-semibold capitalize">{{ resource }}</p>
-              <FormField
-                v-for="perm in perms"
-                :key="perm.id"
-                v-slot="{ value, handleChange }"
-                type="checkbox"
-                :value="perm.id"
-                :unchecked-value="false"
-                name="permissions"
-              >
-                <FormItem class="ml-2 flex items-center gap-2">
-                  <FormControl>
-                    <Checkbox :model-value="value.includes(perm.id)" @update:model-value="handleChange" />
-                  </FormControl>
-                  <FormLabel class="font-normal">{{ perm.description }}</FormLabel>
-                </FormItem>
-              </FormField>
+            <div
+              data-slot="permission-box"
+              :class="[
+                'grid gap-4 rounded-lg border p-3',
+                errorMessage ? 'border-destructive' : 'border-border',
+              ]"
+            >
+              <div v-for="(perms, resource) in groupedPermissions" :key="resource" class="grid gap-2">
+                <p data-testid="perm-group" class="text-[13px] font-semibold capitalize">
+                  {{ resource }}
+                </p>
+                <FormField
+                  v-for="perm in perms"
+                  :key="perm.id"
+                  v-slot="{ value, handleChange }"
+                  type="checkbox"
+                  :value="perm.id"
+                  :unchecked-value="false"
+                  name="permissions"
+                >
+                  <FormItem class="flex items-center gap-2 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        :model-value="value.includes(perm.id)"
+                        @update:model-value="handleChange"
+                      />
+                    </FormControl>
+                    <FormLabel class="font-normal">{{ perm.description }}</FormLabel>
+                  </FormItem>
+                </FormField>
+              </div>
             </div>
             <FormMessage />
           </FormItem>

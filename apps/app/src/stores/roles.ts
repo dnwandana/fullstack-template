@@ -115,8 +115,9 @@ export const useRolesStore = defineStore("roles", () => {
   /**
    * Delete a custom role from an organization
    * Refreshes the roles list after a successful deletion
+   * Rejects when the request fails. The HTTP layer shows the error toast.
    */
-  async function deleteRole(orgId: string, roleId: string): Promise<Envelope<null> | undefined> {
+  async function deleteRole(orgId: string, roleId: string): Promise<Envelope<null>> {
     loading.value = true
     try {
       const response = await apiDeleteRole(orgId, roleId)
@@ -124,8 +125,6 @@ export const useRolesStore = defineStore("roles", () => {
       // Refresh the roles list to remove the deleted role
       await fetchRoles(orgId)
       return response.data
-    } catch {
-      // Axios interceptor handles error display
     } finally {
       loading.value = false
     }

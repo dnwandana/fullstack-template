@@ -95,4 +95,42 @@ describe("OrgSettingsView", () => {
     await vi.waitFor(() => expect(request.del).toHaveBeenCalledWith("/orgs/o1"))
     await vi.waitFor(() => expect(push).toHaveBeenCalledWith("/orgs"))
   })
+
+  it("puts Save in a muted footer bar and Delete in a danger-zone card", async () => {
+    wrapper = setup(PERMS)
+    await flushPromises()
+    const footer = wrapper.find('[data-slot="settings-footer"]')
+    expect(footer.classes()).toEqual(
+      expect.arrayContaining(["justify-end", "border-t", "bg-muted"]),
+    )
+    expect(footer.text()).toBe("Save")
+    const danger = wrapper.find('[data-slot="danger-zone"]')
+    expect(danger.text()).toContain("Permanently delete the organization and all its data.")
+    const button = danger.findAll("button").find((b) => b.text() === "Delete Organization")
+    expect(button?.find("svg.lucide-trash-2").exists()).toBe(true)
+  })
+
+  it("renders no footer and no danger zone without the permissions", async () => {
+    wrapper = setup([])
+    await flushPromises()
+    expect(wrapper.find('[data-slot="settings-footer"]').exists()).toBe(false)
+    expect(wrapper.find('[data-slot="danger-zone"]').exists()).toBe(false)
+  })
+  it("stays on the page and keeps the dialog open when the delete fails", async () => {
+    push.mockClear()
+    vi.mocked(request.del).mockReset().mockRejectedValue(new Error("409"))
+    wrapper = setup(PERMS)
+    await flushPromises()
+    buttons()
+      .find((b) => b.textContent?.trim() === "Delete Organization")
+      ?.click()
+    await flushPromises()
+    buttons()
+      .find((b) => b.textContent?.trim() === "Delete")
+      ?.click()
+    await vi.waitFor(() => expect(request.del).toHaveBeenCalledWith("/orgs/o1"))
+    await flushPromises()
+    expect(push).not.toHaveBeenCalled()
+    expect(document.body.querySelector('[role="alertdialog"]')).not.toBeNull()
+  })
 })

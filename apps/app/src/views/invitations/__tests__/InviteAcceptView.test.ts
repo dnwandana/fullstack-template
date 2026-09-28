@@ -187,4 +187,45 @@ describe("InviteAcceptView", () => {
 
     expect(push).not.toHaveBeenCalled()
   })
+
+  it("shows the org avatar and the expiry date on the wide auth layout", async () => {
+    vi.mocked(request.get).mockResolvedValue(ok(preview()))
+    const wrapper = mount(InviteAcceptView, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-slot="auth-card"]').classes()).toContain(
+      "w-[min(460px,calc(100%-32px))]",
+    )
+    const avatar = wrapper.find('[data-slot="user-avatar"]')
+    expect(avatar.text()).toBe("A")
+    expect(avatar.classes()).toContain("bg-primary")
+    expect(wrapper.find('[data-slot="invite-expires"]').text()).toBe("Expires Jan 1, 2026")
+  })
+
+  it("renders the guest actions as a full-width button and a text link", async () => {
+    vi.mocked(request.get).mockResolvedValue(ok(preview({ requires_signup: true })))
+    const wrapper = mount(InviteAcceptView, { global: { plugins: [createPinia()] } })
+    await flushPromises()
+
+    const create = wrapper.findAll("button").find((b) => b.text().includes("Create account"))
+    expect(create?.classes()).toEqual(expect.arrayContaining(["w-full", "h-10"]))
+    const login = wrapper.findAll("button").find((b) => b.text() === "I already have an account")
+    expect(login?.classes()).toContain("text-link")
+  })
+
+  it("hides the role line and bolds both emails for the wrong account", async () => {
+    vi.mocked(request.get).mockResolvedValue(ok(preview({ requires_signup: false })))
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    useAuthStore().user = makeUser({ id: "u-2", email: "other@acme.com" })
+    const wrapper = mount(InviteAcceptView, { global: { plugins: [pinia] } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-slot="invite-role"]').exists()).toBe(false)
+    const bold = wrapper.findAll("strong").map((s) => s.text())
+    expect(bold).toEqual(["other@acme.com", INVITEE_EMAIL])
+    const switchButton = wrapper.findAll("button").find((b) => b.text() === "Switch account")
+    expect(switchButton?.classes()).toContain("w-full")
+    expect(switchButton?.find("svg.lucide-repeat").exists()).toBe(true)
+  })
 })

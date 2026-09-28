@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest"
-import { mount } from "@vue/test-utils"
+import { flushPromises, mount } from "@vue/test-utils"
 import { createPinia, setActivePinia } from "pinia"
 import { ok, okPaginated, makeOrgMember, makePermission, makeRole } from "@/test/fixtures"
 import { request } from "@/utils/http"
@@ -45,9 +45,7 @@ const ROLES = [
 describe("OrgRolesView", () => {
   let pinia: ReturnType<typeof createPinia>
 
-  beforeEach(() => {
-    pinia = createPinia()
-    setActivePinia(pinia)
+  function mockApi(permissionNames: string[]) {
     useAuthStore().user = { id: "u1", name: "Ada", email: "ada@example.com" }
     vi.mocked(request.get)
       .mockReset()
@@ -57,15 +55,23 @@ describe("OrgRolesView", () => {
         if (url.endsWith("/members"))
           return Promise.resolve(okPaginated([makeOrgMember({ user_id: "u1", role_id: "r1" })]))
         if (url.includes("/roles/"))
-          return Promise.resolve(ok(
-            makeRole({
-              id: "r1",
-              is_system: true,
-              permissions: [makePermission({ name: "org:manage_roles" })],
-            }),
-          ))
+          return Promise.resolve(
+            ok(
+              makeRole({
+                id: "r1",
+                is_system: true,
+                permissions: permissionNames.map((name) => makePermission({ name })),
+              }),
+            ),
+          )
         return Promise.reject(new Error(`unexpected GET ${url}`))
       })
+  }
+
+  beforeEach(() => {
+    pinia = createPinia()
+    setActivePinia(pinia)
+    mockApi(["org:manage_roles"])
   })
 
   it("fetches roles and the permission catalog on mount", async () => {
@@ -79,7 +85,7 @@ describe("OrgRolesView", () => {
   it("badges system roles and custom roles differently", async () => {
     const wrapper = mount(OrgRolesView, { global: { plugins: [pinia] } })
     await vi.waitFor(() => expect(wrapper.text()).toContain("auditor"))
-    const badges = wrapper.findAll("div.rounded-full")
+    const badges = wrapper.findAll('[data-slot="badge"]')
     expect(badges.map((b) => b.text())).toEqual(["System", "Custom"])
     expect(badges[0]?.classes()).toContain("bg-info")
     expect(badges[1]?.classes()).toContain("bg-secondary")
@@ -93,5 +99,32 @@ describe("OrgRolesView", () => {
       expect(labels.filter((l) => l === "Edit")).toHaveLength(1)
       expect(labels.filter((l) => l === "Delete")).toHaveLength(1)
     })
+  })
+
+  it("shows the permission count per role with tabular numbers", async () => {
+    const wrapper = mount(OrgRolesView, { global: { plugins: [pinia] } })
+    await vi.waitFor(() => expect(wrapper.text()).toContain("auditor"))
+    const counts = wrapper.findAll('[data-slot="role-perm-count"]')
+    expect(counts.map((c) => c.text())).toEqual(["0", "1"])
+    expect(counts[0]?.classes()).toContain("tabular-nums")
+    expect(wrapper.findAll("th").map((th) => th.text())).toContain("Permissions")
+  })
+
+  it("renders no Actions column without org:manage_roles", async () => {
+    mockApi(["org:read"])
+    const wrapper = mount(OrgRolesView, { global: { plugins: [pinia] } })
+    await vi.waitFor(() => expect(request.get).toHaveBeenCalledWith("/orgs/o1/roles/r1"))
+    await vi.waitFor(() => expect(wrapper.text()).toContain("auditor"))
+    await flushPromises()
+    expect(wrapper.findAll("th").map((th) => th.text())).not.toContain("Actions")
+    expect(wrapper.findAll("tbody tr")[0]?.findAll("td")).toHaveLength(4)
+  })
+
+  it("shows 4 skeleton rows during the first load", async () => {
+    vi.mocked(request.get).mockReturnValue(new Promise(() => {}))
+    const wrapper = mount(OrgRolesView, { global: { plugins: [pinia] } })
+    // fetchRoles sets the loading flag in onMounted, so the rows appear after one render.
+    await flushPromises()
+    expect(wrapper.findAll('[data-slot="skeleton-row"]')).toHaveLength(4)
   })
 })

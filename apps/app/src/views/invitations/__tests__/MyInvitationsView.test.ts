@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest"
-import { mount, type VueWrapper } from "@vue/test-utils"
+import { flushPromises, mount, type VueWrapper } from "@vue/test-utils"
 import { createPinia } from "pinia"
 import { ok, makeMyInvitation } from "@/test/fixtures"
 import { request } from "@/utils/http"
@@ -91,8 +91,51 @@ describe("MyInvitationsView", () => {
   it("renders no actions for a row that is not pending", async () => {
     mockInvitations([makeMyInvitation({ id: "inv2", status: "accepted" })])
     wrapper = mount(MyInvitationsView, { attachTo: document.body, global: { plugins: [createPinia()] } })
-    await vi.waitFor(() => expect(wrapper?.text()).toContain("accepted"))
+    await vi.waitFor(() => expect(wrapper?.text()).toContain("Acme"))
     expect(wrapper.text()).not.toContain("Open invitation")
     expect(wrapper.text()).not.toContain("Decline")
+  })
+
+  it("renders the mockup columns with no Status column", async () => {
+    mockInvitations([makeMyInvitation({ project_name: null })])
+    wrapper = mount(MyInvitationsView, { attachTo: document.body, global: { plugins: [createPinia()] } })
+    await vi.waitFor(() => expect(wrapper?.text()).toContain("Acme"))
+    expect(wrapper.findAll("th").map((th) => th.text())).toEqual([
+      "Organization", "Project", "Invited by", "Role", "Expires", "Actions",
+    ])
+    const cells = wrapper.findAll("tbody td")
+    expect(cells.map((td) => td.text()).slice(0, 5)).toEqual([
+      "Acme", "-", "Ada Lovelace", "member", "Jan 1, 2026",
+    ])
+    expect(cells[0]?.classes()).toEqual(expect.arrayContaining(["font-medium", "whitespace-nowrap"]))
+    expect(cells[1]?.classes()).toContain("text-muted-foreground")
+    expect(cells[4]?.classes()).toEqual(expect.arrayContaining(["text-muted-foreground", "tabular-nums"]))
+    expect(cells[5]?.classes()).toEqual(expect.arrayContaining(["w-[1%]", "text-right"]))
+  })
+
+  it("shows the project name in the default color when the invitation has one", async () => {
+    mockInvitations([makeMyInvitation({ project_name: "Mobile App" })])
+    wrapper = mount(MyInvitationsView, { attachTo: document.body, global: { plugins: [createPinia()] } })
+    await vi.waitFor(() => expect(wrapper?.text()).toContain("Mobile App"))
+    expect(wrapper.findAll("tbody td")[1]?.classes()).not.toContain("text-muted-foreground")
+  })
+
+  it("shows 3 skeleton rows of 6 cells during the first load", async () => {
+    vi.mocked(request.get).mockReset().mockReturnValue(new Promise(() => {}))
+    wrapper = mount(MyInvitationsView, { attachTo: document.body, global: { plugins: [createPinia()] } })
+    await flushPromises()
+    const rows = wrapper.findAll('[data-slot="skeleton-row"]')
+    expect(rows).toHaveLength(3)
+    expect(rows[0]?.findAll("td")).toHaveLength(6)
+    expect(wrapper.text()).not.toContain("No pending invitations")
+  })
+
+  it("shows a Mail tile in the empty state", async () => {
+    mockInvitations([])
+    wrapper = mount(MyInvitationsView, { attachTo: document.body, global: { plugins: [createPinia()] } })
+    // The first render shows the empty state before onMounted starts the fetch.
+    await flushPromises()
+    await vi.waitFor(() => expect(wrapper?.text()).toContain("No pending invitations"))
+    expect(wrapper.find('[data-slot="empty-icon"] svg.lucide-mail').exists()).toBe(true)
   })
 })

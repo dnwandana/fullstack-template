@@ -103,11 +103,9 @@ export const useProjectsStore = defineStore("projects", () => {
 
   /**
    * Delete a project within an organization and refresh the list
+   * Rejects when the request fails. The HTTP layer shows the error toast.
    */
-  async function deleteProject(
-    orgId: string,
-    projectId: string,
-  ): Promise<Envelope<null> | undefined> {
+  async function deleteProject(orgId: string, projectId: string): Promise<Envelope<null>> {
     loading.value = true
     try {
       const response = await apiDeleteProject(orgId, projectId)
@@ -115,8 +113,6 @@ export const useProjectsStore = defineStore("projects", () => {
       // Refresh the list to remove the deleted project
       await fetchProjects(orgId)
       return response.data
-    } catch {
-      // Axios interceptor handles error display
     } finally {
       loading.value = false
     }

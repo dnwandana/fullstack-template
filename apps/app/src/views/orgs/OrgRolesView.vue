@@ -17,9 +17,9 @@ import { useAuthStore } from "@/stores/auth"
 import RoleFormModal from "@/components/RoleFormModal.vue"
 import PageHeader from "@/components/PageHeader.vue"
 import ConfirmDialog from "@/components/ConfirmDialog.vue"
+import TableSkeletonRows from "@/components/TableSkeletonRows.vue"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import {
   Table,
   TableBody,
@@ -38,6 +38,7 @@ const { can, loadPermissions } = usePermissions()
 const { roles, allPermissions, fetchRoles, fetchAllPermissions, deleteRole } = rolesComposable
 
 const rolesLoading = computed(() => rolesComposable.loading.value)
+const canManageRoles = computed(() => can("org:manage_roles"))
 
 /** Role form data from RoleFormModal */
 function onRoleSubmit(formData: RoleFormInput): void {
@@ -61,53 +62,56 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6">
-    <PageHeader title="Roles">
+    <PageHeader title="Roles" :loading="rolesLoading && roles.length > 0">
       <Button v-if="can('org:manage_roles')" @click="rolesComposable.openCreateModal()">
         <Plus /> Create Role
       </Button>
     </PageHeader>
 
-    <div class="relative rounded-md border">
-      <Spinner v-if="rolesLoading" class="absolute top-2 right-2" />
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Description</TableHead>
-            <TableHead class="w-[100px]">System</TableHead>
-            <TableHead class="w-[160px]">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow v-for="role in roles" :key="role.id">
-            <TableCell>{{ role.name }}</TableCell>
-            <TableCell>{{ role.description || "—" }}</TableCell>
-            <TableCell>
-              <Badge v-if="role.is_system" variant="info">System</Badge>
-              <Badge v-else variant="secondary">Custom</Badge>
-            </TableCell>
-            <TableCell>
-              <div
-                v-if="!role.is_system && can('org:manage_roles')"
-                class="flex items-center gap-2"
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead class="w-[180px]">Name</TableHead>
+          <TableHead>Description</TableHead>
+          <TableHead class="w-[120px]">Permissions</TableHead>
+          <TableHead class="w-[110px]">System</TableHead>
+          <TableHead v-if="canManageRoles" class="w-[1%] text-right">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        <TableSkeletonRows
+          v-if="rolesLoading && roles.length === 0"
+          :rows="4"
+          :columns="[{ width: 90 }, { width: 240 }, { width: 24 }, { width: 60 }]"
+        />
+        <TableRow v-for="role in roles" :key="role.id">
+          <TableCell class="font-medium whitespace-nowrap">{{ role.name }}</TableCell>
+          <TableCell class="text-muted-foreground">{{ role.description || "—" }}</TableCell>
+          <TableCell data-slot="role-perm-count" class="tabular-nums">{{
+            role.permissions.length
+          }}</TableCell>
+          <TableCell>
+            <Badge v-if="role.is_system" variant="info">System</Badge>
+            <Badge v-else variant="secondary">Custom</Badge>
+          </TableCell>
+          <TableCell v-if="canManageRoles" class="w-[1%] text-right">
+            <div v-if="!role.is_system" class="flex items-center justify-end gap-0.5">
+              <Button size="sm" variant="outline" @click="editRole(role.id)">
+                <Pencil /> Edit
+              </Button>
+              <ConfirmDialog
+                title="Delete this role? This cannot be undone."
+                confirm-label="Delete"
+                destructive
+                :action="() => deleteRole(orgId, role.id)"
               >
-                <Button size="sm" variant="outline" @click="editRole(role.id)">
-                  <Pencil /> Edit
-                </Button>
-                <ConfirmDialog
-                  title="Delete this role? This cannot be undone."
-                  confirm-label="Delete"
-                  destructive
-                  @confirm="deleteRole(orgId, role.id)"
-                >
-                  <Button size="sm" variant="destructive"><Trash2 /> Delete</Button>
-                </ConfirmDialog>
-              </div>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </div>
+                <Button size="sm" variant="destructive"><Trash2 /> Delete</Button>
+              </ConfirmDialog>
+            </div>
+          </TableCell>
+        </TableRow>
+      </TableBody>
+    </Table>
 
     <RoleFormModal
       :open="rolesComposable.isModalVisible.value"

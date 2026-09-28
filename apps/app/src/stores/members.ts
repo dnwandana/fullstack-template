@@ -86,11 +86,9 @@ export const useMembersStore = defineStore("members", () => {
   /**
    * Remove a member from an organization
    * Refreshes the org members list after a successful removal
+   * Rejects when the request fails. The HTTP layer shows the error toast.
    */
-  async function removeOrgMember(
-    orgId: string,
-    userId: string,
-  ): Promise<Envelope<null> | undefined> {
+  async function removeOrgMember(orgId: string, userId: string): Promise<Envelope<null>> {
     loading.value = true
     try {
       const response = await apiRemoveOrgMember(orgId, userId)
@@ -98,8 +96,6 @@ export const useMembersStore = defineStore("members", () => {
       // Refresh the org members list to remove the deleted member
       await fetchOrgMembers(orgId)
       return response.data
-    } catch {
-      // Axios interceptor handles error display
     } finally {
       loading.value = false
     }
@@ -160,12 +156,13 @@ export const useMembersStore = defineStore("members", () => {
   /**
    * Remove a member from a project
    * Refreshes the project members list after a successful removal
+   * Rejects when the request fails. The HTTP layer shows the error toast.
    */
   async function removeProjectMember(
     orgId: string,
     projectId: string,
     userId: string,
-  ): Promise<Envelope<null> | undefined> {
+  ): Promise<Envelope<null>> {
     loading.value = true
     try {
       const response = await apiRemoveProjectMember(orgId, projectId, userId)
@@ -173,8 +170,6 @@ export const useMembersStore = defineStore("members", () => {
       // Refresh the project members list to remove the deleted member
       await fetchProjectMembers(orgId, projectId)
       return response.data
-    } catch {
-      // Axios interceptor handles error display
     } finally {
       loading.value = false
     }
