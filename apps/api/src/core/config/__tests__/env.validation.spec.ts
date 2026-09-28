@@ -96,4 +96,33 @@ describe("validate(env)", () => {
       )
     })
   })
+
+  describe("THROTTLE_DISABLED", () => {
+    it("defaults to false", () => {
+      expect(validate({ ...base }).THROTTLE_DISABLED).toBe("false")
+    })
+
+    it("accepts true outside production", () => {
+      expect(validate({ ...base, THROTTLE_DISABLED: "true" }).THROTTLE_DISABLED).toBe("true")
+      expect(
+        validate({ ...base, NODE_ENV: "test", THROTTLE_DISABLED: "true" }).THROTTLE_DISABLED,
+      ).toBe("true")
+    })
+
+    it("rejects true in production", () => {
+      expect(() =>
+        validate({ ...base, NODE_ENV: "production", THROTTLE_DISABLED: "true" }),
+      ).toThrow(/THROTTLE_DISABLED: must not be true when NODE_ENV is production/)
+    })
+
+    it("accepts false in production", () => {
+      expect(
+        validate({ ...base, NODE_ENV: "production", THROTTLE_DISABLED: "false" }).THROTTLE_DISABLED,
+      ).toBe("false")
+    })
+
+    it("rejects a value that is not true or false", () => {
+      expect(() => validate({ ...base, THROTTLE_DISABLED: "yes" })).toThrow(/THROTTLE_DISABLED/)
+    })
+  })
 })
