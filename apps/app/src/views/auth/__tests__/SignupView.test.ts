@@ -15,6 +15,7 @@ const { currentRoute } = vi.hoisted(() => ({ currentRoute: { query: {} } }))
 vi.mock("vue-router", () => ({
   useRouter: () => ({ push: vi.fn() }),
   useRoute: () => currentRoute,
+  RouterLink: { name: "RouterLink", props: ["to"], template: "<a><slot /></a>" },
 }))
 
 describe("SignupView", () => {

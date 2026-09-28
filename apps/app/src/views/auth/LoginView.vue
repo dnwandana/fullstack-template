@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { useRouter } from "vue-router"
+import { RouterLink } from "vue-router"
 import { useForm } from "vee-validate"
 import { toTypedSchema } from "@vee-validate/zod"
-import { Lock, Mail } from "@lucide/vue"
+import { CircleAlert, Lock, Mail } from "@lucide/vue"
 import { useAuth } from "@/composables/useAuth"
 import { loginSchema } from "@/schemas/auth"
+import AuthLayout from "@/components/AuthLayout.vue"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +13,6 @@ import { FormControl, FormField, FormItem, FormMessage } from "@/components/ui/f
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 
-const router = useRouter()
 const { formState, error, loading, handleSignin } = useAuth()
 
 const form = useForm({
@@ -29,11 +29,12 @@ const onSubmit = form.handleSubmit(async (values) => {
 </script>
 
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-muted p-4">
-    <Card class="w-full max-w-[400px]">
-      <CardHeader><CardTitle class="text-center text-2xl">Sign In</CardTitle></CardHeader>
+  <AuthLayout>
+    <Card>
+      <CardHeader><CardTitle class="text-2xl font-semibold">Sign In</CardTitle></CardHeader>
       <CardContent>
         <Alert v-if="error" variant="destructive" class="mb-4">
+          <CircleAlert class="size-4" />
           <AlertDescription>{{ error }}</AlertDescription>
         </Alert>
         <form class="space-y-4" novalidate @submit="onSubmit">
@@ -71,9 +72,11 @@ const onSubmit = form.handleSubmit(async (values) => {
         </form>
         <p class="mt-4 text-center text-sm text-muted-foreground">
           Don't have an account?
-          <Button variant="link" class="h-auto p-0" @click="router.push('/signup')">Sign up</Button>
+          <RouterLink to="/signup" class="font-medium text-link hover:underline"
+            >Sign up</RouterLink
+          >
         </p>
       </CardContent>
     </Card>
-  </div>
+  </AuthLayout>
 </template>

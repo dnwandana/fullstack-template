@@ -11,6 +11,7 @@ vi.mock("@/utils/http", () => ({
 vi.mock("vue-router", () => ({
   useRouter: () => ({ push: vi.fn() }),
   useRoute: () => ({ query: {} }),
+  RouterLink: { name: "RouterLink", props: ["to"], template: "<a><slot /></a>" },
 }))
 
 function mountView() {
@@ -38,5 +39,23 @@ describe("LoginView", () => {
     await flushPromises()
     const [, body] = vi.mocked(request.post).mock.calls[0] ?? []
     expect(body).toMatchObject({ email: "ada@example.com", password: "password123" })
+  })
+
+  it("renders on the auth layout with a left-aligned title", () => {
+    const wrapper = mountView()
+    expect(wrapper.find('[data-slot="auth-layout"]').exists()).toBe(true)
+    const title = wrapper.find("h3")
+    expect(title.text()).toBe("Sign In")
+    expect(title.classes()).not.toContain("text-center")
+  })
+
+  it("shows the sign-in error with a CircleAlert icon", async () => {
+    vi.mocked(request.post).mockRejectedValue(new Error("Invalid email or password"))
+    const wrapper = mountView()
+    await wrapper.find('input[placeholder="Email"]').setValue("ada@example.com")
+    await wrapper.find('input[placeholder="Password"]').setValue("password123")
+    await wrapper.find("form").trigger("submit")
+    await vi.waitFor(() => expect(wrapper.find('[role="alert"]').exists()).toBe(true))
+    expect(wrapper.find('[role="alert"] svg.lucide-circle-alert').exists()).toBe(true)
   })
 })

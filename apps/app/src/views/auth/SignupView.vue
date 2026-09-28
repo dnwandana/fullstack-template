@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { useRoute, useRouter } from "vue-router"
+import { RouterLink, useRoute } from "vue-router"
 import { useForm } from "vee-validate"
 import { toTypedSchema } from "@vee-validate/zod"
-import { Lock, Mail, User } from "@lucide/vue"
+import { CircleAlert, Lock, Mail, User } from "@lucide/vue"
 import { useAuth } from "@/composables/useAuth"
 import { signupSchema } from "@/schemas/auth"
+import AuthLayout from "@/components/AuthLayout.vue"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,7 +14,6 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 
 const route = useRoute()
-const router = useRouter()
 const { formState, error, loading, handleSignup } = useAuth()
 
 // An invite link arrives with `?email=`. The invitation is bound to that address, so the field
@@ -36,11 +36,12 @@ const onSubmit = form.handleSubmit(async (values) => {
 </script>
 
 <template>
-  <div class="flex min-h-screen items-center justify-center bg-muted p-4">
-    <Card class="w-full max-w-[400px]">
-      <CardHeader><CardTitle class="text-center text-2xl">Create Account</CardTitle></CardHeader>
+  <AuthLayout>
+    <Card>
+      <CardHeader><CardTitle class="text-2xl font-semibold">Create Account</CardTitle></CardHeader>
       <CardContent>
         <Alert v-if="error" variant="destructive" class="mb-4">
+          <CircleAlert class="size-4" />
           <AlertDescription>{{ error }}</AlertDescription>
         </Alert>
         <form class="space-y-4" novalidate @submit="onSubmit">
@@ -111,9 +112,9 @@ const onSubmit = form.handleSubmit(async (values) => {
         </form>
         <p class="mt-4 text-center text-sm text-muted-foreground">
           Already have an account?
-          <Button variant="link" class="h-auto p-0" @click="router.push('/login')">Sign in</Button>
+          <RouterLink to="/login" class="font-medium text-link hover:underline">Sign in</RouterLink>
         </p>
       </CardContent>
     </Card>
-  </div>
+  </AuthLayout>
 </template>
