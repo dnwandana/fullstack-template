@@ -51,9 +51,26 @@ below it. Views hold no HTTP calls. Stores hold no modal state. Composables expo
 
 - `src/components/ui/` holds generated shadcn-vue components. Add one with
   `corepack pnpm dlx shadcn-vue@latest add <name>`. The app lint rules do not apply to this folder.
-- Theme tokens live in `src/assets/tailwind.css`. It is the only stylesheet import. The `.dark`
-  block is unused because nothing toggles dark mode.
+- The components in `src/components/ui/` carry local edits. A re-add with the CLI overwrites them.
+  For example, `DropdownMenuContent` sets `inheritAttrs: false` and binds `$attrs` on the menu
+  element, so an attribute such as `data-slot` reaches the element inside the portal.
+- Theme tokens live in `src/assets/tailwind.css`. It also imports the Geist fonts, so it stays the
+  only stylesheet import. The app sends no requests to Google Fonts.
+- The `.dark` block is in use. `useTheme` in `composables/useTheme.ts` toggles the `dark` class on
+  `<html>` and stores the choice under `ui.theme`. An inline script in `index.html` sets the class
+  before the first paint. Keep the key the same in both places.
+- `--link` is the link color. Use the `text-link` utility or the Button `link` variant. `a`
+  elements have no global color. `--overlay` is the dialog overlay color (`bg-overlay`).
 - The status tokens `success`, `warning` and `info` are for `Badge` variants only.
+- Format dates with `formatDate` or `formatDateTime` from `src/utils/format.ts` only. Do not call
+  `toLocaleString` or `toLocaleDateString` in `src/`.
+- Every table shows `TableSkeletonRows` inside the table while the first load runs and the list
+  is empty. When rows already show, the table keeps them and `PageHeader` gets `loading`.
+- `ConfirmDialog` takes `action: () => Promise<unknown>`. It stays open and disabled until the
+  promise settles, and stays open if the promise rejects. So a store action behind it must
+  rethrow its error.
+- Only `src/utils/clipboard.ts` touches `navigator.clipboard`. `copyInviteLink` shows the one
+  toast. An invitation link shows in `InviteLinkField`, because the API returns it once.
 - Forms use VeeValidate with Zod schemas in `src/schemas/`.
 - Toasts come from `vue-sonner`. The `Toaster` is mounted once in `App.vue`.
 - `eslint.config.js` bans imports of `ant-design-vue` and `@ant-design/icons-vue` in `src/`. Use
